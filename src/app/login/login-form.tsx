@@ -1,6 +1,7 @@
 "use client";
 
 import { Film, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,11 @@ export function LoginForm({ signInError }: { signInError?: string }) {
           >
             {mode === "signin" ? "Create an account" : "Sign in"}
           </button>
+        </p>
+        <p className="mt-8 text-center text-xs text-muted-foreground">
+          <Link href="/privacy" className="underline hover:text-foreground">
+            Privacy policy
+          </Link>
         </p>
       </div>
     </main>

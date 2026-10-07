@@ -97,6 +97,9 @@ export default async function LandingPage() {
           />
         </a>
         This product uses the TMDB API but is not endorsed or certified by TMDB.
+        <Link href="/privacy" className="underline hover:text-foreground">
+          Privacy policy
+        </Link>
       </footer>
     </main>
   );

@@ -1,4 +1,5 @@
 import { LogOut } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/login/actions";
@@ -79,6 +80,12 @@ export default async function SettingsPage() {
             </a>
             . Streaming availability is provided by JustWatch.
           </p>
+          <Link
+            href="/privacy"
+            className="w-fit underline hover:text-foreground"
+          >
+            Privacy policy
+          </Link>
         </CardContent>
       </Card>
     </div>
