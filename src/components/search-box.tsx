@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Search } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { type AddTarget } from "@/components/add-to-list-button";
 import { MediaCard } from "@/components/media-card";
@@ -19,9 +19,11 @@ export function SearchBox({
   library?: LibraryIndex;
 }) {
   const [q, setQ] = useState("");
+  const [searched, setSearched] = useState("");
   const [results, setResults] = useState<TmdbItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -30,15 +32,22 @@ export function SearchBox({
       setResults(null);
       return;
     }
+    // Closes the phone keyboard so the results aren't hidden behind it.
+    inputRef.current?.blur();
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Search failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Search failed. Please try again.");
       setResults(data.results as TmdbItem[]);
+      setSearched(query);
     } catch (err) {
-      setError((err as Error).message);
+      setError(
+        err instanceof TypeError
+          ? "You seem to be offline. Check your connection and try again."
+          : (err as Error).message,
+      );
     } finally {
       setLoading(false);
     }
@@ -50,9 +59,13 @@ export function SearchBox({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={inputRef}
+            type="search"
+            enterKeyHint="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search movies & series…"
+            aria-label="Search movies and series"
             className="pl-9"
           />
         </div>
@@ -79,7 +92,9 @@ export function SearchBox({
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No results for “{q}”.</p>
+          <p className="text-sm text-muted-foreground">
+            No results for “{searched}”.
+          </p>
         ))}
     </div>
   );

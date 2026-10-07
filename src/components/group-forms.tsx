@@ -66,6 +66,10 @@ export function GroupForms() {
               name="code"
               placeholder="Invite code"
               required
+              autoCapitalize="characters"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
               className="uppercase"
             />
             {joinState.error && (

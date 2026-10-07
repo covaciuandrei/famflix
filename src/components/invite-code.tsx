@@ -15,10 +15,18 @@ export function InviteCode({
   const [copied, setCopied] = useState(false);
 
   function copy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    // The clipboard API is missing on insecure pages and some older phones.
+    if (!navigator.clipboard) {
+      window.prompt("Copy this invite code:", code);
+      return;
+    }
+    navigator.clipboard.writeText(code).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => window.prompt("Copy this invite code:", code),
+    );
   }
 
   return (

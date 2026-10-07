@@ -78,7 +78,7 @@ export default async function FamilyPage({
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-start gap-2 sm:items-end">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             Invite code:
             <InviteCode code={group.invite_code} />
