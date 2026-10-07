@@ -45,7 +45,18 @@ export async function authenticate(
         emailRedirectTo: `${await siteOrigin()}/auth/callback`,
       },
     });
-    if (error) return { error: error.message };
+    if (error) {
+      // Until custom SMTP is set up, Supabase only emails its own team members.
+      const cantEmail =
+        /not authorized|sending confirmation email|rate limit/i.test(
+          error.message,
+        );
+      return {
+        error: cantEmail
+          ? "We couldn't send you a confirmation email. Please use Continue with Google instead."
+          : error.message,
+      };
+    }
     if (!data.session) {
       return {
         message: "Check your email to confirm your account, then sign in.",
