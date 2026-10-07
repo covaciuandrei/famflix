@@ -11,11 +11,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useId, useRef } from "react";
 
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/avatar";
 import { RatingRequests } from "@/components/rating-requests";
+import { placePopover } from "@/lib/popover";
 import type { PendingRating } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -65,7 +66,9 @@ export function AppNav({
   pending: PendingRating[];
 }) {
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   return (
     <>
@@ -99,10 +102,10 @@ export function AppNav({
 
           <div className="flex items-center gap-2">
             <RatingRequests pending={pending} currentUserId={currentUserId} />
-            <div className="relative">
             <button
+              ref={buttonRef}
               type="button"
-              onClick={() => setMenuOpen((o) => !o)}
+              popoverTarget={menuId}
               className="flex items-center gap-2 rounded-full p-0.5 pr-2 hover:bg-muted"
             >
               <Avatar name={name} url={avatarUrl} className="size-8" />
@@ -110,34 +113,33 @@ export function AppNav({
                 {name}
               </span>
             </button>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setMenuOpen(false)}
-                  aria-hidden
-                />
-                <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-lg border border-border bg-card p-1 shadow-lg">
-                  <Link
-                    href="/app/settings"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-muted"
-                  >
-                    <Settings className="size-4" />
-                    Settings
-                  </Link>
-                  <form action={signOut}>
-                    <button
-                      type="submit"
-                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-destructive hover:bg-muted"
-                    >
-                      <LogOut className="size-4" />
-                      Sign out
-                    </button>
-                  </form>
-                </div>
-              </>
-            )}
+            {/* Top layer: the header's backdrop-blur would confine fixed-position children to the header. */}
+            <div
+              ref={menuRef}
+              id={menuId}
+              popover="auto"
+              onBeforeToggle={(e) =>
+                placePopover(e, () => buttonRef.current, 8)
+              }
+              className="inset-auto w-44 overflow-hidden rounded-lg border border-border bg-card p-1 text-card-foreground shadow-lg"
+            >
+              <Link
+                href="/app/settings"
+                onClick={() => menuRef.current?.hidePopover()}
+                className="flex items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-muted"
+              >
+                <Settings className="size-4" />
+                Settings
+              </Link>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-destructive hover:bg-muted"
+                >
+                  <LogOut className="size-4" />
+                  Sign out
+                </button>
+              </form>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Avatar } from "@/components/avatar";
-import { timeAgo } from "@/lib/format";
+import { formatScore, timeAgo } from "@/lib/format";
 import type { ActivityEvent } from "@/lib/types";
 
 function describe(e: ActivityEvent, currentUserId: string): ReactNode {
@@ -19,22 +19,38 @@ function describe(e: ActivityEvent, currentUserId: string): ReactNode {
     case "left":
       return <>{who} left the family</>;
     case "removed_member":
-      return <>{who} removed {subject} from the family</>;
+      return (
+        <>
+          {who} removed {subject} from the family
+        </>
+      );
     case "new_owner":
       return (
         <>
-          <strong>{subject === "you" ? "You are" : `${subject} is`}</strong>{" "}
-          now the family owner
+          <strong>{subject === "you" ? "You are" : `${subject} is`}</strong> now
+          the family owner
         </>
       );
     case "renamed":
-      return <>{who} renamed the family to “{e.detail}”</>;
+      return (
+        <>
+          {who} renamed the family to “{e.detail}”
+        </>
+      );
     case "new_code":
       return <>{who} made a new invite code</>;
     case "added":
-      return <>{who} added {title}</>;
+      return (
+        <>
+          {who} added {title}
+        </>
+      );
     case "watched":
-      return <>{who} marked {title} as watched</>;
+      return (
+        <>
+          {who} marked {title} as watched
+        </>
+      );
     case "watched_together":
       return (
         <>
@@ -53,15 +69,23 @@ function describe(e: ActivityEvent, currentUserId: string): ReactNode {
         </>
       ) : (
         <>
-          {who} rated {title} {e.score}/10{forWhom}
+          {who} rated {title} {formatScore(e.score)}/10{forWhom}
           {note}
         </>
       );
     }
     case "removed":
-      return <>{who} removed {title}</>;
+      return (
+        <>
+          {who} removed {title}
+        </>
+      );
     case "restored":
-      return <>{who} restored {title}</>;
+      return (
+        <>
+          {who} restored {title}
+        </>
+      );
     default:
       return <>{who} made a change</>;
   }

@@ -16,6 +16,8 @@ export function Avatar({
       <img
         src={url}
         alt={name ?? "avatar"}
+        // Google answers 429 instead of the photo when the request carries our page as referrer.
+        referrerPolicy="no-referrer"
         className={cn("size-8 rounded-full object-cover", className)}
       />
     );

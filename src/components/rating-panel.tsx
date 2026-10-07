@@ -5,12 +5,11 @@ import { useState, useTransition } from "react";
 
 import { setRating } from "@/app/app/actions";
 import { Avatar } from "@/components/avatar";
+import { ScoreInput } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { formatScore } from "@/lib/format";
 import type { MemberSummary, RatingWithProfile } from "@/lib/types";
-import { cn } from "@/lib/utils";
-
-const SCORES = Array.from({ length: 10 }, (_, i) => i + 1);
 
 export function RatingPanel({
   itemId,
@@ -29,6 +28,7 @@ export function RatingPanel({
 }) {
   const [score, setScore] = useState<number | null>(myScore);
   const [comment, setComment] = useState(myComment ?? "");
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const nameOf = (userId: string) =>
@@ -44,8 +44,10 @@ export function RatingPanel({
   );
 
   function save() {
+    setError(null);
     start(async () => {
-      await setRating(itemId, score, comment);
+      const res = await setRating(itemId, score, comment);
+      if (res.error) setError(res.error);
     });
   }
 
@@ -53,30 +55,15 @@ export function RatingPanel({
     <div className="flex flex-col gap-3">
       {filledInBy && (
         <p className="text-xs text-muted-foreground">
-          {nameOf(filledInBy) ?? "A family member"} filled in your score.
-          Change it if it&apos;s wrong.
+          {nameOf(filledInBy) ?? "A family member"} filled in your score. Change
+          it if it&apos;s wrong.
         </p>
       )}
       <div>
         <p className="mb-1.5 text-xs font-medium text-muted-foreground">
           Your score
         </p>
-        <div className="flex flex-wrap gap-1">
-          {SCORES.map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setScore(score === n ? null : n)}
-              className={cn(
-                "size-7 rounded-md border border-border text-xs font-medium transition-colors hover:bg-muted",
-                score === n &&
-                  "border-primary bg-primary text-primary-foreground",
-              )}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
+        <ScoreInput value={score} onChange={setScore} label="Your score" />
       </div>
 
       <Textarea
@@ -85,6 +72,8 @@ export function RatingPanel({
         placeholder="Add a note (optional)"
         rows={2}
       />
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       <div className="flex justify-end">
         <Button size="sm" onClick={save} disabled={pending}>
@@ -110,7 +99,9 @@ export function RatingPanel({
                   {r.profiles?.display_name ?? "Someone"}
                 </span>
                 {r.score !== null && (
-                  <span className="ml-1.5 text-star">★ {r.score}/10</span>
+                  <span className="ml-1.5 text-star">
+                    ★ {formatScore(r.score)}/10
+                  </span>
                 )}
                 {r.rated_by && r.rated_by !== r.user_id && (
                   <span className="ml-1.5 text-xs text-muted-foreground">

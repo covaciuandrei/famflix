@@ -10,13 +10,12 @@ import {
   type ActionResult,
 } from "@/app/app/actions";
 import { MediaPoster } from "@/components/media-poster";
+import { ScoreInput } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDay } from "@/lib/format";
 import type { PendingRating } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
-const SCORES = Array.from({ length: 10 }, (_, i) => i + 1);
 const DISMISSED_KEY = "famflix:dismissed-rating-requests";
 
 // sessionStorage throws when the browser blocks site storage.
@@ -158,22 +157,8 @@ function RequestRow({
           {request.group_name}
         </p>
 
-        <div className="mt-2 flex flex-wrap gap-1">
-          {SCORES.map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setScore(score === n ? null : n)}
-              aria-pressed={score === n}
-              className={cn(
-                "size-7 rounded-md border border-border text-xs font-medium transition-colors hover:bg-muted",
-                score === n &&
-                  "border-primary bg-primary text-primary-foreground",
-              )}
-            >
-              {n}
-            </button>
-          ))}
+        <div className="mt-3">
+          <ScoreInput value={score} onChange={setScore} />
         </div>
 
         <Textarea

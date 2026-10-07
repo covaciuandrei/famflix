@@ -19,6 +19,13 @@ function revalidateApp() {
   revalidatePath("/app", "layout");
 }
 
+/** Scores run from 1 to 10 with one decimal (6.7); returns undefined if out of range. */
+function cleanScore(score: number | null): number | null | undefined {
+  if (score === null) return null;
+  if (!Number.isFinite(score) || score < 1 || score > 10) return undefined;
+  return Math.round(score * 10) / 10;
+}
+
 async function requireUser() {
   const supabase = await createClient();
   const {
@@ -132,8 +139,12 @@ export async function setRating(
 ): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   const cleanComment = comment && comment.trim() ? comment.trim() : null;
+  const cleanedScore = cleanScore(score);
+  if (cleanedScore === undefined) {
+    return { error: "Scores must be between 1 and 10." };
+  }
 
-  if (score === null && !cleanComment) {
+  if (cleanedScore === null && !cleanComment) {
     const { error } = await supabase
       .from("ratings")
       .delete()
@@ -145,7 +156,7 @@ export async function setRating(
       {
         list_item_id: itemId,
         user_id: user.id,
-        score,
+        score: cleanedScore,
         comment: cleanComment,
         updated_at: new Date().toISOString(),
       },
@@ -181,10 +192,12 @@ export async function setReaction(
       .eq("id", current.id);
     if (error) return { error: error.message };
   } else {
-    const { error } = await supabase.from("reactions").upsert(
-      { list_item_id: itemId, user_id: user.id, value },
-      { onConflict: "list_item_id,user_id" },
-    );
+    const { error } = await supabase
+      .from("reactions")
+      .upsert(
+        { list_item_id: itemId, user_id: user.id, value },
+        { onConflict: "list_item_id,user_id" },
+      );
     if (error) return { error: error.message };
   }
 
@@ -199,11 +212,18 @@ export async function logWatchTogether(input: {
   viewers: { userId: string; score: number | null }[];
 }): Promise<ActionResult> {
   const { supabase } = await requireUser();
+  const viewers = input.viewers.map((v) => ({
+    user_id: v.userId,
+    score: cleanScore(v.score),
+  }));
+  if (viewers.some((v) => v.score === undefined)) {
+    return { error: "Scores must be between 1 and 10." };
+  }
   // log_watch() checks membership, the date and the scores.
   const { error } = await supabase.rpc("log_watch", {
     p_item: input.itemId,
     p_watched_on: input.watchedOn,
-    p_viewers: input.viewers.map((v) => ({ user_id: v.userId, score: v.score })),
+    p_viewers: viewers,
   });
   if (error) return { error: error.message };
   revalidateApp();

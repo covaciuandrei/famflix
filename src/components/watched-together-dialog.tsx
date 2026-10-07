@@ -5,11 +5,11 @@ import { useRef, useState, useTransition } from "react";
 
 import { logWatchTogether } from "@/app/app/actions";
 import { Avatar } from "@/components/avatar";
+import { ScoreInput } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatScore } from "@/lib/format";
 import type { MemberSummary, RatingWithProfile, Watch } from "@/lib/types";
-
-const SCORES = Array.from({ length: 10 }, (_, i) => i + 1);
 
 function localToday(): string {
   const d = new Date();
@@ -119,50 +119,44 @@ export function WatchedTogetherDialog({
             return (
               <li
                 key={m.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+                className="rounded-lg border border-border px-3 py-2"
               >
-                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => toggle(m.id)}
-                    className="size-4 accent-primary"
-                  />
-                  <Avatar
-                    name={m.display_name}
-                    url={m.avatar_url}
-                    className="size-6"
-                  />
-                  <span className="truncate">
-                    {m.display_name}
-                    {m.id === currentUserId ? " (you)" : ""}
-                  </span>
-                </label>
-                {isChecked &&
-                  (existing !== null ? (
-                    <span className="text-xs text-muted-foreground">
-                      Rated {existing}/10
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggle(m.id)}
+                      className="size-4 accent-primary"
+                    />
+                    <Avatar
+                      name={m.display_name}
+                      url={m.avatar_url}
+                      className="size-6"
+                    />
+                    <span className="truncate">
+                      {m.display_name}
+                      {m.id === currentUserId ? " (you)" : ""}
                     </span>
-                  ) : (
-                    <select
-                      value={scores[m.id] ?? ""}
-                      onChange={(e) =>
-                        setScores((prev) => ({
-                          ...prev,
-                          [m.id]: e.target.value ? Number(e.target.value) : null,
-                        }))
+                  </label>
+                  {isChecked && existing !== null && (
+                    <span className="text-xs text-muted-foreground">
+                      Rated {formatScore(existing)}/10
+                    </span>
+                  )}
+                </div>
+                {isChecked && existing === null && (
+                  <div className="mt-2">
+                    <ScoreInput
+                      compact
+                      value={scores[m.id] ?? null}
+                      onChange={(v) =>
+                        setScores((prev) => ({ ...prev, [m.id]: v }))
                       }
-                      aria-label={`Score for ${m.display_name}`}
-                      className="h-8 rounded-md border border-border bg-input px-2 text-sm"
-                    >
-                      <option value="">No score</option>
-                      {SCORES.map((n) => (
-                        <option key={n} value={n}>
-                          {n}/10
-                        </option>
-                      ))}
-                    </select>
-                  ))}
+                      label={`Score for ${m.display_name}`}
+                    />
+                  </div>
+                )}
               </li>
             );
           })}

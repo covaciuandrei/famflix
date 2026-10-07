@@ -43,6 +43,8 @@ pasting each one's contents and clicking Run:
 3. [`supabase/migrations/0003_family_tools.sql`](supabase/migrations/0003_family_tools.sql) —
    undo for removed titles, family settings, the activity feed and stronger
    invite codes.
+4. [`supabase/migrations/0004_decimal_scores.sql`](supabase/migrations/0004_decimal_scores.sql) —
+   scores with one decimal (6.7, 8.5, ...). Existing scores are kept.
 
 ## 4. Enable authentication
 
