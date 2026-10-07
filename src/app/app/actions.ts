@@ -43,7 +43,12 @@ export async function addToList(input: {
 }): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
 
-  const details = await getMediaDetails(input.mediaType, input.tmdbId);
+  let details;
+  try {
+    details = await getMediaDetails(input.mediaType, input.tmdbId);
+  } catch {
+    return { error: "Couldn't reach the movie database. Please try again." };
+  }
   const { data: media, error: mediaError } = await supabase
     .from("media")
     .upsert(detailsToMediaRow(details), { onConflict: "tmdb_id,media_type" })

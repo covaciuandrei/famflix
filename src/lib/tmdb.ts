@@ -84,6 +84,15 @@ function token(): string {
   return t;
 }
 
+export class TmdbError extends Error {
+  constructor(
+    readonly status: number,
+    path: string,
+  ) {
+    super(`TMDB request failed (${status}) for ${path}`);
+  }
+}
+
 async function tmdbFetch<T>(
   path: string,
   params: Record<string, string> = {},
@@ -102,7 +111,7 @@ async function tmdbFetch<T>(
   });
 
   if (!res.ok) {
-    throw new Error(`TMDB request failed (${res.status}) for ${path}`);
+    throw new TmdbError(res.status, path);
   }
   return (await res.json()) as T;
 }

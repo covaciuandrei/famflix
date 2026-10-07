@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
 import { getLibraryIndex, getMyGroups, getSessionProfile } from "@/lib/data";
 import { tmdbImage } from "@/lib/images";
-import { getMediaDetails } from "@/lib/tmdb";
+import { getMediaDetails, TmdbError } from "@/lib/tmdb";
 import type { MediaType } from "@/lib/types";
 
 export default async function MediaDetailPage({
@@ -35,7 +35,11 @@ export default async function MediaDetailPage({
     libraryKey(mediaType, id)
   ];
 
-  const details = await getMediaDetails(mediaType, id).catch(() => null);
+  // Only a TMDB 404 means "no such title"; anything else goes to the error page.
+  const details = await getMediaDetails(mediaType, id).catch((e) => {
+    if (e instanceof TmdbError && e.status === 404) return null;
+    throw e;
+  });
   if (!details) notFound();
 
   const backdrop = tmdbImage(details.backdropPath, "w1280");

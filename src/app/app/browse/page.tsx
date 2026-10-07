@@ -47,14 +47,15 @@ export default async function BrowsePage() {
 
   let rows: TmdbRow[] = [];
   let suggestions: TmdbRow[] = [];
-  let error: string | null = null;
+  let error = false;
   try {
     [rows, suggestions] = await Promise.all([
       getBrowseRows(),
       getSuggestionRows(library),
     ]);
   } catch (e) {
-    error = (e as Error).message;
+    console.error("Browse rows failed:", e);
+    error = true;
   }
 
   return (
@@ -70,9 +71,8 @@ export default async function BrowsePage() {
 
       {error ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-          Couldn&apos;t load titles from TMDB. Make sure{" "}
-          <code className="font-mono text-foreground">TMDB_ACCESS_TOKEN</code> is
-          set in your environment.
+          Couldn&apos;t load movies and series right now. Search still might
+          work; otherwise try again in a minute.
         </div>
       ) : (
         <div className="flex flex-col gap-8">

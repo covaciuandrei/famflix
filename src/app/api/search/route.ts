@@ -17,9 +17,10 @@ export async function GET(request: Request) {
     const results = await searchMedia(q);
     return NextResponse.json({ results });
   } catch (error) {
+    console.error("Search failed:", error);
     return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 },
+      { error: "Search isn't working right now. Please try again." },
+      { status: 502 },
     );
   }
 }
