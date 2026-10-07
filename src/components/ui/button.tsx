@@ -1,0 +1,49 @@
+import * as React from "react";
+
+import { cn } from "@/lib/utils";
+
+type Variant = "default" | "secondary" | "outline" | "ghost" | "destructive";
+type Size = "sm" | "default" | "lg" | "icon";
+
+const base =
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 cursor-pointer";
+
+const variants: Record<Variant, string> = {
+  default: "bg-primary text-primary-foreground hover:bg-primary/90",
+  secondary: "bg-muted text-foreground hover:bg-muted/70",
+  outline: "border border-border bg-transparent hover:bg-muted",
+  ghost: "hover:bg-muted",
+  destructive: "bg-destructive text-white hover:bg-destructive/90",
+};
+
+const sizes: Record<Size, string> = {
+  sm: "h-8 px-3 text-xs",
+  default: "h-10 px-4 py-2",
+  lg: "h-11 px-6",
+  icon: "h-10 w-10",
+};
+
+export function buttonVariants({
+  variant = "default",
+  size = "default",
+  className,
+}: { variant?: Variant; size?: Size; className?: string } = {}) {
+  return cn(base, variants[variant], sizes[size], className);
+}
+
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: Variant;
+  size?: Size;
+}
+
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, type = "button", ...props }, ref) => (
+    <button
+      ref={ref}
+      type={type}
+      className={buttonVariants({ variant, size, className })}
+      {...props}
+    />
+  ),
+);
+Button.displayName = "Button";
