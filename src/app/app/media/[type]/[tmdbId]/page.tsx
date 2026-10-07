@@ -109,6 +109,7 @@ export default async function MediaDetailPage({
               <AddToListButton
                 tmdbId={details.tmdbId}
                 mediaType={mediaType}
+                title={details.title}
                 targets={targets}
                 alreadyOn={library?.lists.map((l) => l.listId)}
                 size="default"

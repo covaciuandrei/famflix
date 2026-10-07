@@ -149,7 +149,7 @@ export function ScoreInput({
       </div>
       {slider}
       {/* Whole-number shortcuts, lined up under the slider (between the ± buttons). */}
-      <div className="relative mx-9 h-5">
+      <div className="relative mx-9 h-5 pointer-coarse:mx-11 pointer-coarse:h-8">
         {TICKS.map((n) => (
           <button
             key={n}
@@ -157,10 +157,10 @@ export function ScoreInput({
             onClick={() => onChange(n)}
             aria-label={`${n} out of 10`}
             style={{
-              left: `calc(0.625rem + (100% - 1.25rem) * ${(n - 1) / 9})`,
+              left: `calc(var(--score-thumb) / 2 + (100% - var(--score-thumb)) * ${(n - 1) / 9})`,
             }}
             className={cn(
-              "absolute -translate-x-1/2 rounded px-1 text-[11px] tabular-nums text-muted-foreground transition-colors hover:text-foreground",
+              "absolute inline-flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded text-[11px] tabular-nums text-muted-foreground transition-colors hover:text-foreground pointer-coarse:h-8 pointer-coarse:text-xs",
               value !== null &&
                 Math.floor(value) === n &&
                 "font-semibold text-star",
@@ -191,7 +191,7 @@ function NudgeButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+      className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40 pointer-coarse:size-9"
     >
       {children}
     </button>

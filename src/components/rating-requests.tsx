@@ -139,64 +139,66 @@ function RequestRow({
   const itemId = request.list_item_id;
 
   return (
-    <li className="flex gap-3 rounded-lg border border-border p-3">
-      <MediaPoster
-        path={request.poster_path}
-        alt={request.title}
-        size="w92"
-        sizes="56px"
-        className="w-14 shrink-0 self-start"
-      />
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold">
-          {request.title}
-          {request.release_year ? ` (${request.release_year})` : ""}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {loggedBy} logged it on {formatDay(request.watched_on)} ·{" "}
-          {request.group_name}
-        </p>
-
-        <div className="mt-3">
-          <ScoreInput value={score} onChange={setScore} />
-        </div>
-
-        <Textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Add a note (optional)"
-          rows={1}
-          className="mt-2 min-h-9"
+    <li className="rounded-lg border border-border p-3">
+      <div className="flex gap-3">
+        <MediaPoster
+          path={request.poster_path}
+          alt={request.title}
+          size="w92"
+          sizes="56px"
+          className="w-14 shrink-0 self-start"
         />
-
-        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            disabled={pending || (score === null && !note.trim())}
-            onClick={() => run(() => setRating(itemId, score, note))}
-          >
-            {pending && <Loader2 className="size-4 animate-spin" />}
-            Save
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={pending}
-            onClick={() => run(() => skipRatingRequest(itemId))}
-          >
-            Skip
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={pending}
-            onClick={() => run(() => removeMeFromWatch(itemId))}
-          >
-            I wasn&apos;t there
-          </Button>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">
+            {request.title}
+            {request.release_year ? ` (${request.release_year})` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {loggedBy} logged it on {formatDay(request.watched_on)} ·{" "}
+            {request.group_name}
+          </p>
         </div>
+      </div>
+
+      <div className="mt-3">
+        <ScoreInput value={score} onChange={setScore} />
+      </div>
+
+      <Textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Add a note (optional)"
+        rows={1}
+        className="mt-2 min-h-9"
+      />
+
+      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          disabled={pending || (score === null && !note.trim())}
+          onClick={() => run(() => setRating(itemId, score, note))}
+        >
+          {pending && <Loader2 className="size-4 animate-spin" />}
+          Save
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => run(() => skipRatingRequest(itemId))}
+        >
+          Skip
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => run(() => removeMeFromWatch(itemId))}
+        >
+          I wasn&apos;t there
+        </Button>
       </div>
     </li>
   );

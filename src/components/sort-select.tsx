@@ -14,7 +14,7 @@ export function SortSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as SortKey)}
-      className="h-9 rounded-md border border-border bg-input px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="h-9 rounded-md border border-border bg-input px-2.5 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
       aria-label="Sort"
     >
       {SORT_OPTIONS.map((o) => (

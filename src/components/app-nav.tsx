@@ -102,14 +102,22 @@ export function AppNav({
 
           <div className="flex items-center gap-2">
             <RatingRequests pending={pending} currentUserId={currentUserId} />
+            {/* Phones: the avatar goes straight to Settings (which has Sign out). */}
+            <Link
+              href="/app/settings"
+              aria-label="Settings"
+              className="rounded-full p-0.5 sm:hidden"
+            >
+              <Avatar name={name} url={avatarUrl} className="size-8" />
+            </Link>
             <button
               ref={buttonRef}
               type="button"
               popoverTarget={menuId}
-              className="flex items-center gap-2 rounded-full p-0.5 pr-2 hover:bg-muted"
+              className="hidden items-center gap-2 rounded-full p-0.5 pr-2 hover:bg-muted sm:flex"
             >
               <Avatar name={name} url={avatarUrl} className="size-8" />
-              <span className="hidden max-w-24 truncate text-sm font-medium sm:inline">
+              <span className="max-w-24 truncate text-sm font-medium">
                 {name}
               </span>
             </button>

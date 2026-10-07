@@ -96,12 +96,21 @@ body {
   display: none;
 }
 
-/* Score slider (score-input.tsx): --fill (0-1) fills the track to the thumb's centre; 1.25rem = thumb width.
+/* Score slider (score-input.tsx): --fill (0-1) fills the track to the thumb's centre.
    Keep -webkit-/-moz- pseudo-elements in separate rules: one unknown selector drops the whole rule. */
+:root {
+  --score-thumb: 1.25rem;
+}
+@media (pointer: coarse) {
+  :root {
+    --score-thumb: 1.75rem;
+  }
+}
+
 @layer components {
   .score-slider {
     appearance: none;
-    height: 1.5rem;
+    height: max(1.5rem, var(--score-thumb));
     background: transparent;
     cursor: pointer;
   }
@@ -113,7 +122,8 @@ body {
     border-radius: 9999px;
     background: linear-gradient(
       to right,
-      var(--star) calc(0.625rem + (100% - 1.25rem) * var(--fill)),
+      var(--star)
+        calc(var(--score-thumb) / 2 + (100% - var(--score-thumb)) * var(--fill)),
       var(--muted) 0
     );
   }
@@ -122,16 +132,17 @@ body {
     border-radius: 9999px;
     background: linear-gradient(
       to right,
-      var(--star) calc(0.625rem + (100% - 1.25rem) * var(--fill)),
+      var(--star)
+        calc(var(--score-thumb) / 2 + (100% - var(--score-thumb)) * var(--fill)),
       var(--muted) 0
     );
   }
   .score-slider::-webkit-slider-thumb {
     appearance: none;
     box-sizing: border-box;
-    width: 1.25rem;
-    height: 1.25rem;
-    margin-top: -0.375rem;
+    width: var(--score-thumb);
+    height: var(--score-thumb);
+    margin-top: calc((0.5rem - var(--score-thumb)) / 2);
     border-radius: 9999px;
     border: 3px solid var(--star);
     background: var(--foreground);
@@ -140,8 +151,8 @@ body {
   }
   .score-slider::-moz-range-thumb {
     box-sizing: border-box;
-    width: 1.25rem;
-    height: 1.25rem;
+    width: var(--score-thumb);
+    height: var(--score-thumb);
     border-radius: 9999px;
     border: 3px solid var(--star);
     background: var(--foreground);
@@ -174,5 +185,28 @@ body {
   .score-slider[data-empty]::-moz-range-thumb {
     border-color: var(--muted-foreground);
     background: var(--muted);
+  }
+
+  /* Phone bottom sheet (add-to-list-button.tsx) slides up when opened. */
+  .sheet[open] {
+    animation: sheet-up 180ms ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sheet[open] {
+      animation: none;
+    }
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* Without the Popover API (iOS 16 and older) popovers would render inline; phones use the sheet instead. */
+@supports not selector(:popover-open) {
+  [popover] {
+    display: none;
   }
 }

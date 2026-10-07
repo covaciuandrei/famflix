@@ -50,6 +50,7 @@ export function MediaCard({
       <AddToListButton
         tmdbId={item.tmdbId}
         mediaType={item.mediaType}
+        title={item.title}
         targets={targets}
         alreadyOn={library?.lists.map((l) => l.listId)}
         className="w-full"
