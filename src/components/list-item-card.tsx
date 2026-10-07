@@ -33,7 +33,6 @@ export function ListItemCard({
   const [removeError, setRemoveError] = useState<string | null>(null);
   const { media, item } = card;
   const detailHref = `/app/media/${media.media_type}/${media.tmdb_id}`;
-  const hasMyNote = card.myScore !== null || Boolean(card.myComment);
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
   const answered = new Set(card.ratings.map((r) => r.user_id));
   const waitingFor = card.viewers.filter(
@@ -125,10 +124,28 @@ export function ListItemCard({
             <button
               type="button"
               onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted"
             >
-              <MessageSquare className="size-4" />
-              {hasMyNote ? "Your note" : "Rate / note"}
+              {card.myScore !== null ? (
+                <>
+                  <Star className="size-4 fill-star text-star" />
+                  Your rating
+                  <span className="font-semibold text-foreground">
+                    {formatScore(card.myScore)}
+                  </span>
+                </>
+              ) : card.myComment ? (
+                <>
+                  <MessageSquare className="size-4" />
+                  Your note
+                </>
+              ) : (
+                <>
+                  <Star className="size-4" />
+                  Rate / note
+                </>
+              )}
             </button>
             {card.addedBy && (
               <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
