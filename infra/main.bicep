@@ -1,13 +1,18 @@
 targetScope = 'subscription'
 
+param environmentName string
 param location string
 param sessionId string
+param deployedBy string
+param createdAt string
 param tags object = {
-  environment: 'production'
+  'app-onboard-skill': 'true'
+  'app-onboard-session-id': sessionId
+  environment: environmentName
   project: 'famflix'
-  managedBy: 'bicep'
+  managedBy: 'AppOnboard/${deployedBy}'
   deploymentMethod: 'bicep'
-  sessionId: sessionId
+  'created-at': createdAt
 }
 
 var resourceGroupName = 'rg-famflix-prod-a85c'
