@@ -6,6 +6,7 @@ import { signOut } from "@/app/login/actions";
 import { ProfileForm } from "@/components/profile-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ShowTourButton } from "@/components/welcome-tour";
 import { getSessionProfile } from "@/lib/data";
 
 export default async function SettingsPage() {
@@ -86,6 +87,7 @@ export default async function SettingsPage() {
           >
             Privacy policy
           </Link>
+          <ShowTourButton />
         </CardContent>
       </Card>
     </div>

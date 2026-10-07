@@ -191,10 +191,22 @@ body {
   .sheet[open] {
     animation: sheet-up 180ms ease-out;
   }
+  /* Welcome tour steps (welcome-tour.tsx). */
+  .fade-in {
+    animation: fade-in 200ms ease-out;
+  }
   @media (prefers-reduced-motion: reduce) {
-    .sheet[open] {
+    .sheet[open],
+    .fade-in {
       animation: none;
     }
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 
