@@ -149,6 +149,8 @@ create index activity_group_created_idx
 -- ---------------------------------------------------------------------------
 
 -- Membership checks. SECURITY DEFINER => bypass RLS to avoid recursion.
+-- Anyone can call them through the API, so they only answer about the signed-in user's own families:
+-- nobody can use them to find out who is in someone else's family.
 create function public.is_group_member(gid uuid, uid uuid)
 returns boolean
 language sql
@@ -159,6 +161,13 @@ as $$
   select exists (
     select 1 from public.group_members gm
     where gm.group_id = gid and gm.user_id = uid
+  )
+  and (
+    coalesce(uid = auth.uid(), false)
+    or exists (
+      select 1 from public.group_members me
+      where me.group_id = gid and me.user_id = auth.uid()
+    )
   );
 $$;
 
@@ -169,12 +178,13 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (
-    select 1
-    from public.group_members x
-    join public.group_members y on x.group_id = y.group_id
-    where x.user_id = a and y.user_id = b
-  );
+  select coalesce(auth.uid() in (a, b), false)
+    and exists (
+      select 1
+      from public.group_members x
+      join public.group_members y on x.group_id = y.group_id
+      where x.user_id = a and y.user_id = b
+    );
 $$;
 
 create function public.is_group_owner(gid uuid, uid uuid)
