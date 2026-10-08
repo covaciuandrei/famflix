@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Users } from "lucide-react";
+import { Check, Loader2, Users } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 
 import { logWatchTogether } from "@/app/app/actions";
@@ -26,6 +26,7 @@ export function WatchedTogetherDialog({
   viewers,
   ratings,
   currentUserId,
+  done,
 }: {
   itemId: string;
   title: string;
@@ -33,6 +34,8 @@ export function WatchedTogetherDialog({
   viewers: Watch[];
   ratings: RatingWithProfile[];
   currentUserId: string;
+  /** Already logged as watched together: the button shows a tick, like Watched. */
+  done: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -83,8 +86,12 @@ export function WatchedTogetherDialog({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={open}>
-        <Users className="size-4" />
+      <Button variant={done ? "secondary" : "outline"} size="sm" onClick={open}>
+        {done ? (
+          <Check className="size-4 text-like" />
+        ) : (
+          <Users className="size-4" />
+        )}
         Watched together
       </Button>
 

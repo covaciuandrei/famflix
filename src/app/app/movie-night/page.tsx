@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { MovieNight } from "@/components/movie-night";
 import { getListCards, getMyGroups, getSessionProfile } from "@/lib/data";
+import { isToWatch } from "@/lib/list-status";
 import { cn } from "@/lib/utils";
 
 export default async function MovieNightPage({
@@ -27,7 +28,7 @@ export default async function MovieNightPage({
       groupId: current.id === "mine" ? null : current.id,
       userId: user.id,
     })
-  ).filter((c) => c.item.status === "want");
+  ).filter(isToWatch);
   // Picked here and passed down so the server and the browser shuffle identically.
   // eslint-disable-next-line react-hooks/purity -- server component, renders once per request (it reads cookies); a new order per visit is intended
   const seed = Math.floor(Math.random() * 2 ** 31);

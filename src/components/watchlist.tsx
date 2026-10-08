@@ -8,6 +8,7 @@ import { restoreListItem } from "@/app/app/actions";
 import { ListItemCard } from "@/components/list-item-card";
 import { SortSelect } from "@/components/sort-select";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { isToWatch } from "@/lib/list-status";
 import { sortCards } from "@/lib/sort";
 import type {
   ListItemCard as Card,
@@ -16,13 +17,7 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "want" | "watched" | "all";
-
-const TABS: { value: Tab; label: string }[] = [
-  { value: "want", label: "To watch" },
-  { value: "watched", label: "Watched" },
-  { value: "all", label: "All" },
-];
+type Tab = "want" | "done" | "all";
 
 export function Watchlist({
   cards,
@@ -33,6 +28,13 @@ export function Watchlist({
   currentUserId: string;
   members?: MemberSummary[];
 }) {
+  // Only family lists are given their members.
+  const family = members !== undefined;
+  const tabs: { value: Tab; label: string }[] = [
+    { value: "want", label: "To watch" },
+    { value: "done", label: family ? "Watched together" : "Watched" },
+    { value: "all", label: "All" },
+  ];
   const [tab, setTab] = useState<Tab>("want");
   const [sort, setSort] = useState<SortKey>("recent");
   const [removed, setRemoved] = useState<{ id: string; title: string } | null>(
@@ -58,18 +60,16 @@ export function Watchlist({
     });
   }
 
-  const counts = useMemo(
-    () => ({
-      want: cards.filter((c) => c.item.status === "want").length,
-      watched: cards.filter((c) => c.item.status === "watched").length,
-      all: cards.length,
-    }),
-    [cards],
-  );
+  const counts = useMemo(() => {
+    const want = cards.filter(isToWatch).length;
+    return { want, done: cards.length - want, all: cards.length };
+  }, [cards]);
 
   const visible = useMemo(() => {
     const filtered =
-      tab === "all" ? cards : cards.filter((c) => c.item.status === tab);
+      tab === "all"
+        ? cards
+        : cards.filter((c) => isToWatch(c) === (tab === "want"));
     return sortCards(filtered, sort);
   }, [cards, tab, sort]);
 
@@ -77,13 +77,14 @@ export function Watchlist({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-lg border border-border bg-card p-1">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.value}
               type="button"
               onClick={() => setTab(t.value)}
+              aria-pressed={tab === t.value}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
                 tab === t.value && "bg-muted text-foreground",
               )}
             >
@@ -98,7 +99,7 @@ export function Watchlist({
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState tab={tab} />
+        <EmptyState tab={tab} family={family} listEmpty={cards.length === 0} />
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {visible.map((card) => (
@@ -135,21 +136,39 @@ export function Watchlist({
   );
 }
 
-function EmptyState({ tab }: { tab: Tab }) {
+function EmptyState({
+  tab,
+  family,
+  listEmpty,
+}: {
+  tab: Tab;
+  family: boolean;
+  listEmpty: boolean;
+}) {
+  const [title, text] =
+    tab === "done"
+      ? family
+        ? [
+            "Nothing watched together yet",
+            "After you watch a title together, tap Watched together on it.",
+          ]
+        : ["Nothing watched yet", "Mark titles Watched once you've seen them."]
+      : listEmpty
+        ? ["This list is empty", "Find something to watch and add it to your list."]
+        : ["Nothing left to watch", "Find something new to add to your list."];
+
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
       <Clapperboard className="size-8 text-muted-foreground" />
       <div>
-        <p className="font-medium">
-          {tab === "watched" ? "Nothing watched yet" : "This list is empty"}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Find something to watch and add it to your list.
-        </p>
+        <p className="font-medium">{title}</p>
+        <p className="text-sm text-muted-foreground">{text}</p>
       </div>
-      <Link href="/app/browse" className={buttonVariants({ size: "sm" })}>
-        Browse titles
-      </Link>
+      {tab !== "done" && (
+        <Link href="/app/browse" className={buttonVariants({ size: "sm" })}>
+          Browse titles
+        </Link>
+      )}
     </div>
   );
 }

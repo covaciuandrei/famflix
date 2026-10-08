@@ -14,6 +14,7 @@ import { WatchedToggle } from "@/components/watched-toggle";
 import { WatchedTogetherDialog } from "@/components/watched-together-dialog";
 import { mediaTypeLabel } from "@/lib/constants";
 import { formatDay, formatScore } from "@/lib/format";
+import { isWatchedTogether } from "@/lib/list-status";
 import type { ListItemCard as Card, MemberSummary } from "@/lib/types";
 
 export function ListItemCard({
@@ -113,6 +114,7 @@ export function ListItemCard({
                 viewers={card.viewers}
                 ratings={card.ratings}
                 currentUserId={currentUserId}
+                done={isWatchedTogether(card)}
               />
             )}
             <ReactionButtons
