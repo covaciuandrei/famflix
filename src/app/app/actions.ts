@@ -278,8 +278,10 @@ export async function logWatchTogether(input: {
   itemId: string;
   watchedOn: string;
   viewers: { userId: string; score: number | null }[];
+  /** The signed-in user's own note, when they're among the viewers and changed it. */
+  note?: string;
 }): Promise<ActionResult> {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const viewers = input.viewers.map((v) => ({
     user_id: v.userId,
     score: cleanScore(v.score),
@@ -294,8 +296,43 @@ export async function logWatchTogether(input: {
     p_viewers: viewers,
   });
   if (error) return { error: error.message };
+
+  // Only your own note: nobody writes notes for the others, they add theirs when they're asked to rate.
+  if (input.note !== undefined && input.viewers.some((v) => v.userId === user.id)) {
+    const res = await saveOwnNote(supabase, input.itemId, user.id, input.note);
+    if (res.error) return res;
+  }
+
   revalidateApp();
   return {};
+}
+
+/** Sets the note on the user's rating, creating one without a score if needed (but never an empty one). */
+async function saveOwnNote(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  itemId: string,
+  userId: string,
+  note: string,
+): Promise<ActionResult> {
+  const comment = note.trim() || null;
+  const { data: existing } = await supabase
+    .from("ratings")
+    .select("id")
+    .eq("list_item_id", itemId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (existing) {
+    const { error } = await supabase
+      .from("ratings")
+      .update({ comment, updated_at: new Date().toISOString() })
+      .eq("id", (existing as { id: string }).id);
+    return error ? { error: error.message } : {};
+  }
+  if (!comment) return {};
+  const { error } = await supabase
+    .from("ratings")
+    .insert({ list_item_id: itemId, user_id: userId, comment });
+  return error ? { error: error.message } : {};
 }
 
 export async function skipRatingRequest(itemId: string): Promise<ActionResult> {

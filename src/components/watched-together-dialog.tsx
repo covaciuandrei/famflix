@@ -8,6 +8,7 @@ import { Avatar } from "@/components/avatar";
 import { ScoreInput } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { formatScore } from "@/lib/format";
 import type { MemberSummary, RatingWithProfile, Watch } from "@/lib/types";
@@ -41,6 +42,7 @@ export function WatchedTogetherDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [scores, setScores] = useState<Record<string, number | null>>({});
+  const [note, setNote] = useState("");
   const [watchedOn, setWatchedOn] = useState("");
   const [today, setToday] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +50,15 @@ export function WatchedTogetherDialog({
 
   const existingScore = (userId: string) =>
     ratings.find((r) => r.user_id === userId)?.score ?? null;
+  const myComment =
+    ratings.find((r) => r.user_id === currentUserId)?.comment ?? "";
   const selected = members.filter((m) => checked.has(m.id));
 
   function open() {
     const now = localToday();
     setChecked(new Set([currentUserId, ...viewers.map((v) => v.user_id)]));
     setScores({});
+    setNote(myComment);
     setToday(now);
     setWatchedOn(now);
     setError(null);
@@ -79,6 +84,11 @@ export function WatchedTogetherDialog({
           userId: m.id,
           score: existingScore(m.id) === null ? (scores[m.id] ?? null) : null,
         })),
+        // Only your own note; everyone else adds theirs when they're asked to rate it.
+        note:
+          checked.has(currentUserId) && note.trim() !== myComment.trim()
+            ? note
+            : undefined,
       });
       if (res.error) setError(res.error);
       else dialogRef.current?.close();
@@ -108,7 +118,8 @@ export function WatchedTogetherDialog({
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Tick everyone who was there. You can fill in a score for anyone who
-          hasn&apos;t rated it yet. They can change it later.
+          hasn&apos;t rated it yet, and add your own note. The others are
+          asked to confirm their score and add their note.
         </p>
 
         <label className="mt-4 flex items-center gap-3 text-sm">
@@ -166,6 +177,16 @@ export function WatchedTogetherDialog({
                       label={`Score for ${m.display_name}`}
                     />
                   </div>
+                )}
+                {isChecked && m.id === currentUserId && (
+                  <Textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Your note (optional)"
+                    aria-label="Your note"
+                    rows={1}
+                    className="mt-2 min-h-9"
+                  />
                 )}
               </li>
             );
