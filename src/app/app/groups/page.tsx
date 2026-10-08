@@ -1,4 +1,4 @@
-import { Crown, UserCog, Users } from "lucide-react";
+import { ChevronRight, Crown, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 
 import { GroupForms } from "@/components/group-forms";
@@ -26,48 +26,58 @@ export default async function GroupsPage() {
           <h2 className="text-lg font-semibold">Your families</h2>
           <div className="flex flex-col gap-3">
             {groups.map((g) => (
-              <Card key={g.id}>
-                <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                      <Users className="size-5" />
-                    </span>
-                    <div>
-                      <p className="flex flex-wrap items-center gap-x-2 font-semibold">
-                        {g.name}
-                        {g.isOwner && (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-star">
-                            <Crown className="size-3.5" />
-                            Owner
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {g.memberCount} member{g.memberCount === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="hidden items-center gap-1.5 text-sm text-muted-foreground sm:flex">
-                      Invite:
-                      <InviteCode code={g.invite_code} />
-                    </div>
-                    {g.isOwner && (
+              // The whole card opens the family: the name link stretches over it (after:inset-0),
+              // and the invite code and Manage controls sit above it (relative z-10).
+              <Card
+                key={g.id}
+                className="relative transition-colors hover:border-primary/50"
+              >
+                <CardContent className="flex items-center gap-3 pt-5">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                    <Users className="size-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-x-2 font-semibold">
                       <Link
-                        href={`/app/family/${g.id}/settings#members`}
-                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                        href={`/app/family/${g.id}`}
+                        className="break-words after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
                       >
-                        <UserCog className="size-4" />
-                        Manage
+                        {g.name}
                       </Link>
-                    )}
-                    <Link
-                      href={`/app/family/${g.id}`}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
-                    >
-                      Open
-                    </Link>
+                      {g.isOwner && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-star">
+                          <Crown className="size-3.5" />
+                          Owner
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {g.memberCount} member{g.memberCount === 1 ? "" : "s"}
+                    </p>
                   </div>
+                  <div className="hidden items-center gap-1.5 text-sm text-muted-foreground sm:flex">
+                    Invite:
+                    <InviteCode code={g.invite_code} className="relative z-10" />
+                  </div>
+                  {g.isOwner && (
+                    <Link
+                      href={`/app/family/${g.id}/settings#members`}
+                      aria-label={`Manage ${g.name}`}
+                      title="Manage members"
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "relative z-10 shrink-0 max-sm:size-9 max-sm:px-0",
+                      })}
+                    >
+                      <UserCog className="size-4" />
+                      <span className="max-sm:hidden">Manage</span>
+                    </Link>
+                  )}
+                  <ChevronRight
+                    className="size-5 shrink-0 text-muted-foreground"
+                    aria-hidden
+                  />
                 </CardContent>
               </Card>
             ))}
