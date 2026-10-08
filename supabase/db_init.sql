@@ -38,6 +38,8 @@ create table public.group_members (
   joined_at timestamptz not null default now(),
   primary key (group_id, user_id)
 );
+create index group_members_user_idx on public.group_members (user_id);
+create index groups_created_by_idx on public.groups (created_by);
 
 -- Cached TMDB metadata (shared across all users).
 create table public.media (
@@ -81,7 +83,8 @@ create unique index list_items_shared_uniq
   where group_id is not null;
 
 create index list_items_group_idx on public.list_items (group_id);
-create index list_items_added_by_idx on public.list_items (added_by);
+-- added_by needs no index of its own: list_items_personal_uniq starts with it.
+create index list_items_media_idx on public.list_items (media_id);
 create index list_items_created_idx on public.list_items (created_at desc);
 
 -- A user's score and/or written note for a list item.
@@ -99,6 +102,7 @@ create table public.ratings (
   unique (list_item_id, user_id)
 );
 create index ratings_item_idx on public.ratings (list_item_id);
+create index ratings_user_idx on public.ratings (user_id);
 
 -- A user's like/dislike on a list item.
 create table public.reactions (
@@ -110,6 +114,7 @@ create table public.reactions (
   unique (list_item_id, user_id)
 );
 create index reactions_item_idx on public.reactions (list_item_id);
+create index reactions_user_idx on public.reactions (user_id);
 
 -- Who has watched a family-list title.
 create table public.watches (
@@ -124,6 +129,7 @@ create table public.watches (
   unique (list_item_id, user_id)
 );
 create index watches_user_idx on public.watches (user_id);
+create index watches_logged_by_idx on public.watches (logged_by);
 
 -- Family activity feed. Names and titles are copied in, so history stays readable after people leave.
 create table public.activity (
@@ -243,6 +249,8 @@ $$;
 --  Row level security
 -- ---------------------------------------------------------------------------
 
+-- auth.uid() is always wrapped as (select auth.uid()), so Postgres works it out once per query instead of
+-- once per row (Supabase Performance Advisor: "Auth RLS Initialization Plan").
 alter table public.profiles      enable row level security;
 alter table public.groups        enable row level security;
 alter table public.group_members enable row level security;
@@ -255,38 +263,38 @@ alter table public.activity      enable row level security;
 
 -- profiles ------------------------------------------------------------------
 create policy profiles_select on public.profiles for select
-  using (id = auth.uid() or public.shares_group(auth.uid(), id));
+  using (id = (select auth.uid()) or public.shares_group((select auth.uid()), id));
 create policy profiles_insert_self on public.profiles for insert
-  with check (id = auth.uid());
+  with check (id = (select auth.uid()));
 create policy profiles_update_self on public.profiles for update
-  using (id = auth.uid()) with check (id = auth.uid());
+  using (id = (select auth.uid())) with check (id = (select auth.uid()));
 
 -- groups + group_members: read-only here; they change only through the family functions below.
 create policy groups_select_member on public.groups for select
-  using (public.is_group_member(id, auth.uid()));
+  using (public.is_group_member(id, (select auth.uid())));
 create policy gm_select on public.group_members for select
-  using (public.is_group_member(group_id, auth.uid()));
+  using (public.is_group_member(group_id, (select auth.uid())));
 
 -- media (shared cache of TMDB data): any signed-in user can read it. Nobody writes it from
 -- the browser: the app's server saves it with the service-role key, which skips these rules.
 create policy media_select_authed on public.media for select
-  using (auth.uid() is not null);
+  using ((select auth.uid()) is not null);
 
 -- list_items: no delete policy; the app never hard-deletes titles, so every removal can be undone.
 create policy li_select on public.list_items for select using (
-  (group_id is null and added_by = auth.uid())
-  or (group_id is not null and public.is_group_member(group_id, auth.uid()))
+  (group_id is null and added_by = (select auth.uid()))
+  or (group_id is not null and public.is_group_member(group_id, (select auth.uid())))
 );
 create policy li_insert on public.list_items for insert with check (
-  added_by = auth.uid()
+  added_by = (select auth.uid())
   and (
     group_id is null
-    or public.is_group_member(group_id, auth.uid())
+    or public.is_group_member(group_id, (select auth.uid()))
   )
 );
 create policy li_update on public.list_items for update using (
-  (group_id is null and added_by = auth.uid())
-  or (group_id is not null and public.is_group_member(group_id, auth.uid()))
+  (group_id is null and added_by = (select auth.uid()))
+  or (group_id is not null and public.is_group_member(group_id, (select auth.uid())))
 );
 
 -- ratings -------------------------------------------------------------------
@@ -295,19 +303,19 @@ create policy ratings_select on public.ratings for select using (
     select 1 from public.list_items li
     where li.id = list_item_id
       and (
-        (li.group_id is null and li.added_by = auth.uid())
-        or (li.group_id is not null and public.is_group_member(li.group_id, auth.uid()))
+        (li.group_id is null and li.added_by = (select auth.uid()))
+        or (li.group_id is not null and public.is_group_member(li.group_id, (select auth.uid())))
       )
   )
 );
 -- Your own scores, and only on titles you can still see (not after you leave a family).
 create policy ratings_insert_own on public.ratings for insert
-  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
+  with check (user_id = (select auth.uid()) and public.can_see_item(list_item_id));
 create policy ratings_update_own on public.ratings for update
-  using (user_id = auth.uid() and public.can_see_item(list_item_id))
-  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
+  using (user_id = (select auth.uid()) and public.can_see_item(list_item_id))
+  with check (user_id = (select auth.uid()) and public.can_see_item(list_item_id));
 create policy ratings_delete_own on public.ratings for delete
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
 -- reactions -----------------------------------------------------------------
 create policy reactions_select on public.reactions for select using (
@@ -315,18 +323,18 @@ create policy reactions_select on public.reactions for select using (
     select 1 from public.list_items li
     where li.id = list_item_id
       and (
-        (li.group_id is null and li.added_by = auth.uid())
-        or (li.group_id is not null and public.is_group_member(li.group_id, auth.uid()))
+        (li.group_id is null and li.added_by = (select auth.uid()))
+        or (li.group_id is not null and public.is_group_member(li.group_id, (select auth.uid())))
       )
   )
 );
 create policy reactions_insert_own on public.reactions for insert
-  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
+  with check (user_id = (select auth.uid()) and public.can_see_item(list_item_id));
 create policy reactions_update_own on public.reactions for update
-  using (user_id = auth.uid() and public.can_see_item(list_item_id))
-  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
+  using (user_id = (select auth.uid()) and public.can_see_item(list_item_id))
+  with check (user_id = (select auth.uid()) and public.can_see_item(list_item_id));
 create policy reactions_delete_own on public.reactions for delete
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
 -- watches: no insert policy; log_watch() writes these ------------------------
 create policy watches_select on public.watches for select using (
@@ -334,17 +342,17 @@ create policy watches_select on public.watches for select using (
     select 1 from public.list_items li
     where li.id = list_item_id
       and li.group_id is not null
-      and public.is_group_member(li.group_id, auth.uid())
+      and public.is_group_member(li.group_id, (select auth.uid()))
   )
 );
 create policy watches_update_own on public.watches for update
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy watches_delete_own on public.watches for delete
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
 -- activity: read-only; only the triggers and functions below write it --------
 create policy activity_select on public.activity for select
-  using (public.is_group_member(group_id, auth.uid()));
+  using (public.is_group_member(group_id, (select auth.uid())));
 
 -- ---------------------------------------------------------------------------
 --  New users
