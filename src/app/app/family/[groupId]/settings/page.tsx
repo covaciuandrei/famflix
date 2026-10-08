@@ -101,8 +101,8 @@ export default async function FamilySettingsPage({
           {isOwner && (
             <CardDescription>
               As the owner you can remove members. Their scores and notes stay
-              on the list. Anyone with the invite code can rejoin, so make a
-              new code if you don&apos;t want them back.
+              on the list. Removing someone also changes the invite code, so
+              they can only come back if someone shares the new one.
             </CardDescription>
           )}
         </CardHeader>

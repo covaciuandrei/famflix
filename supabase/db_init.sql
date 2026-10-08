@@ -498,6 +498,11 @@ begin
   if not found then
     raise exception 'That person is not in this family';
   end if;
+  -- They knew the old code, so it changes too; otherwise they could rejoin straight away.
+  update public.groups
+  set invite_code = public.new_invite_code(),
+      invite_code_expires_at = now() + interval '24 hours'
+  where id = p_group;
 end;
 $$;
 
