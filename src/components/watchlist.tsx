@@ -107,8 +107,9 @@ export function Watchlist({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-border bg-card p-1">
+      {/* One row on phones: the tabs and the sort button never wrap onto separate lines. */}
+      <div className="flex items-center gap-2 sm:flex-wrap sm:justify-between sm:gap-3">
+        <div className="inline-flex min-w-0 rounded-lg border border-border bg-card p-1">
           {tabs.map((t) => (
             <button
               key={t.value}
@@ -116,12 +117,14 @@ export function Watchlist({
               onClick={() => setTab(t.value)}
               aria-pressed={tab === t.value}
               className={cn(
-                "whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-3",
+                "flex items-baseline whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-3",
+                // On a narrow phone only the long "Watched together" label gives way, shortened with "…".
+                t.value === "done" ? "min-w-0" : "shrink-0",
                 tab === t.value && "bg-muted text-foreground",
               )}
             >
-              {t.label}
-              <span className="ml-1.5 text-xs text-muted-foreground">
+              <span className="truncate">{t.label}</span>
+              <span className="ml-1 shrink-0 text-xs text-muted-foreground sm:ml-1.5">
                 {counts[t.value]}
               </span>
             </button>
