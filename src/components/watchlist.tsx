@@ -9,7 +9,9 @@ import { CategoryChips } from "@/components/category-chips";
 import { ListItemCard } from "@/components/list-item-card";
 import { SortSelect } from "@/components/sort-select";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { YearSelect } from "@/components/year-select";
 import { listCategories, matchesCategory } from "@/lib/categories";
+import { ANY_YEAR, listDecades, matchesDecade } from "@/lib/decades";
 import { isToWatch } from "@/lib/list-status";
 import { sortCards } from "@/lib/sort";
 import type {
@@ -38,6 +40,7 @@ export function Watchlist({
     { value: "all", label: "All" },
   ];
   const [tab, setTab] = useState<Tab>("want");
+  const [decade, setDecade] = useState(ANY_YEAR);
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState<SortKey>("recent");
   const [removed, setRemoved] = useState<{ id: string; title: string } | null>(
@@ -75,8 +78,21 @@ export function Watchlist({
         : cards.filter((c) => isToWatch(c) === (tab === "want")),
     [cards, tab],
   );
-  const categories = useMemo(() => listCategories(inTab), [inTab]);
-  // A category with no titles in this tab shows everything instead of an empty list.
+  // Filters narrow in order (tab, then release date, then category); one that matches nothing
+  // here falls back to showing everything instead of an empty list.
+  const decades = useMemo(
+    () => listDecades(inTab.map((c) => c.media.release_year)),
+    [inTab],
+  );
+  const activeDecade = decades.some((d) => d.value === decade)
+    ? decade
+    : ANY_YEAR;
+  const inDecade = useMemo(
+    () =>
+      inTab.filter((c) => matchesDecade(c.media.release_year, activeDecade)),
+    [inTab, activeDecade],
+  );
+  const categories = useMemo(() => listCategories(inDecade), [inDecade]);
   const activeCategory = categories.some((c) => c.value === category)
     ? category
     : "all";
@@ -84,10 +100,10 @@ export function Watchlist({
   const visible = useMemo(
     () =>
       sortCards(
-        inTab.filter((c) => matchesCategory(c, activeCategory)),
+        inDecade.filter((c) => matchesCategory(c, activeCategory)),
         sort,
       ),
-    [inTab, activeCategory, sort],
+    [inDecade, activeCategory, sort],
   );
 
   return (
@@ -112,7 +128,16 @@ export function Watchlist({
             </button>
           ))}
         </div>
-        <SortSelect value={sort} onChange={setSort} />
+        <div className="flex gap-2">
+          {inTab.length > 0 && (
+            <YearSelect
+              options={decades}
+              value={activeDecade}
+              onChange={setDecade}
+            />
+          )}
+          <SortSelect value={sort} onChange={setSort} />
+        </div>
       </div>
 
       {categories.length > 1 && (

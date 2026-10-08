@@ -11,12 +11,14 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   family, make a new invite code and remove members (**Manage** on the
   Families page).
 - **Personal list**: a private "My list" that only you can see. Every list can
-  be filtered by category (genre, movies or series).
+  be filtered by release date (2020s, 1990s, ...) and category (genre, movies
+  or series).
 - **Browse and add**: search, browse trending and top rated titles, or pick a
-  category (Comedy, Horror, Kids, ...), with trailers and where to stream them.
-- **Scores and reactions**: rate 1–10 with one decimal (8.5) and add a note.
-  A score over 7 also likes the title and under 6 dislikes it; you can still
-  change the thumbs yourself.
+  category (Comedy, Horror, Kids, ...) and decade, with trailers and where to
+  stream them.
+- **Scores and reactions**: rate 1–10 with one decimal (8.5) using a slider,
+  and add a note. A score over 7 also likes the title and under 6 dislikes it;
+  you can still change the thumbs yourself.
 - **Watched together**: log who watched a title with you. FamFlix asks the
   others for their score, or you can fill it in for them. Family lists are split
   into To watch and Watched together, so a title one person marked Watched on

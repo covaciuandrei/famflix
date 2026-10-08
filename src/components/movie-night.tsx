@@ -7,8 +7,10 @@ import { useMemo, useState } from "react";
 import { CategoryChips } from "@/components/category-chips";
 import { MediaPoster } from "@/components/media-poster";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { YearSelect } from "@/components/year-select";
 import { listCategories, matchesCategory } from "@/lib/categories";
 import { mediaTypeLabel } from "@/lib/constants";
+import { ANY_YEAR, listDecades, matchesDecade } from "@/lib/decades";
 import { formatScore } from "@/lib/format";
 import { seededShuffle } from "@/lib/random";
 import type { ListItemCard } from "@/lib/types";
@@ -18,7 +20,7 @@ function detailHref(card: ListItemCard) {
   return `/app/media/${card.media.media_type}/${card.media.tmdb_id}`;
 }
 
-/** The To watch list in random order, filterable by category, with a random pick. */
+/** The To watch list in random order, filterable by release date and category, with a random pick. */
 export function MovieNight({
   cards,
   seed: initialSeed,
@@ -27,14 +29,31 @@ export function MovieNight({
   seed: number;
 }) {
   const [seed, setSeed] = useState(initialSeed);
+  const [decade, setDecade] = useState(ANY_YEAR);
   const [category, setCategory] = useState("all");
   const [pickedId, setPickedId] = useState<string | null>(null);
 
-  const categories = useMemo(() => listCategories(cards), [cards]);
+  const decades = useMemo(
+    () => listDecades(cards.map((c) => c.media.release_year)),
+    [cards],
+  );
+  const inDecade = useMemo(
+    () => cards.filter((c) => matchesDecade(c.media.release_year, decade)),
+    [cards, decade],
+  );
+  const categories = useMemo(() => listCategories(inDecade), [inDecade]);
+  // A category with no titles from the chosen years shows everything from those years.
+  const activeCategory = categories.some((c) => c.value === category)
+    ? category
+    : "all";
 
   const shown = useMemo(
-    () => seededShuffle(cards.filter((c) => matchesCategory(c, category)), seed),
-    [cards, category, seed],
+    () =>
+      seededShuffle(
+        inDecade.filter((c) => matchesCategory(c, activeCategory)),
+        seed,
+      ),
+    [inDecade, activeCategory, seed],
   );
   const picked = shown.find((c) => c.item.id === pickedId) ?? null;
 
@@ -76,6 +95,7 @@ export function MovieNight({
           <Shuffle className="size-4" />
           Shuffle
         </Button>
+        <YearSelect options={decades} value={decade} onChange={setDecade} />
       </div>
 
       {picked && (
@@ -120,7 +140,7 @@ export function MovieNight({
 
       <CategoryChips
         categories={categories}
-        value={category}
+        value={activeCategory}
         onChange={setCategory}
       />
 

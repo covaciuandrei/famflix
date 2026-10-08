@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Decade } from "@/lib/decades";
 import type { MediaType } from "@/lib/types";
 
 /**
@@ -219,26 +220,40 @@ export const BROWSE_GENRES = [
 
 export type BrowseGenre = (typeof BROWSE_GENRES)[number];
 
-/** Popular and top rated movies and series in one Browse category. */
-export async function getGenreRows(genre: BrowseGenre): Promise<TmdbRow[]> {
-  const name = genre.label.toLowerCase();
-  const discover = (
-    mediaType: MediaType,
-    id: number,
-    params: Record<string, string>,
-  ) =>
-    tmdbFetch<{ results: RawResult[] }>(
+/** Popular and top rated movies and series in a Browse category, release decade, or both. */
+export async function getDiscoverRows({
+  genre,
+  decade,
+}: {
+  genre: BrowseGenre | null;
+  decade: Decade | null;
+}): Promise<TmdbRow[]> {
+  const what = genre ? `${genre.label.toLowerCase()} ` : "";
+  const when = !decade
+    ? ""
+    : decade.from === null
+      ? ` from before ${decade.to + 1}`
+      : ` from the ${decade.label}`;
+
+  const discover = (mediaType: MediaType, params: Record<string, string>) => {
+    const genreId = genre ? genre[mediaType] : null;
+    const dateField =
+      mediaType === "movie" ? "primary_release_date" : "first_air_date";
+    return tmdbFetch<{ results: RawResult[] }>(
       `/discover/${mediaType}`,
       {
-        with_genres: String(id),
+        ...(genreId !== null && { with_genres: String(genreId) }),
         // Talk, news, reality and soap shows would otherwise fill the Comedy and Drama series rows.
         ...(mediaType === "tv" && { without_genres: "10763,10764,10766,10767" }),
+        ...(decade?.from != null && { [`${dateField}.gte`]: `${decade.from}-01-01` }),
+        ...(decade?.to != null && { [`${dateField}.lte`]: `${decade.to}-12-31` }),
         include_adult: "false",
         page: "1",
         ...params,
       },
       3600,
     ).then((data) => normalizeMany(data.results, mediaType));
+  };
   // Vote minimums keep out obscure titles and ones rated by a handful of people.
   const popular = { sort_by: "popularity.desc", "vote_count.gte": "100" };
   const topRated = (minVotes: number) => ({
@@ -246,29 +261,31 @@ export async function getGenreRows(genre: BrowseGenre): Promise<TmdbRow[]> {
     "vote_count.gte": String(minVotes),
   });
 
+  const movies = !genre || genre.movie !== null;
+  const series = !genre || genre.tv !== null;
   const rows: { title: string; items: Promise<TmdbItem[]> }[] = [];
-  if (genre.movie !== null) {
+  if (movies) {
     rows.push({
-      title: `Popular ${name} movies`,
-      items: discover("movie", genre.movie, popular),
+      title: `Popular ${what}movies${when}`,
+      items: discover("movie", popular),
     });
   }
-  if (genre.tv !== null) {
+  if (series) {
     rows.push({
-      title: `Popular ${name} series`,
-      items: discover("tv", genre.tv, popular),
+      title: `Popular ${what}series${when}`,
+      items: discover("tv", popular),
     });
   }
-  if (genre.movie !== null) {
+  if (movies) {
     rows.push({
-      title: `Top rated ${name} movies`,
-      items: discover("movie", genre.movie, topRated(1000)),
+      title: `Top rated ${what}movies${when}`,
+      items: discover("movie", topRated(1000)),
     });
   }
-  if (genre.tv !== null) {
+  if (series) {
     rows.push({
-      title: `Top rated ${name} series`,
-      items: discover("tv", genre.tv, topRated(300)),
+      title: `Top rated ${what}series${when}`,
+      items: discover("tv", topRated(300)),
     });
   }
   return Promise.all(

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CategoryLinks } from "@/components/category-chips";
 import { MediaRow } from "@/components/media-row";
 import { SearchBox } from "@/components/search-box";
+import { YearSelectLinks } from "@/components/year-select";
 import { libraryKey } from "@/lib/constants";
 import {
   getLibraryIndex,
@@ -10,10 +11,11 @@ import {
   getSessionProfile,
   getSuggestionSeeds,
 } from "@/lib/data";
+import { ANY_YEAR, DECADES, findDecade } from "@/lib/decades";
 import {
   BROWSE_GENRES,
   getBrowseRows,
-  getGenreRows,
+  getDiscoverRows,
   getRecommendations,
   type TmdbRow,
 } from "@/lib/tmdb";
@@ -44,13 +46,18 @@ async function getSuggestionRows(library: LibraryIndex): Promise<TmdbRow[]> {
 export default async function BrowsePage({
   searchParams,
 }: {
-  searchParams: Promise<{ genre?: string | string[] }>;
+  searchParams: Promise<{
+    genre?: string | string[];
+    decade?: string | string[];
+  }>;
 }) {
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
-  const { genre: slug } = await searchParams;
-  const genre = BROWSE_GENRES.find((g) => g.slug === slug) ?? null;
+  const params = await searchParams;
+  const genre = BROWSE_GENRES.find((g) => g.slug === params.genre) ?? null;
+  const decade =
+    typeof params.decade === "string" ? findDecade(params.decade) : null;
   const groups = await getMyGroups();
   const targets = [
     { id: null, label: "My list" },
@@ -62,13 +69,21 @@ export default async function BrowsePage({
   let suggestions: TmdbRow[] = [];
   let error = false;
   try {
-    [rows, suggestions] = genre
-      ? [await getGenreRows(genre), []]
-      : await Promise.all([getBrowseRows(), getSuggestionRows(library)]);
+    [rows, suggestions] =
+      genre || decade
+        ? [await getDiscoverRows({ genre, decade }), []]
+        : await Promise.all([getBrowseRows(), getSuggestionRows(library)]);
   } catch (e) {
     console.error("Browse rows failed:", e);
     error = true;
   }
+
+  const browseHref = (genreSlug?: string, decadeValue?: string) => {
+    const query = new URLSearchParams();
+    if (genreSlug) query.set("genre", genreSlug);
+    if (decadeValue) query.set("decade", decadeValue);
+    return query.size ? `/app/browse?${query}` : "/app/browse";
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -81,16 +96,39 @@ export default async function BrowsePage({
 
       <SearchBox targets={targets} library={library} />
 
-      <CategoryLinks
-        links={[
-          { label: "All", href: "/app/browse", active: genre === null },
-          ...BROWSE_GENRES.map((g) => ({
-            label: g.label,
-            href: `/app/browse?genre=${g.slug}`,
-            active: g === genre,
-          })),
-        ]}
-      />
+      <div className="flex flex-col gap-3">
+        <div>
+          <YearSelectLinks
+            value={decade?.value ?? ANY_YEAR}
+            options={[
+              {
+                value: ANY_YEAR,
+                label: "Any year",
+                href: browseHref(genre?.slug),
+              },
+              ...DECADES.map((d) => ({
+                value: d.value,
+                label: d.label,
+                href: browseHref(genre?.slug, d.value),
+              })),
+            ]}
+          />
+        </div>
+        <CategoryLinks
+          links={[
+            {
+              label: "All",
+              href: browseHref(undefined, decade?.value),
+              active: genre === null,
+            },
+            ...BROWSE_GENRES.map((g) => ({
+              label: g.label,
+              href: browseHref(g.slug, decade?.value),
+              active: g === genre,
+            })),
+          ]}
+        />
+      </div>
 
       {error ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
