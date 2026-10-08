@@ -94,27 +94,53 @@ export class TmdbError extends Error {
   }
 }
 
+/**
+ * TMDB answers are the same for everyone, so each one is kept in memory for `ttl` seconds (TMDB allows and
+ * encourages caching). Browse then costs one TMDB request per row per hour instead of up to 8 per visit;
+ * TMDB allows about 40 a second. (Next's fetch cache can't do this here: the app renders every page fresh,
+ * and each server action clears it.) Concurrent requests for the same thing share one TMDB call.
+ */
+const cache = new Map<string, { expires: number; value: Promise<unknown> }>();
+const MAX_CACHED = 500;
+
 async function tmdbFetch<T>(
   path: string,
   params: Record<string, string> = {},
-  revalidate = 3600,
+  ttl = 3600,
 ): Promise<T> {
   const url = new URL(`${TMDB_BASE}${path}`);
   url.searchParams.set("language", "en-US");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token()}`,
-      Accept: "application/json",
-    },
-    next: { revalidate },
-  });
+  const key = url.toString();
+  const hit = cache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.value as Promise<T>;
 
-  if (!res.ok) {
-    throw new TmdbError(res.status, path);
+  const value = (async () => {
+    const res = await fetch(url, {
+      headers: {
+      Authorization: `Bearer ${token()}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new TmdbError(res.status, path);
+    }
+    return (await res.json()) as T;
+  })();
+
+  cache.delete(key);
+  cache.set(key, { expires: Date.now() + ttl * 1000, value });
+  // Failures aren't kept, so the next visit tries again.
+  value.catch(() => {
+    if (cache.get(key)?.value === value) cache.delete(key);
+  });
+  // The oldest answers go first once the cache is full.
+  while (cache.size > MAX_CACHED) {
+    cache.delete(cache.keys().next().value as string);
   }
-  return (await res.json()) as T;
+  return value;
 }
 
 function yearFromDate(date?: string): number | null {
@@ -156,7 +182,7 @@ export async function searchMedia(query: string): Promise<TmdbItem[]> {
   const data = await tmdbFetch<{ results: RawResult[] }>(
     "/search/multi",
     { query: trimmed, include_adult: "false", page: "1" },
-    0,
+    600,
   );
   return normalizeMany(data.results);
 }
