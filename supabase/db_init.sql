@@ -547,8 +547,14 @@ language plpgsql
 set search_path = public
 as $$
 begin
+  -- Neither the time nor the person can be supplied by the app, so a removal can't be backdated or blamed on someone else.
   if new.deleted_at is distinct from old.deleted_at then
-    new.deleted_by := case when new.deleted_at is null then null else auth.uid() end;
+    if new.deleted_at is null then
+      new.deleted_by := null;
+    else
+      new.deleted_at := now();
+      new.deleted_by := auth.uid();
+    end if;
   end if;
   return new;
 end;
@@ -877,6 +883,11 @@ grant update (skipped_at) on public.watches to authenticated;
 revoke insert, update, delete on public.activity from anon, authenticated;
 -- Everyone shares the movie info, so nobody can rewrite titles and posters for the rest; only the server saves it.
 revoke insert, update, delete on public.media from anon, authenticated;
+-- A list item's list, movie and author are fixed once it's added; afterwards people only mark it watched or
+-- remove/restore it (the database fills in who removed it and when).
+revoke insert, update on public.list_items from anon, authenticated;
+grant insert (group_id, added_by, media_id, status) on public.list_items to authenticated;
+grant update (status, watched_at, deleted_at) on public.list_items to authenticated;
 
 -- Internal helpers, used only inside the functions above.
 revoke execute on function public.add_activity(uuid, text, uuid, uuid, numeric, text) from public, anon, authenticated;
