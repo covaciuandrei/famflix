@@ -23,6 +23,8 @@ const LIST_SELECT =
 
 export interface GroupWithCount extends Group {
   memberCount: number;
+  /** The signed-in user owns this family: they can rename it and remove members. */
+  isOwner: boolean;
 }
 
 /** The signed-in user and their profile row (cached per request). */
@@ -42,15 +44,28 @@ export const getSessionProfile = cache(async () => {
   return { user, profile: (profile as Profile | null) ?? null };
 });
 
-/** Groups the current user belongs to, with member counts. */
+/** Groups the current user belongs to, with member counts and whether they own each one. */
 export async function getMyGroups(): Promise<GroupWithCount[]> {
+  const { user } = await getSessionProfile();
+  if (!user) return [];
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("groups")
-    .select("*, group_members(count)")
-    .order("created_at", { ascending: true });
+  const [{ data, error }, { data: owned }] = await Promise.all([
+    supabase
+      .from("groups")
+      .select("*, group_members(count)")
+      .order("created_at", { ascending: true }),
+    // Ownership moves to another member when the owner leaves, so created_by isn't enough.
+    supabase
+      .from("group_members")
+      .select("group_id")
+      .eq("user_id", user.id)
+      .eq("role", "owner"),
+  ]);
 
   if (error || !data) return [];
+  const ownedIds = new Set(
+    ((owned ?? []) as { group_id: string }[]).map((m) => m.group_id),
+  );
 
   return (data as (Group & { group_members?: { count: number }[] })[]).map(
     (g) => ({
@@ -60,6 +75,7 @@ export async function getMyGroups(): Promise<GroupWithCount[]> {
       created_by: g.created_by,
       created_at: g.created_at,
       memberCount: g.group_members?.[0]?.count ?? 0,
+      isOwner: ownedIds.has(g.id),
     }),
   );
 }

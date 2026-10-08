@@ -1,4 +1,4 @@
-import { Users } from "lucide-react";
+import { Crown, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 
 import { GroupForms } from "@/components/group-forms";
@@ -33,7 +33,15 @@ export default async function GroupsPage() {
                       <Users className="size-5" />
                     </span>
                     <div>
-                      <p className="font-semibold">{g.name}</p>
+                      <p className="flex flex-wrap items-center gap-x-2 font-semibold">
+                        {g.name}
+                        {g.isOwner && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-star">
+                            <Crown className="size-3.5" />
+                            Owner
+                          </span>
+                        )}
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         {g.memberCount} member{g.memberCount === 1 ? "" : "s"}
                       </p>
@@ -44,6 +52,15 @@ export default async function GroupsPage() {
                       Invite:
                       <InviteCode code={g.invite_code} />
                     </div>
+                    {g.isOwner && (
+                      <Link
+                        href={`/app/family/${g.id}/settings#members`}
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        <UserCog className="size-4" />
+                        Manage
+                      </Link>
+                    )}
                     <Link
                       href={`/app/family/${g.id}`}
                       className={buttonVariants({ variant: "outline", size: "sm" })}

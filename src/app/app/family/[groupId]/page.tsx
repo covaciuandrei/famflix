@@ -1,4 +1,4 @@
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, UserCog } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -33,6 +33,9 @@ export default async function FamilyPage({
   const data = await getGroupWithMembers(groupId);
   if (!data) notFound();
   const { group, members } = data;
+  const isOwner = members.some(
+    (m) => m.user_id === user.id && m.role === "owner",
+  );
 
   const memberSummaries = members.map((m) => ({
     id: m.user_id,
@@ -88,8 +91,12 @@ export default async function FamilyPage({
               href={`/app/family/${group.id}/settings`}
               className={buttonVariants({ size: "sm", variant: "outline" })}
             >
-              <Settings className="size-4" />
-              Settings
+              {isOwner ? (
+                <UserCog className="size-4" />
+              ) : (
+                <Settings className="size-4" />
+              )}
+              {isOwner ? "Manage" : "Settings"}
             </Link>
             <Link href="/app/browse" className={buttonVariants({ size: "sm" })}>
               <Plus className="size-4" />

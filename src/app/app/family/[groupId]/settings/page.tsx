@@ -10,7 +10,13 @@ import {
   RenameForm,
 } from "@/components/family-settings";
 import { InviteCode } from "@/components/invite-code";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { getGroupWithMembers, getSessionProfile } from "@/lib/data";
 
 export default async function FamilySettingsPage({
@@ -81,9 +87,16 @@ export default async function FamilySettingsPage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="members" className="scroll-mt-20">
         <CardHeader>
           <CardTitle>Members ({members.length})</CardTitle>
+          {isOwner && (
+            <CardDescription>
+              As the owner you can remove members. Their scores and notes stay
+              on the list. Anyone with the invite code can rejoin, so make a
+              new code if you don&apos;t want them back.
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col gap-2">
