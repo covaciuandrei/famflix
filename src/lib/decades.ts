@@ -1,3 +1,5 @@
+import type { Category } from "@/lib/categories";
+
 /** Release-date filter, newest first. Series count from the year they first aired. */
 export const DECADES = [
   { value: "2020s", label: "2020s", from: 2020, to: null },
@@ -31,15 +33,9 @@ export function matchesDecade(year: number | null, value: string): boolean {
   );
 }
 
-export interface YearOption {
-  value: string;
-  label: string;
-  count?: number;
-}
-
 /** "Any year" plus the decades these release years fall in, with how many titles each has. */
-export function listDecades(years: (number | null)[]): YearOption[] {
-  const options: YearOption[] = [
+export function listDecades(years: (number | null)[]): Category[] {
+  const options: Category[] = [
     { value: ANY_YEAR, label: "Any year", count: years.length },
   ];
   for (const d of DECADES) {

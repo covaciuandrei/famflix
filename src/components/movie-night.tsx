@@ -7,7 +7,6 @@ import { useMemo, useState } from "react";
 import { CategoryChips } from "@/components/category-chips";
 import { MediaPoster } from "@/components/media-poster";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { YearSelect } from "@/components/year-select";
 import { listCategories, matchesCategory } from "@/lib/categories";
 import { mediaTypeLabel } from "@/lib/constants";
 import { ANY_YEAR, listDecades, matchesDecade } from "@/lib/decades";
@@ -95,7 +94,6 @@ export function MovieNight({
           <Shuffle className="size-4" />
           Shuffle
         </Button>
-        <YearSelect options={decades} value={decade} onChange={setDecade} />
       </div>
 
       {picked && (
@@ -138,11 +136,20 @@ export function MovieNight({
         </div>
       )}
 
-      <CategoryChips
-        categories={categories}
-        value={activeCategory}
-        onChange={setCategory}
-      />
+      <div className="flex flex-col gap-3">
+        <CategoryChips
+          label="Released"
+          aria-label="Release date"
+          categories={decades}
+          value={decade}
+          onChange={setDecade}
+        />
+        <CategoryChips
+          categories={categories}
+          value={activeCategory}
+          onChange={setCategory}
+        />
+      </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {shown.map((card) => (

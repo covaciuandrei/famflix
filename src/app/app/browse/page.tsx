@@ -3,14 +3,13 @@ import { redirect } from "next/navigation";
 import { CategoryLinks } from "@/components/category-chips";
 import { MediaRow } from "@/components/media-row";
 import { SearchBox } from "@/components/search-box";
-import { YearSelectLinks } from "@/components/year-select";
 import {
   getLibraryIndex,
   getMyGroups,
   getSessionProfile,
   getSuggestionSeeds,
 } from "@/lib/data";
-import { ANY_YEAR, DECADES, findDecade } from "@/lib/decades";
+import { DECADES, findDecade } from "@/lib/decades";
 import {
   BROWSE_GENRES,
   getBrowseRows,
@@ -93,23 +92,22 @@ export default async function BrowsePage({
       <SearchBox targets={targets} library={library} />
 
       <div className="flex flex-col gap-3">
-        <div>
-          <YearSelectLinks
-            value={decade?.value ?? ANY_YEAR}
-            options={[
-              {
-                value: ANY_YEAR,
-                label: "Any year",
-                href: browseHref(genre?.slug),
-              },
-              ...DECADES.map((d) => ({
-                value: d.value,
-                label: d.label,
-                href: browseHref(genre?.slug, d.value),
-              })),
-            ]}
-          />
-        </div>
+        <CategoryLinks
+          label="Released"
+          aria-label="Release date"
+          links={[
+            {
+              label: "Any year",
+              href: browseHref(genre?.slug),
+              active: decade === null,
+            },
+            ...DECADES.map((d) => ({
+              label: d.label,
+              href: browseHref(genre?.slug, d.value),
+              active: d === decade,
+            })),
+          ]}
+        />
         <CategoryLinks
           links={[
             {

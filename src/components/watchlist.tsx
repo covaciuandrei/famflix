@@ -9,7 +9,6 @@ import { CategoryChips } from "@/components/category-chips";
 import { ListItemCard } from "@/components/list-item-card";
 import { SortSelect } from "@/components/sort-select";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { YearSelect } from "@/components/year-select";
 import { listCategories, matchesCategory } from "@/lib/categories";
 import { ANY_YEAR, listDecades, matchesDecade } from "@/lib/decades";
 import { isToWatch } from "@/lib/list-status";
@@ -128,24 +127,26 @@ export function Watchlist({
             </button>
           ))}
         </div>
-        <div className="flex gap-2">
-          {inTab.length > 0 && (
-            <YearSelect
-              options={decades}
-              value={activeDecade}
-              onChange={setDecade}
-            />
-          )}
-          <SortSelect value={sort} onChange={setSort} />
-        </div>
+        <SortSelect value={sort} onChange={setSort} />
       </div>
 
-      {categories.length > 1 && (
-        <CategoryChips
-          categories={categories}
-          value={activeCategory}
-          onChange={setCategory}
-        />
+      {inTab.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <CategoryChips
+            label="Released"
+            aria-label="Release date"
+            categories={decades}
+            value={activeDecade}
+            onChange={setDecade}
+          />
+          {categories.length > 1 && (
+            <CategoryChips
+              categories={categories}
+              value={activeCategory}
+              onChange={setCategory}
+            />
+          )}
+        </div>
       )}
 
       {visible.length === 0 ? (
