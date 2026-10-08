@@ -52,6 +52,7 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
 | Styling              | [Tailwind CSS v4](https://tailwindcss.com), [Lucide](https://lucide.dev) icons |
 | Database and sign-in | [Supabase](https://supabase.com): Postgres with row-level security, Auth (Google) |
 | Movie data           | [TMDB API](https://developer.themoviedb.org)                              |
+| Tests                | SQL test files for the database, [Playwright](https://playwright.dev) for the browser |
 | Hosting              | Azure Static Web Apps, deployed by GitHub Actions                         |
 
 ## 1. Prerequisites
@@ -108,14 +109,28 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000), continue with Google, then
-create a family or join one with an invite code. Before pushing, check with
-`npx tsc --noEmit`, `npm run lint` and `npm run build`.
+create a family or join one with an invite code.
+
+## Tests
+
+- `npm run test:db`: the database tests in `supabase/tests/` (security rules,
+  families, scores, limits, deleting an account). They build a throwaway
+  database from `supabase/db_init.sql`; you need PostgreSQL 17 installed, or
+  `PGHOST` pointing at a server where they may create a database.
+- `npm run test:e2e`: the browser tests in `e2e/` (signing in, adding titles,
+  watched together, deleting an account), on a computer-sized and a phone-sized
+  screen. You need Docker: they run against a local Supabase
+  (`supabase/config.toml`) built from `db_init.sql`, never the live one.
+  `npx supabase stop` shuts it down afterwards.
+
+GitHub runs lint, the type check and both test suites on every push and pull
+request, and only deploys when they pass.
 
 ## Deploy
 
 The live site runs on **Azure Static Web Apps** (Free plan).
 [`.github/workflows/azure-static-web-apps.yml`](.github/workflows/azure-static-web-apps.yml)
-builds and deploys every push to `main`; pull requests get a preview site.
+tests, builds and deploys every push to `main`; pull requests get a preview site.
 
 [**Beginner's deployment guide**](docs/DEPLOYMENT-GUIDE.md) explains our complete
 setup, manual commands, infrastructure, secrets, DNS, HTTPS, authentication,
@@ -145,6 +160,8 @@ limits and troubleshooting.
   Next.js 16 replacement for middleware).
 - `supabase/db_init.sql`: the whole database (tables, security policies and
   functions) in one file.
+- `supabase/tests/`: database tests; `e2e/` and `scripts/e2e.sh`: browser tests;
+  `supabase/config.toml`: the local Supabase the browser tests use.
 
 ## Notes
 

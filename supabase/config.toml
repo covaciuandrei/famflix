@@ -1,0 +1,48 @@
+# A local Supabase for the browser tests (scripts/e2e.sh): `npx supabase start` runs the database, sign-in and
+# API in Docker on this machine, and the tests never touch the live project. The live project's settings live
+# in the Supabase dashboard, not here. Anything not set here keeps the Supabase CLI's default.
+project_id = "famflix"
+
+[api]
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+major_version = 17
+
+# The schema comes from db_init.sql (scripts/e2e.sh), not from migrations or a seed file.
+[db.migrations]
+enabled = false
+
+[db.seed]
+enabled = false
+
+[auth]
+site_url = "http://127.0.0.1:3100"
+additional_redirect_urls = ["http://127.0.0.1:3100/auth/callback"]
+
+[auth.email]
+# The live project only signs in with Google. Locally, test users sign in with a password instead.
+enable_signup = true
+enable_confirmations = false
+
+# Not needed by FamFlix or its tests.
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+
+[local_smtp]
+enabled = false
+
+[storage]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

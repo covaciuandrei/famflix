@@ -16,6 +16,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The browser tests build into .next-e2e (scripts/e2e.sh), so they never replace a normal build.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   images: {
     // TMDB already serves each poster at the size we ask for, so the browser loads it from TMDB directly.
