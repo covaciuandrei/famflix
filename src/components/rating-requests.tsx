@@ -13,6 +13,7 @@ import { MediaPoster } from "@/components/media-poster";
 import { ScoreInput, SCORE_REACTION_HINT } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { formatDay } from "@/lib/format";
 import type { PendingRating } from "@/lib/types";
 
@@ -55,7 +56,7 @@ export function RatingRequests({
     const hasNew = pending.some(
       (p) => p.logged_by !== currentUserId && !dismissed.has(p.list_item_id),
     );
-    if (hasNew && !dialog.open) dialog.showModal();
+    if (hasNew && !dialog.open) openModal(dialog);
   }, [pending, currentUserId]);
 
   function rememberDismissed() {
@@ -69,7 +70,7 @@ export function RatingRequests({
       {pending.length > 0 && (
         <button
           type="button"
-          onClick={() => dialogRef.current?.showModal()}
+          onClick={() => openModal(dialogRef.current)}
           title="Ratings waiting for you"
           aria-label={`${pending.length} ${pending.length === 1 ? "title" : "titles"} waiting for your rating`}
           className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2.5 py-1 text-sm font-medium text-primary transition-colors hover:bg-primary/25"
@@ -81,9 +82,11 @@ export function RatingRequests({
 
       <dialog
         ref={dialogRef}
+        tabIndex={-1}
+        {...closeOnBackdrop}
         onClose={rememberDismissed}
         aria-labelledby="rating-requests-title"
-        className="m-auto max-h-[85vh] w-[min(32rem,calc(100%-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-5 text-foreground shadow-xl backdrop:bg-black/60"
+        className="m-auto max-h-[85vh] w-[min(32rem,calc(100%-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-5 text-foreground shadow-xl outline-none backdrop:bg-black/60"
       >
         <h2 id="rating-requests-title" className="text-lg font-semibold">
           How did you like it?

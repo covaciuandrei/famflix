@@ -1,7 +1,7 @@
 "use client";
 
 import { Minus, Plus, Star, X } from "lucide-react";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ function clampScore(n: number): number {
   return Math.min(MAX, Math.max(MIN, Math.round(n * 10) / 10));
 }
 
-/** Score from 1.0 to 10.0 in steps of 0.1: slider, ±0.1 buttons, an editable number and whole-number shortcuts. */
+/** Score from 1.0 to 10.0 in steps of 0.1, set with the slider, its ±0.1 buttons or the whole-number marks (no typing). */
 export function ScoreInput({
   value,
   onChange,
@@ -29,47 +29,25 @@ export function ScoreInput({
   label?: string;
   compact?: boolean;
 }) {
-  // What the user is typing; null when the box isn't being edited.
-  const [draft, setDraft] = useState<string | null>(null);
   const empty = value === null;
   const position = value ?? 5.5;
-  const shown = draft ?? (empty ? "" : value.toFixed(1));
-
-  function commitDraft() {
-    if (draft === null) return;
-    const text = draft.trim().replace(",", ".");
-    setDraft(null);
-    if (text === "") onChange(null);
-    else if (Number.isFinite(Number(text))) onChange(clampScore(Number(text)));
-  }
 
   function nudge(delta: number) {
     if (value !== null) onChange(clampScore(value + delta));
   }
 
+  // The slider announces the value to screen readers; this is just the big readout.
   const number = (
-    <input
-      type="text"
-      inputMode="decimal"
-      value={shown}
-      placeholder="–"
-      onChange={(e) => setDraft(e.target.value)}
-      onFocus={(e) => e.currentTarget.select()}
-      onBlur={commitDraft}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.currentTarget.blur();
-        }
-      }}
-      aria-label={`${label}, 1 to 10`}
+    <span
+      aria-hidden
       className={cn(
-        "rounded-md bg-transparent px-1 font-semibold tabular-nums outline-none transition-colors placeholder:text-muted-foreground hover:bg-muted focus:bg-muted",
-        compact
-          ? "h-8 w-12 text-center text-base"
-          : "h-10 w-[4.5rem] text-3xl [field-sizing:content] supports-[field-sizing:content]:w-auto",
+        "font-semibold tabular-nums",
+        empty && "text-muted-foreground",
+        compact ? "w-10 text-center text-base" : "text-3xl",
       )}
-    />
+    >
+      {empty ? "–" : value.toFixed(1)}
+    </span>
   );
 
   const slider = (
@@ -139,7 +117,7 @@ export function ScoreInput({
         />
         {number}
         <span className="text-sm text-muted-foreground">
-          {empty ? "Slide or type a score" : "/ 10"}
+          {empty ? "Slide to score" : "/ 10"}
         </span>
         {!empty && (
           <button

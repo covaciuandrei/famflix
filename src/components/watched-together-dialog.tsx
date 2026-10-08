@@ -8,6 +8,7 @@ import { Avatar } from "@/components/avatar";
 import { ScoreInput } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { formatScore } from "@/lib/format";
 import type { MemberSummary, RatingWithProfile, Watch } from "@/lib/types";
 
@@ -56,7 +57,7 @@ export function WatchedTogetherDialog({
     setToday(now);
     setWatchedOn(now);
     setError(null);
-    dialogRef.current?.showModal();
+    openModal(dialogRef.current);
   }
 
   function toggle(userId: string) {
@@ -97,8 +98,10 @@ export function WatchedTogetherDialog({
 
       <dialog
         ref={dialogRef}
+        tabIndex={-1}
+        {...closeOnBackdrop}
         aria-labelledby={`wt-title-${itemId}`}
-        className="m-auto max-h-[85vh] w-[min(28rem,calc(100%-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-5 text-foreground shadow-xl backdrop:bg-black/60"
+        className="m-auto max-h-[85vh] w-[min(28rem,calc(100%-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-5 text-foreground shadow-xl outline-none backdrop:bg-black/60"
       >
         <h2 id={`wt-title-${itemId}`} className="text-lg font-semibold">
           Who watched {title}?
