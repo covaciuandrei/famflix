@@ -63,7 +63,12 @@ Fill in:
 | ------------------------------- | ----------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`      | Supabase → Project Settings → API → Project URL             |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` public key       |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase → Project Settings → API Keys → `service_role`     |
 | `TMDB_ACCESS_TOKEN`             | TMDB → Settings → API → **API Read Access Token** (v4 auth) |
+
+`SUPABASE_SERVICE_ROLE_KEY` stays on the server. It lets the app save movie info,
+which signed-in users can't write themselves, and it can do anything in your
+database: never put it in a `NEXT_PUBLIC_` variable, never commit it.
 
 ## 3. Set up the database
 
@@ -109,8 +114,9 @@ limits and troubleshooting.
    then use the existing GitHub Actions workflow and add these
    repository secrets in GitHub: `AZURE_STATIC_WEB_APPS_API_TOKEN`,
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
-   `TMDB_ACCESS_TOKEN`. Also configure the three application variables in
-   Azure's runtime settings.
+   `TMDB_ACCESS_TOKEN`. Also configure the same three application variables,
+   plus `SUPABASE_SERVICE_ROLE_KEY` (only the running server needs it, not the
+   build), in Azure's runtime settings.
 2. In Supabase URL Configuration, set the Site URL to the production address
    and add `https://<your-domain>/auth/callback` to the Redirect URLs.
 3. Database changes aren't deployed automatically: run the new SQL in the SQL

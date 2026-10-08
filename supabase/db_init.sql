@@ -257,13 +257,10 @@ create policy groups_select_member on public.groups for select
 create policy gm_select on public.group_members for select
   using (public.is_group_member(group_id, auth.uid()));
 
--- media (shared cache, readable + writable by any signed-in user) -----------
+-- media (shared cache of TMDB data): any signed-in user can read it. Nobody writes it from
+-- the browser: the app's server saves it with the service-role key, which skips these rules.
 create policy media_select_authed on public.media for select
   using (auth.uid() is not null);
-create policy media_insert_authed on public.media for insert
-  with check (auth.uid() is not null);
-create policy media_update_authed on public.media for update
-  using (auth.uid() is not null) with check (auth.uid() is not null);
 
 -- list_items: no delete policy; the app never hard-deletes titles, so every removal can be undone.
 create policy li_select on public.list_items for select using (
@@ -878,6 +875,8 @@ revoke insert, update on public.watches from anon, authenticated;
 grant update (skipped_at) on public.watches to authenticated;
 -- Only the database's own triggers and functions write the feed, so events can't be faked.
 revoke insert, update, delete on public.activity from anon, authenticated;
+-- Everyone shares the movie info, so nobody can rewrite titles and posters for the rest; only the server saves it.
+revoke insert, update, delete on public.media from anon, authenticated;
 
 -- Internal helpers, used only inside the functions above.
 revoke execute on function public.add_activity(uuid, text, uuid, uuid, numeric, text) from public, anon, authenticated;

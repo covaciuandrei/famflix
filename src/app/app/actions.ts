@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { saveMedia } from "@/lib/save-media";
 import { createClient } from "@/lib/supabase/server";
 import { detailsToMediaRow, getMediaDetails } from "@/lib/tmdb";
 import type { MediaType, ReactionValue } from "@/lib/types";
@@ -43,22 +44,25 @@ export async function addToList(input: {
 }): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
 
+  // Server actions get whatever the browser sends, and these two pick what is asked from TMDB and saved.
+  if (
+    !Number.isSafeInteger(input.tmdbId) ||
+    input.tmdbId <= 0 ||
+    (input.mediaType !== "movie" && input.mediaType !== "tv")
+  ) {
+    return { error: "That isn't a valid title." };
+  }
+
   let details;
   try {
     details = await getMediaDetails(input.mediaType, input.tmdbId);
   } catch {
     return { error: "Couldn't reach the movie database. Please try again." };
   }
-  const { data: media, error: mediaError } = await supabase
-    .from("media")
-    .upsert(detailsToMediaRow(details), { onConflict: "tmdb_id,media_type" })
-    .select("id")
-    .single();
-
-  if (mediaError || !media) {
-    return { error: mediaError?.message ?? "Could not save this title." };
-  }
-  const mediaId = (media as { id: string }).id;
+  // The movie info is shared by everyone, so the server saves it, not the signed-in user.
+  const saved = await saveMedia(detailsToMediaRow(details));
+  if ("error" in saved) return { error: saved.error };
+  const mediaId = saved.id;
 
   let existing = supabase
     .from("list_items")

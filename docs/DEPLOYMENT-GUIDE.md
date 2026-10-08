@@ -310,7 +310,7 @@ Create local configuration:
 cp .env.local.example .env.local
 ```
 
-Open `.env.local` locally and fill in the three values described in
+Open `.env.local` locally and fill in the four values described in
 [the example](../.env.local.example). Do not commit the real file.
 
 Understand the project scripts:
@@ -519,6 +519,7 @@ steps is still useful for learning.
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Identifies the Supabase API endpoint | Local file, GitHub build environment, Azure runtime settings |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser-compatible Supabase public/anon key | Same three places |
+| `SUPABASE_SERVICE_ROLE_KEY` | Lets the server, and only the server, save the shared movie info that signed-in users cannot write | Local file and Azure runtime settings. Not a GitHub secret (the build does not use it), never a `NEXT_PUBLIC_` variable |
 | `TMDB_ACCESS_TOKEN` | Authorizes server calls to TMDB | Same three places, never exposed as a browser variable |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN` | Permits publishing to this SWA | GitHub Actions secret, not app runtime |
 | `GITHUB_TOKEN` | Temporary GitHub token automatically supplied to a workflow | Used by the workflow; no manually created repository secret needed |
@@ -533,6 +534,13 @@ It is **not** the powerful Supabase service-role key. Never substitute a
 service-role key into `NEXT_PUBLIC_SUPABASE_ANON_KEY`; RLS is essential to making
 public client access safe.
 
+FamFlix does use the service-role key, but only on the server and in one place:
+`src/lib/save-media.ts` saves TMDB data into the shared `media` table, which
+signed-in users have no right to write. The key skips row-level security, so keep
+it out of `NEXT_PUBLIC_` variables, Git, screenshots, and logs. If it leaks, create
+a new one in Supabase (Project Settings -> API Keys) and update the two places
+above.
+
 `TMDB_ACCESS_TOKEN` uses TMDB's long **API Read Access Token**, not its short API
 key. It does not have the `NEXT_PUBLIC_` prefix and is used server-side.
 
@@ -542,9 +550,11 @@ key. It does not have the `NEXT_PUBLIC_` prefix and is used server-side.
 2. GitHub Actions secrets are injected while the hosted runner builds the app.
 3. Azure app settings are available to deployed server-side code at runtime.
 
-Your local file is ignored by Git; it does not magically arrive at GitHub or
-Azure. Changing a `NEXT_PUBLIC_` value in Azure alone does not replace values
-already compiled into a browser bundle: update build configuration and redeploy.
+The service-role key belongs in the first and third place only: the GitHub build
+never needs it. Your local file is ignored by Git; it does not magically arrive
+at GitHub or Azure. Changing a `NEXT_PUBLIC_` value in Azure alone does not
+replace values already compiled into a browser bundle: update build
+configuration and redeploy.
 
 ### Add GitHub secrets manually
 
@@ -584,8 +594,8 @@ status instead of checking only the GitHub command's result.
 ### Add Azure runtime settings manually
 
 Open the SWA in Azure Portal. Find **Environment variables** or **Configuration**
-(labels can change), select the production environment, and set the three app
-variables: Supabase URL, anon key, and TMDB token. Save them.
+(labels can change), select the production environment, and set the four app
+variables: Supabase URL, anon key, service-role key, and TMDB token. Save them.
 
 Do not add the deployment token there; the app does not need it.
 
@@ -1151,6 +1161,7 @@ change the Mac's DNS settings or hosts file as part of this diagnosis.
 | Confirmation email cannot be sent | Email delivery | Supabase SMTP configuration, restrictions, rate limits |
 | Missing table/function errors | Database | Required SQL migration was not applied |
 | Titles do not load | App/TMDB | Server runtime token, TMDB response/logs, API limits |
+| Adding a title says "Couldn't save this title" | Server settings | `SUPABASE_SERVICE_ROLE_KEY` missing or wrong in Azure's runtime settings (the server log says which) |
 | Old UI after a code change | Delivery/browser cache | Deployed commit, successful latest run, refresh and static-asset cache |
 
 Read the actual error before changing multiple settings. When reporting a
