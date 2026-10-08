@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 
 import { setRating } from "@/app/app/actions";
 import { Avatar } from "@/components/avatar";
-import { ScoreInput } from "@/components/score-input";
+import { ScoreInput, SCORE_REACTION_HINT } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatScore } from "@/lib/format";
@@ -64,6 +64,7 @@ export function RatingPanel({
           Your score
         </p>
         <ScoreInput value={score} onChange={setScore} label="Your score" />
+        <p className="mt-1 text-xs text-muted-foreground">{SCORE_REACTION_HINT}</p>
       </div>
 
       <Textarea

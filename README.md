@@ -45,6 +45,9 @@ pasting each one's contents and clicking Run:
    invite codes.
 4. [`supabase/migrations/0004_decimal_scores.sql`](supabase/migrations/0004_decimal_scores.sql) —
    scores with one decimal (6.7, 8.5, ...). Existing scores are kept.
+5. [`supabase/migrations/0005_score_reactions.sql`](supabase/migrations/0005_score_reactions.sql) —
+   your score sets your like/dislike: over 7 likes the title, under 6 dislikes
+   it. Existing scores and reactions are left alone.
 
 ## 4. Enable authentication
 

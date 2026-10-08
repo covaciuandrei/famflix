@@ -10,7 +10,7 @@ import {
   type ActionResult,
 } from "@/app/app/actions";
 import { MediaPoster } from "@/components/media-poster";
-import { ScoreInput } from "@/components/score-input";
+import { ScoreInput, SCORE_REACTION_HINT } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDay } from "@/lib/format";
@@ -162,6 +162,7 @@ function RequestRow({
 
       <div className="mt-3">
         <ScoreInput value={score} onChange={setScore} />
+        <p className="mt-1 text-xs text-muted-foreground">{SCORE_REACTION_HINT}</p>
       </div>
 
       <Textarea
