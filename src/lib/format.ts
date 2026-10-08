@@ -36,18 +36,3 @@ export function timeUntil(iso: string): string {
   const minutes = Math.max(1, Math.ceil((Date.parse(iso) - Date.now()) / 60_000));
   return minutes < 60 ? `${minutes} min` : `${Math.ceil(minutes / 60)} h`;
 }
-
-export function relativeDate(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  const diff = Date.now() - then;
-  const day = 86_400_000;
-  if (diff < day) return "today";
-  if (diff < 2 * day) return "yesterday";
-  if (diff < 7 * day) return `${Math.floor(diff / day)} days ago`;
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
