@@ -1159,6 +1159,7 @@ change the Mac's DNS settings or hosts file as part of this diagnosis.
 | Login returns to localhost | App/Supabase redirect configuration | Saved Site URL, precise allowlist, actual request origin |
 | Some Google users are blocked | Google audience | Test users/publishing status and provider policy |
 | Confirmation email cannot be sent | Email delivery | Supabase SMTP configuration, restrictions, rate limits |
+| "You're doing that too often" | App limits | Someone added titles, searched or tried invite codes faster than the limits in the README; wait and retry |
 | Missing table/function errors | Database | Required SQL migration was not applied |
 | Titles do not load | App/TMDB | Server runtime token, TMDB response/logs, API limits |
 | Adding a title says "Couldn't save this title" | Server settings | `SUPABASE_SERVICE_ROLE_KEY` missing or wrong in Azure's runtime settings (the server log says which) |

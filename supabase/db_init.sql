@@ -150,6 +150,15 @@ create table public.activity (
 create index activity_group_created_idx
   on public.activity (group_id, created_at desc);
 
+-- How often each person did something, per fixed time window (hit_rate_limit). Not readable through the API.
+create table public.rate_limits (
+  user_id      uuid not null references public.profiles (id) on delete cascade,
+  action       text not null,
+  window_start timestamptz not null,
+  hits         integer not null default 0,
+  primary key (user_id, action, window_start)
+);
+
 -- ---------------------------------------------------------------------------
 --  Helper functions
 -- ---------------------------------------------------------------------------
@@ -224,6 +233,35 @@ as $$
   );
 $$;
 
+-- Counts one go at p_action for p_user in the current p_seconds-long window, and refuses once there have
+-- been more than p_max. Called by the functions below and, through the service-role key, by the app's server.
+create function public.hit_rate_limit(p_user uuid, p_action text, p_max integer, p_seconds integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_start timestamptz := to_timestamp(floor(extract(epoch from now()) / p_seconds) * p_seconds);
+  v_hits  integer;
+begin
+  if p_user is null then
+    return;
+  end if;
+  -- Windows older than a day are no longer needed.
+  delete from public.rate_limits where user_id = p_user and window_start < now() - interval '1 day';
+
+  insert into public.rate_limits as r (user_id, action, window_start, hits)
+  values (p_user, p_action, v_start, 1)
+  on conflict (user_id, action, window_start) do update set hits = r.hits + 1
+  returning hits into v_hits;
+
+  if v_hits > p_max then
+    raise exception 'You''re doing that too often. Please wait a bit and try again.';
+  end if;
+end;
+$$;
+
 -- Invite codes: 8 characters from 32 easy-to-read symbols.
 create function public.new_invite_code()
 returns text
@@ -251,6 +289,7 @@ $$;
 
 -- auth.uid() is always wrapped as (select auth.uid()), so Postgres works it out once per query instead of
 -- once per row (Supabase Performance Advisor: "Auth RLS Initialization Plan").
+-- rate_limits has row-level security and no policies: nobody reads or writes it through the API.
 alter table public.profiles      enable row level security;
 alter table public.groups        enable row level security;
 alter table public.group_members enable row level security;
@@ -260,6 +299,7 @@ alter table public.ratings       enable row level security;
 alter table public.reactions     enable row level security;
 alter table public.watches       enable row level security;
 alter table public.activity      enable row level security;
+alter table public.rate_limits   enable row level security;
 
 -- profiles ------------------------------------------------------------------
 create policy profiles_select on public.profiles for select
@@ -405,6 +445,7 @@ begin
   if char_length(trim(p_name)) > 250 then
     raise exception 'Family names can be at most 250 characters';
   end if;
+  perform public.hit_rate_limit(auth.uid(), 'create_group', 10, 3600);
 
   insert into public.groups (name, invite_code, created_by)
   values (trim(p_name), public.new_invite_code(), auth.uid())
@@ -417,7 +458,9 @@ begin
 end;
 $$;
 
--- Join an existing group by invite code. Returns the group id.
+-- Join an existing group by invite code. Returns the group id, or null if no family has that code.
+-- At most 10 tries per 10 minutes. A wrong code returns null instead of raising an error, because an error
+-- would also undo the try's count, and then nothing would stop someone from guessing codes.
 create function public.join_group(p_invite_code text)
 returns uuid
 language plpgsql
@@ -428,12 +471,14 @@ declare
   g_id      uuid;
   g_expires timestamptz;
 begin
+  perform public.hit_rate_limit(auth.uid(), 'join_group', 10, 600);
+
   select id, invite_code_expires_at into g_id, g_expires
   from public.groups
   where invite_code = upper(trim(p_invite_code));
 
   if g_id is null then
-    raise exception 'Invalid invite code';
+    return null;
   end if;
   if g_expires <= now() then
     raise exception 'This invite code has expired. Ask the family for the new one';
@@ -767,6 +812,15 @@ begin
     p_score,
     p_detail
   );
+
+  -- A family's feed keeps its latest 500 events, so it can't grow without end.
+  delete from public.activity
+  where id in (
+    select id from public.activity
+    where group_id = p_group
+    order by created_at desc
+    offset 500
+  );
 end;
 $$;
 
@@ -915,6 +969,7 @@ revoke insert, update on public.watches from anon, authenticated;
 grant update (skipped_at) on public.watches to authenticated;
 -- Only the database's own triggers and functions write the feed, so events can't be faked.
 revoke insert, update, delete on public.activity from anon, authenticated;
+revoke all on public.rate_limits from anon, authenticated;
 -- Everyone shares the movie info, so nobody can rewrite titles and posters for the rest; only the server saves it.
 revoke insert, update, delete on public.media from anon, authenticated;
 -- A list item's list, movie and author are fixed once it's added; afterwards people only mark it watched or
@@ -923,8 +978,9 @@ revoke insert, update on public.list_items from anon, authenticated;
 grant insert (group_id, added_by, media_id, status) on public.list_items to authenticated;
 grant update (status, watched_at, deleted_at) on public.list_items to authenticated;
 
--- Internal helpers, used only inside the functions above.
+-- Internal helpers, used only inside the functions above (hit_rate_limit also by the server's service-role key).
 revoke execute on function public.add_activity(uuid, text, uuid, uuid, numeric, text) from public, anon, authenticated;
+revoke execute on function public.hit_rate_limit(uuid, text, integer, integer) from public, anon, authenticated;
 revoke execute on function public.new_invite_code() from public, anon, authenticated;
 revoke execute on function public.is_group_owner(uuid, uuid) from public, anon, authenticated;
 

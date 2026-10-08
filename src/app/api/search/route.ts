@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { searchMedia } from "@/lib/tmdb";
 
@@ -11,6 +12,9 @@ export async function GET(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const limited = await overRateLimit(user.id, LIMITS.search);
+  if (limited) return NextResponse.json({ error: limited }, { status: 429 });
 
   const q = new URL(request.url).searchParams.get("q") ?? "";
   try {

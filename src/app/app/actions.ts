@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { saveMedia } from "@/lib/save-media";
 import { createClient } from "@/lib/supabase/server";
 import { detailsToMediaRow, getMediaDetails } from "@/lib/tmdb";
@@ -45,10 +46,10 @@ async function requireUser() {
 }
 
 /** Checks a title id sent by the browser, fetches the title from TMDB and saves its movie info; returns its media id. */
-async function saveTitle(input: {
-  tmdbId: number;
-  mediaType: MediaType;
-}): Promise<{ id: string } | { error: string }> {
+async function saveTitle(
+  userId: string,
+  input: { tmdbId: number; mediaType: MediaType },
+): Promise<{ id: string } | { error: string }> {
   // Server actions get whatever the browser sends, and these two pick what is asked from TMDB and saved.
   if (
     !Number.isSafeInteger(input.tmdbId) ||
@@ -57,6 +58,8 @@ async function saveTitle(input: {
   ) {
     return { error: "That isn't a valid title." };
   }
+  const limited = await overRateLimit(userId, LIMITS.addTitle);
+  if (limited) return { error: limited };
 
   let details;
   try {
@@ -76,7 +79,7 @@ export async function addToList(input: {
 }): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
 
-  const saved = await saveTitle(input);
+  const saved = await saveTitle(user.id, input);
   if ("error" in saved) return { error: saved.error };
   const mediaId = saved.id;
 
@@ -164,7 +167,7 @@ export async function markWatched(input: {
 }): Promise<ActionResult & { itemId?: string }> {
   const { supabase, user } = await requireUser();
 
-  const saved = await saveTitle(input);
+  const saved = await saveTitle(user.id, input);
   if ("error" in saved) return { error: saved.error };
 
   const { data: found } = await supabase
@@ -411,6 +414,8 @@ export async function joinGroupAction(
     p_invite_code: code,
   });
   if (error) return { error: error.message };
+  // No family has that code (join_group returns null so that wrong guesses still count toward its limit).
+  if (!data) return { error: "Invalid invite code." };
 
   revalidateApp();
   redirect(`/app/family/${data as string}`);
