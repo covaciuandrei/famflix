@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { AddToListButton } from "@/components/add-to-list-button";
-import { LibraryBadges } from "@/components/library-badges";
+import { ListBadges, SeenBy } from "@/components/library-badges";
 import { MediaPoster } from "@/components/media-poster";
 import { Badge } from "@/components/ui/badge";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
@@ -66,13 +66,14 @@ export default async function MediaDetailPage({
           </div>
         )}
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:p-6">
-          <div className="w-32 shrink-0 sm:w-44">
+          <div className="relative w-32 shrink-0 sm:w-44">
             <MediaPoster
               path={details.posterPath}
               alt={details.title}
               size="w500"
               className="w-full"
             />
+            <ListBadges lists={library?.lists} />
           </div>
           <div className="flex flex-col gap-3">
             <div>
@@ -118,7 +119,7 @@ export default async function MediaDetailPage({
                 alreadyOn={library?.lists.map((l) => l.listId)}
                 size="default"
               />
-              <LibraryBadges entry={library} />
+              <SeenBy names={library?.seenBy} />
             </div>
           </div>
         </div>

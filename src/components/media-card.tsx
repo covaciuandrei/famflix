@@ -5,7 +5,7 @@ import {
   AddToListButton,
   type AddTarget,
 } from "@/components/add-to-list-button";
-import { LibraryBadges } from "@/components/library-badges";
+import { ListBadges, SeenBy } from "@/components/library-badges";
 import { MediaPoster } from "@/components/media-poster";
 import { mediaTypeLabel } from "@/lib/constants";
 import type { TmdbItem } from "@/lib/tmdb";
@@ -33,6 +33,7 @@ export function MediaCard({
             {item.voteAverage.toFixed(1)}
           </span>
         )}
+        <ListBadges lists={library?.lists} />
       </div>
       <div className="min-w-0">
         <Link
@@ -45,7 +46,7 @@ export function MediaCard({
           {mediaTypeLabel(item.mediaType)}
           {item.year ? ` · ${item.year}` : ""}
         </p>
-        <LibraryBadges entry={library} />
+        <SeenBy names={library?.seenBy} />
       </div>
       <AddToListButton
         tmdbId={item.tmdbId}

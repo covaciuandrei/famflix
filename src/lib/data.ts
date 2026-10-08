@@ -271,7 +271,7 @@ export async function getLibraryIndex(
   const [items, watches, members] = await Promise.all([
     supabase
       .from("list_items")
-      .select("group_id, status, media(tmdb_id, media_type)")
+      .select("id, group_id, media(tmdb_id, media_type)")
       .is("deleted_at", null),
     supabase
       .from("watches")
@@ -296,17 +296,17 @@ export async function getLibraryIndex(
     });
 
   for (const row of (items.data ?? []) as unknown as {
+    id: string;
     group_id: string | null;
-    status: string;
     media: MediaRef;
   }[]) {
     if (!row.media) continue;
     entryFor(row.media).lists.push({
       listId: row.group_id,
+      itemId: row.id,
       label: row.group_id
         ? (groupName.get(row.group_id) ?? "Family list")
         : "My list",
-      watched: row.status === "watched",
     });
   }
 
@@ -319,6 +319,13 @@ export async function getLibraryIndex(
     const seenBy = entryFor(media).seenBy;
     const name = w.user_id === userId ? "You" : (names.get(w.user_id) ?? "Someone");
     if (!seenBy.includes(name)) seenBy.push(name);
+  }
+
+  // My list first, then families in the same order as the "Add to…" menu.
+  const rank = (listId: string | null) =>
+    listId === null ? -1 : groups.findIndex((g) => g.id === listId);
+  for (const entry of Object.values(index)) {
+    entry.lists.sort((a, b) => rank(a.listId) - rank(b.listId));
   }
 
   return index;

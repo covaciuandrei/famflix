@@ -149,8 +149,8 @@ export interface ActivityEvent {
 
 /** What the signed-in user's lists already know about one TMDB title. */
 export interface LibraryEntry {
-  /** listId null = My list. */
-  lists: { listId: string | null; label: string; watched: boolean }[];
+  /** My list (listId null) first, then families; itemId is the list item, for removing it. */
+  lists: { listId: string | null; itemId: string; label: string }[];
   /** Names of family members marked as having watched it ("You" for yourself). */
   seenBy: string[];
 }
