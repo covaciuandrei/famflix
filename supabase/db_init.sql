@@ -909,8 +909,21 @@ revoke execute on function public.add_activity(uuid, text, uuid, uuid, numeric, 
 revoke execute on function public.new_invite_code() from public, anon, authenticated;
 revoke execute on function public.is_group_owner(uuid, uuid) from public, anon, authenticated;
 
+revoke execute on function public.create_group(text) from public, anon;
 grant execute on function public.create_group(text) to authenticated;
+revoke execute on function public.join_group(text) from public, anon;
 grant execute on function public.join_group(text) to authenticated;
+-- is_group_member() and shares_group() stay executable for everyone: the security rules call them for visitors too
+-- (who then simply see nothing), and they only ever answer about the caller's own families.
+-- Trigger functions only ever run as triggers (which doesn't need EXECUTE), never through the API.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.set_deleted_by() from public, anon, authenticated;
+revoke execute on function public.set_rated_by() from public, anon, authenticated;
+revoke execute on function public.list_items_activity() from public, anon, authenticated;
+revoke execute on function public.ratings_activity() from public, anon, authenticated;
+revoke execute on function public.group_members_activity() from public, anon, authenticated;
+revoke execute on function public.groups_activity() from public, anon, authenticated;
+revoke execute on function public.react_to_score() from public, anon, authenticated;
 
 -- Signed-in users only.
 revoke execute on function public.refresh_invite_codes() from public, anon;
