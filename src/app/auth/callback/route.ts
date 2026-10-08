@@ -12,25 +12,23 @@ export async function GET(request: Request) {
 
   let failure = searchParams.get("error_description");
 
+  // Behind Azure the request URL is the internal server (https://localhost:8080), so redirects
+  // (on success and on failure alike) go to the host the visitor actually used.
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const base =
+    forwardedHost && process.env.NODE_ENV !== "development"
+      ? `https://${forwardedHost}`
+      : origin;
+
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      const forwardedHost = request.headers.get("x-forwarded-host");
-      const isLocalEnv = process.env.NODE_ENV === "development";
-      if (isLocalEnv) {
-        return NextResponse.redirect(`${origin}${next}`);
-      }
-      if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`);
-      }
-      return NextResponse.redirect(`${origin}${next}`);
-    }
+    if (!error) return NextResponse.redirect(`${base}${next}`);
     failure = error.message;
   }
 
   const reason = failure ?? "Could not sign in. Please try again.";
   return NextResponse.redirect(
-    `${origin}/login?error=${encodeURIComponent(reason)}`,
+    `${base}/login?error=${encodeURIComponent(reason)}`,
   );
 }
