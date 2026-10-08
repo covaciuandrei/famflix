@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { CategoryLinks } from "@/components/category-chips";
 import { MediaRow } from "@/components/media-row";
 import { SearchBox } from "@/components/search-box";
 import { libraryKey } from "@/lib/constants";
@@ -9,7 +10,13 @@ import {
   getSessionProfile,
   getSuggestionSeeds,
 } from "@/lib/data";
-import { getBrowseRows, getRecommendations, type TmdbRow } from "@/lib/tmdb";
+import {
+  BROWSE_GENRES,
+  getBrowseRows,
+  getGenreRows,
+  getRecommendations,
+  type TmdbRow,
+} from "@/lib/tmdb";
 import type { LibraryIndex } from "@/lib/types";
 
 /** "Because your family liked X" rows, without titles already on the user's lists. */
@@ -34,10 +41,16 @@ async function getSuggestionRows(library: LibraryIndex): Promise<TmdbRow[]> {
   });
 }
 
-export default async function BrowsePage() {
+export default async function BrowsePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ genre?: string | string[] }>;
+}) {
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
+  const { genre: slug } = await searchParams;
+  const genre = BROWSE_GENRES.find((g) => g.slug === slug) ?? null;
   const groups = await getMyGroups();
   const targets = [
     { id: null, label: "My list" },
@@ -49,10 +62,9 @@ export default async function BrowsePage() {
   let suggestions: TmdbRow[] = [];
   let error = false;
   try {
-    [rows, suggestions] = await Promise.all([
-      getBrowseRows(),
-      getSuggestionRows(library),
-    ]);
+    [rows, suggestions] = genre
+      ? [await getGenreRows(genre), []]
+      : await Promise.all([getBrowseRows(), getSuggestionRows(library)]);
   } catch (e) {
     console.error("Browse rows failed:", e);
     error = true;
@@ -68,6 +80,17 @@ export default async function BrowsePage() {
       </div>
 
       <SearchBox targets={targets} library={library} />
+
+      <CategoryLinks
+        links={[
+          { label: "All", href: "/app/browse", active: genre === null },
+          ...BROWSE_GENRES.map((g) => ({
+            label: g.label,
+            href: `/app/browse?genre=${g.slug}`,
+            active: g === genre,
+          })),
+        ]}
+      />
 
       {error ? (
         <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">

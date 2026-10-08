@@ -10,9 +10,10 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   add titles, mark them watched, rate them and react. The owner can rename the
   family, make a new invite code and remove members (**Manage** on the
   Families page).
-- **Personal list**: a private "My list" that only you can see.
-- **Browse and add**: search or browse trending movies and series, with
-  trailers and where to stream them.
+- **Personal list**: a private "My list" that only you can see. Every list can
+  be filtered by category (genre, movies or series).
+- **Browse and add**: search, browse trending and top rated titles, or pick a
+  category (Comedy, Horror, Kids, ...), with trailers and where to stream them.
 - **Scores and reactions**: rate 1–10 with one decimal (8.5) and add a note.
   A score over 7 also likes the title and under 6 dislikes it; you can still
   change the thumbs yourself.

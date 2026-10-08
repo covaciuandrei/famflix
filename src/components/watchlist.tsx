@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { restoreListItem } from "@/app/app/actions";
+import { CategoryChips } from "@/components/category-chips";
 import { ListItemCard } from "@/components/list-item-card";
 import { SortSelect } from "@/components/sort-select";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { listCategories, matchesCategory } from "@/lib/categories";
 import { isToWatch } from "@/lib/list-status";
 import { sortCards } from "@/lib/sort";
 import type {
@@ -36,6 +38,7 @@ export function Watchlist({
     { value: "all", label: "All" },
   ];
   const [tab, setTab] = useState<Tab>("want");
+  const [category, setCategory] = useState("all");
   const [sort, setSort] = useState<SortKey>("recent");
   const [removed, setRemoved] = useState<{ id: string; title: string } | null>(
     null,
@@ -65,13 +68,27 @@ export function Watchlist({
     return { want, done: cards.length - want, all: cards.length };
   }, [cards]);
 
-  const visible = useMemo(() => {
-    const filtered =
+  const inTab = useMemo(
+    () =>
       tab === "all"
         ? cards
-        : cards.filter((c) => isToWatch(c) === (tab === "want"));
-    return sortCards(filtered, sort);
-  }, [cards, tab, sort]);
+        : cards.filter((c) => isToWatch(c) === (tab === "want")),
+    [cards, tab],
+  );
+  const categories = useMemo(() => listCategories(inTab), [inTab]);
+  // A category with no titles in this tab shows everything instead of an empty list.
+  const activeCategory = categories.some((c) => c.value === category)
+    ? category
+    : "all";
+
+  const visible = useMemo(
+    () =>
+      sortCards(
+        inTab.filter((c) => matchesCategory(c, activeCategory)),
+        sort,
+      ),
+    [inTab, activeCategory, sort],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -97,6 +114,14 @@ export function Watchlist({
         </div>
         <SortSelect value={sort} onChange={setSort} />
       </div>
+
+      {categories.length > 1 && (
+        <CategoryChips
+          categories={categories}
+          value={activeCategory}
+          onChange={setCategory}
+        />
+      )}
 
       {visible.length === 0 ? (
         <EmptyState tab={tab} family={family} listEmpty={cards.length === 0} />

@@ -4,27 +4,15 @@ import { Clapperboard, Dices, Shuffle, Star, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { CategoryChips } from "@/components/category-chips";
 import { MediaPoster } from "@/components/media-poster";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { listCategories, matchesCategory } from "@/lib/categories";
 import { mediaTypeLabel } from "@/lib/constants";
 import { formatScore } from "@/lib/format";
 import { seededShuffle } from "@/lib/random";
 import type { ListItemCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-interface Category {
-  value: string;
-  label: string;
-  count: number;
-}
-
-function matches(card: ListItemCard, category: string): boolean {
-  if (category === "all") return true;
-  if (category.startsWith("type:")) {
-    return card.media.media_type === category.slice("type:".length);
-  }
-  return card.media.genres.includes(category.slice("genre:".length));
-}
 
 function detailHref(card: ListItemCard) {
   return `/app/media/${card.media.media_type}/${card.media.tmdb_id}`;
@@ -42,33 +30,10 @@ export function MovieNight({
   const [category, setCategory] = useState("all");
   const [pickedId, setPickedId] = useState<string | null>(null);
 
-  const categories = useMemo(() => {
-    const genreCounts = new Map<string, number>();
-    for (const card of cards) {
-      for (const genre of card.media.genres) {
-        genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1);
-      }
-    }
-    const movies = cards.filter((c) => c.media.media_type === "movie").length;
-    const series = cards.length - movies;
-
-    const result: Category[] = [{ value: "all", label: "All", count: cards.length }];
-    if (movies > 0 && series > 0) {
-      result.push(
-        { value: "type:movie", label: "Movies", count: movies },
-        { value: "type:tv", label: "Series", count: series },
-      );
-    }
-    [...genreCounts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .forEach(([genre, count]) =>
-        result.push({ value: `genre:${genre}`, label: genre, count }),
-      );
-    return result;
-  }, [cards]);
+  const categories = useMemo(() => listCategories(cards), [cards]);
 
   const shown = useMemo(
-    () => seededShuffle(cards.filter((c) => matches(c, category)), seed),
+    () => seededShuffle(cards.filter((c) => matchesCategory(c, category)), seed),
     [cards, category, seed],
   );
   const picked = shown.find((c) => c.item.id === pickedId) ?? null;
@@ -153,22 +118,11 @@ export function MovieNight({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Categories">
-        {categories.map((c) => (
-          <button
-            key={c.value}
-            type="button"
-            onClick={() => setCategory(c.value)}
-            aria-pressed={category === c.value}
-            className={cn(
-              "rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground",
-              category === c.value && "border-primary bg-primary/15 text-foreground",
-            )}
-          >
-            {c.label} <span className="text-xs opacity-70">{c.count}</span>
-          </button>
-        ))}
-      </div>
+      <CategoryChips
+        categories={categories}
+        value={category}
+        onChange={setCategory}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {shown.map((card) => (
