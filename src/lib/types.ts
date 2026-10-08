@@ -16,6 +16,8 @@ export interface Group {
   id: string;
   name: string;
   invite_code: string;
+  /** Codes last 24 hours; refreshInviteCodes() swaps expired ones for new ones. */
+  invite_code_expires_at: string;
   created_by: string;
   created_at: string;
 }

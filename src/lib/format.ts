@@ -31,6 +31,12 @@ export function timeAgo(iso: string): string {
   return formatDay(iso.slice(0, 10));
 }
 
+/** "5 h" or "40 min" until the given time, rounded up. Render on the server only. */
+export function timeUntil(iso: string): string {
+  const minutes = Math.max(1, Math.ceil((Date.parse(iso) - Date.now()) / 60_000));
+  return minutes < 60 ? `${minutes} min` : `${Math.ceil(minutes / 60)} h`;
+}
+
 export function relativeDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const then = new Date(iso).getTime();

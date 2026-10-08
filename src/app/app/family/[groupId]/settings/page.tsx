@@ -17,7 +17,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getGroupWithMembers, getSessionProfile } from "@/lib/data";
+import {
+  getGroupWithMembers,
+  getSessionProfile,
+  refreshInviteCodes,
+} from "@/lib/data";
+import { timeUntil } from "@/lib/format";
 
 export default async function FamilySettingsPage({
   params,
@@ -28,6 +33,7 @@ export default async function FamilySettingsPage({
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
+  await refreshInviteCodes();
   const data = await getGroupWithMembers(groupId);
   if (!data) notFound();
   const { group, members } = data;
@@ -81,8 +87,10 @@ export default async function FamilySettingsPage({
           <InviteCode code={group.invite_code} />
           {isOwner && <NewCodeButton groupId={group.id} />}
           <p className="w-full text-sm text-muted-foreground">
-            Share this code with family members so they can join.
-            {isOwner && " Make a new one if it got into the wrong hands."}
+            Share this code with family members so they can join. Codes change
+            every 24 hours; this one changes in{" "}
+            {timeUntil(group.invite_code_expires_at)}.
+            {isOwner && " Make a new one now if it got into the wrong hands."}
           </p>
         </CardContent>
       </Card>

@@ -72,12 +72,21 @@ export async function getMyGroups(): Promise<GroupWithCount[]> {
       id: g.id,
       name: g.name,
       invite_code: g.invite_code,
+      invite_code_expires_at: g.invite_code_expires_at,
       created_by: g.created_by,
       created_at: g.created_at,
       memberCount: g.group_members?.[0]?.count ?? 0,
       isOwner: ownedIds.has(g.id),
     }),
   );
+}
+
+/** Swaps expired invite codes in the user's families for new ones; call before showing codes. */
+export async function refreshInviteCodes() {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("refresh_invite_codes");
+  // Logged, not thrown: the page still works, it just shows the current code.
+  if (error) console.error("Could not refresh invite codes:", error.message);
 }
 
 /** A single group plus its members (RLS ensures the user is a member). */

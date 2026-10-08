@@ -5,9 +5,10 @@ import { GroupForms } from "@/components/group-forms";
 import { InviteCode } from "@/components/invite-code";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getMyGroups } from "@/lib/data";
+import { getMyGroups, refreshInviteCodes } from "@/lib/data";
 
 export default async function GroupsPage() {
+  await refreshInviteCodes();
   const groups = await getMyGroups();
 
   return (

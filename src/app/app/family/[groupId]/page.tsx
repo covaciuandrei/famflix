@@ -14,7 +14,9 @@ import {
   getListCards,
   getRemovedItems,
   getSessionProfile,
+  refreshInviteCodes,
 } from "@/lib/data";
+import { timeUntil } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export default async function FamilyPage({
@@ -30,6 +32,7 @@ export default async function FamilyPage({
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
+  await refreshInviteCodes();
   const data = await getGroupWithMembers(groupId);
   if (!data) notFound();
   const { group, members } = data;
@@ -82,9 +85,12 @@ export default async function FamilyPage({
           </div>
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             Invite code:
             <InviteCode code={group.invite_code} />
+            <span className="text-xs">
+              changes in {timeUntil(group.invite_code_expires_at)}
+            </span>
           </div>
           <div className="flex gap-2">
             <Link

@@ -7,9 +7,9 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
 ## Features
 
 - **Family lists**: start a family and invite people with a code. Everyone can
-  add titles, mark them watched, rate them and react. The owner can rename the
-  family, make a new invite code and remove members (**Manage** on the
-  Families page).
+  add titles, mark them watched, rate them and react. Invite codes last 24
+  hours, then change by themselves. The owner can rename the family, make a
+  new invite code and remove members (**Manage** on the Families page).
 - **Personal list**: a private "My list" that only you can see. Every list can
   be filtered by release date (2020s, 1990s, ...) and category (genre, movies
   or series).
@@ -83,6 +83,9 @@ pasting each one's contents and clicking Run:
 5. [`supabase/migrations/0005_score_reactions.sql`](supabase/migrations/0005_score_reactions.sql) —
    your score sets your like/dislike: over 7 likes the title, under 6 dislikes
    it. Existing scores and reactions are left alone.
+6. [`supabase/migrations/0006_invite_code_expiry.sql`](supabase/migrations/0006_invite_code_expiry.sql) —
+   invite codes last 24 hours, then change by themselves. Existing codes get
+   24 hours from when you run it.
 
 ## 4. Enable authentication
 
