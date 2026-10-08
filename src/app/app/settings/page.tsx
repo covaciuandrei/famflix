@@ -95,7 +95,7 @@ export default async function SettingsPage() {
             >
               The Movie Database (TMDB)
             </a>
-            . Streaming availability is provided by JustWatch.
+            .
           </p>
           <Link
             href="/privacy"

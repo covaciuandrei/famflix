@@ -23,18 +23,10 @@ export interface TmdbItem {
   voteAverage: number;
 }
 
-export interface TmdbProvider {
-  providerId: number;
-  providerName: string;
-  logoPath: string | null;
-}
-
 export interface TmdbDetails extends TmdbItem {
   genres: string[];
   runtime: number | null;
   trailerKey: string | null;
-  watchProviders: TmdbProvider[];
-  watchLink: string | null;
 }
 
 export interface TmdbRow {
@@ -60,19 +52,6 @@ interface RawDetails extends RawResult {
   runtime?: number;
   episode_run_time?: number[];
   videos?: { results: { key: string; site: string; type: string }[] };
-  "watch/providers"?: {
-    results: Record<
-      string,
-      {
-        link?: string;
-        flatrate?: {
-          provider_id: number;
-          provider_name: string;
-          logo_path: string | null;
-        }[];
-      }
-    >;
-  };
 }
 
 function token(): string {
@@ -332,15 +311,14 @@ export async function getRecommendations(
   return normalizeMany(data.results, mediaType);
 }
 
-/** Full details for a single title, including trailer and streaming providers. */
+/** Full details for a single title, including its trailer. */
 export async function getMediaDetails(
   mediaType: MediaType,
   tmdbId: number,
-  region = "US",
 ): Promise<TmdbDetails> {
   const raw = await tmdbFetch<RawDetails>(
     `/${mediaType}/${tmdbId}`,
-    { append_to_response: "videos,watch/providers" },
+    { append_to_response: "videos" },
     86_400,
   );
 
@@ -351,14 +329,6 @@ export async function getMediaDetails(
     raw.videos?.results.find(
       (v) => v.site === "YouTube" && v.type === "Trailer",
     ) ?? raw.videos?.results.find((v) => v.site === "YouTube");
-
-  const providersForRegion = raw["watch/providers"]?.results?.[region];
-  const watchProviders: TmdbProvider[] =
-    providersForRegion?.flatrate?.map((p) => ({
-      providerId: p.provider_id,
-      providerName: p.provider_name,
-      logoPath: p.logo_path ?? null,
-    })) ?? [];
 
   const runtime =
     raw.runtime ??
@@ -371,8 +341,6 @@ export async function getMediaDetails(
     genres: raw.genres?.map((g) => g.name) ?? [],
     runtime,
     trailerKey: trailer?.key ?? null,
-    watchProviders,
-    watchLink: providersForRegion?.link ?? null,
   };
 }
 

@@ -162,33 +162,6 @@ export default async function MediaDetailPage({
           </div>
         </section>
       )}
-
-      {details.watchProviders.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">Where to watch</h2>
-          <p className="-mt-1 text-xs text-muted-foreground">
-            Streaming availability (US) via JustWatch / TMDB.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {details.watchProviders.map((p) => (
-              <div
-                key={p.providerId}
-                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
-              >
-                {p.logoPath && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={tmdbImage(p.logoPath, "w92") ?? ""}
-                    alt=""
-                    className="size-6 rounded"
-                  />
-                )}
-                {p.providerName}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
