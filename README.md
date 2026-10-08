@@ -67,25 +67,9 @@ Fill in:
 
 ## 3. Set up the database
 
-In the Supabase dashboard open **SQL Editor** and run these files, in order, by
-pasting each one's contents and clicking Run:
-
-1. [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) —
-   all tables, indexes, security policies and helper functions, plus a trigger
-   that auto-creates a profile for each new user.
-2. [`supabase/migrations/0002_watched_together.sql`](supabase/migrations/0002_watched_together.sql) —
-   "Watched together" logging, scores filled in for others, and rating requests.
-3. [`supabase/migrations/0003_family_tools.sql`](supabase/migrations/0003_family_tools.sql) —
-   undo for removed titles, family settings, the activity feed and stronger
-   invite codes.
-4. [`supabase/migrations/0004_decimal_scores.sql`](supabase/migrations/0004_decimal_scores.sql) —
-   scores with one decimal (6.7, 8.5, ...). Existing scores are kept.
-5. [`supabase/migrations/0005_score_reactions.sql`](supabase/migrations/0005_score_reactions.sql) —
-   your score sets your like/dislike: over 7 likes the title, under 6 dislikes
-   it. Existing scores and reactions are left alone.
-6. [`supabase/migrations/0006_invite_code_expiry.sql`](supabase/migrations/0006_invite_code_expiry.sql) —
-   invite codes last 24 hours, then change by themselves. Existing codes get
-   24 hours from when you run it.
+In the Supabase dashboard open **SQL Editor**, paste the contents of
+[`supabase/db_init.sql`](supabase/db_init.sql) and click Run, once, on an
+empty database. It creates all tables, security policies and functions.
 
 ## 4. Enable authentication
 
@@ -129,8 +113,9 @@ limits and troubleshooting.
    Azure's runtime settings.
 2. In Supabase URL Configuration, set the Site URL to the production address
    and add `https://<your-domain>/auth/callback` to the Redirect URLs.
-3. Database changes aren't deployed automatically: run any new file from
-   `supabase/migrations` in the SQL Editor before pushing code that needs it.
+3. Database changes aren't deployed automatically: run the new SQL in the SQL
+   Editor before pushing code that needs it, and keep `supabase/db_init.sql`
+   up to date so a fresh database gets everything.
 
 ## Project layout
 
@@ -141,7 +126,8 @@ limits and troubleshooting.
   the theme helpers.
 - `src/proxy.ts`: refreshes the Supabase session and protects `/app` (the
   Next.js 16 replacement for middleware).
-- `supabase/migrations`: database tables, security policies and functions.
+- `supabase/db_init.sql`: the whole database (tables, security policies and
+  functions) in one file.
 
 ## Notes
 

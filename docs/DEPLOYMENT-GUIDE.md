@@ -990,9 +990,9 @@ Supabase continued to host the database; we did not move it into Azure. Pushing
 to GitHub deploys application code, **not SQL migrations**.
 
 For a fresh Supabase project, follow the database instructions in
-[`README.md`](../README.md) and inspect the SQL files under
-[`supabase/migrations/`](../supabase/migrations/). They define tables, functions,
-security policies, and later feature changes.
+[`README.md`](../README.md): run [`supabase/db_init.sql`](../supabase/db_init.sql)
+once on the empty database. It defines the tables, functions and security
+policies.
 
 For the existing production project:
 
@@ -1003,9 +1003,9 @@ For the existing production project:
    migration process.
 5. Deploy application code that depends on them in the correct order.
 
-Do not blindly rerun every initialization SQL file on a live database. SQL
-files may not all be safe to run repeatedly. Our Actions workflow does not
-track or apply them.
+Do not run `db_init.sql` on a live database: it is only for an empty one, and
+it stops at the first table that already exists. Our Actions workflow does not
+track or apply SQL.
 
 RLS is what enforces database access boundaries even when a browser has the
 Supabase public key. Hiding a button in React is not a substitute for database

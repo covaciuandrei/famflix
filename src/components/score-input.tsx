@@ -9,7 +9,7 @@ const MIN = 1;
 const MAX = 10;
 const TICKS = Array.from({ length: 10 }, (_, i) => i + 1);
 
-// Mirrors the react_to_score() trigger in supabase/migrations/0005_score_reactions.sql.
+// Mirrors the react_to_score() trigger in supabase/db_init.sql.
 export const SCORE_REACTION_HINT =
   "Scores over 7 also like the title; under 6 dislike it.";
 
