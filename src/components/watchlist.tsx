@@ -116,7 +116,7 @@ export function Watchlist({
               onClick={() => setTab(t.value)}
               aria-pressed={tab === t.value}
               className={cn(
-                "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                "whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-3",
                 tab === t.value && "bg-muted text-foreground",
               )}
             >
