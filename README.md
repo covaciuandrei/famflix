@@ -100,10 +100,16 @@ The live site runs on **Azure Static Web Apps** (Free plan).
 [`.github/workflows/azure-static-web-apps.yml`](.github/workflows/azure-static-web-apps.yml)
 builds and deploys every push to `main`; pull requests get a preview site.
 
-1. Create a Static Web App linked to the GitHub repo, then add these
+[**Beginner's deployment guide**](docs/DEPLOYMENT-GUIDE.md) explains our complete
+setup, manual commands, infrastructure, secrets, DNS, HTTPS, authentication,
+limits and troubleshooting.
+
+1. Create a detached Free Static Web App using the Bicep files in `infra/`,
+   then use the existing GitHub Actions workflow and add these
    repository secrets in GitHub: `AZURE_STATIC_WEB_APPS_API_TOKEN`,
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
-   `TMDB_ACCESS_TOKEN`.
+   `TMDB_ACCESS_TOKEN`. Also configure the three application variables in
+   Azure's runtime settings.
 2. In Supabase URL Configuration, set the Site URL to the production address
    and add `https://<your-domain>/auth/callback` to the Redirect URLs.
 3. Database changes aren't deployed automatically: run any new file from
