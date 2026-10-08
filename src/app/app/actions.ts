@@ -20,6 +20,14 @@ function revalidateApp() {
   revalidatePath("/app", "layout");
 }
 
+/** Names and notes: at most this many characters (the database refuses longer ones too). */
+const MAX_TEXT = 250;
+
+/** Characters as the database counts them (an emoji is one, though it is two JavaScript chars). */
+function tooLong(text: string): boolean {
+  return [...text].length > MAX_TEXT;
+}
+
 /** Scores run from 1 to 10 with one decimal (6.7); returns undefined if out of range. */
 function cleanScore(score: number | null): number | null | undefined {
   if (score === null) return null;
@@ -207,6 +215,9 @@ export async function setRating(
 ): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   const cleanComment = comment && comment.trim() ? comment.trim() : null;
+  if (cleanComment && tooLong(cleanComment)) {
+    return { error: `Notes can be at most ${MAX_TEXT} characters.` };
+  }
   const cleanedScore = cleanScore(score);
   if (cleanedScore === undefined) {
     return { error: "Scores must be between 1 and 10." };
@@ -315,6 +326,9 @@ async function saveOwnNote(
   note: string,
 ): Promise<ActionResult> {
   const comment = note.trim() || null;
+  if (comment && tooLong(comment)) {
+    return { error: `Notes can be at most ${MAX_TEXT} characters.` };
+  }
   const { data: existing } = await supabase
     .from("ratings")
     .select("id")
@@ -374,6 +388,9 @@ export async function createGroupAction(
   const { supabase } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Please enter a family name." };
+  if (tooLong(name)) {
+    return { error: `Family names can be at most ${MAX_TEXT} characters.` };
+  }
 
   const { data, error } = await supabase.rpc("create_group", { p_name: name });
   if (error) return { error: error.message };
@@ -406,6 +423,9 @@ export async function updateDisplayName(
   const { supabase, user } = await requireUser();
   const name = String(formData.get("display_name") ?? "").trim();
   if (!name) return { error: "Name cannot be empty." };
+  if (tooLong(name)) {
+    return { error: `Names can be at most ${MAX_TEXT} characters.` };
+  }
 
   const { error } = await supabase
     .from("profiles")
@@ -424,6 +444,9 @@ export async function renameGroup(
   name: string,
 ): Promise<ActionResult> {
   const { supabase } = await requireUser();
+  if (tooLong(name.trim())) {
+    return { error: `Family names can be at most ${MAX_TEXT} characters.` };
+  }
   const { error } = await supabase.rpc("rename_group", {
     p_group: groupId,
     p_name: name,

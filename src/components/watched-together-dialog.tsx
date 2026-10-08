@@ -180,6 +180,7 @@ export function WatchedTogetherDialog({
                 )}
                 {isChecked && m.id === currentUserId && (
                   <Textarea
+                    maxLength={250}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="Your note (optional)"

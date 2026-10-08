@@ -21,6 +21,7 @@ export function ProfileForm({ displayName }: { displayName: string }) {
         id="display_name"
         name="display_name"
         defaultValue={displayName}
+        maxLength={250}
         required
       />
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}

@@ -14,7 +14,7 @@ begin;
 -- Public mirror of auth.users. One row is created automatically per new user.
 create table public.profiles (
   id           uuid primary key references auth.users (id) on delete cascade,
-  display_name text not null default '',
+  display_name text not null default '' check (char_length(display_name) <= 250),
   avatar_url   text,
   created_at   timestamptz not null default now()
 );
@@ -22,7 +22,7 @@ create table public.profiles (
 -- A "family"/circle. Users create or join one via its invite code.
 create table public.groups (
   id                     uuid primary key default gen_random_uuid(),
-  name                   text not null,
+  name                   text not null check (char_length(name) <= 250),
   invite_code            text not null unique,
   created_by             uuid not null references public.profiles (id) on delete cascade,
   created_at             timestamptz not null default now(),
@@ -94,7 +94,7 @@ create table public.ratings (
   user_id      uuid not null references public.profiles (id) on delete cascade,
   -- numeric(3,1) rounds anything finer to one decimal (6.7, 8.5, ...).
   score        numeric(3,1) check (score between 1 and 10),
-  comment      text,
+  comment      text check (char_length(comment) <= 250),
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   -- No foreign key: a second ratings -> profiles link would make the app's profiles() embed ambiguous.
@@ -369,11 +369,11 @@ begin
   insert into public.profiles (id, display_name, avatar_url)
   values (
     new.id,
-    coalesce(
+    left(coalesce(
       new.raw_user_meta_data ->> 'full_name',
       new.raw_user_meta_data ->> 'name',
       split_part(new.email, '@', 1)
-    ),
+    ), 250),
     new.raw_user_meta_data ->> 'avatar_url'
   )
   on conflict (id) do nothing;
@@ -401,6 +401,9 @@ declare
 begin
   if coalesce(trim(p_name), '') = '' then
     raise exception 'Group name is required';
+  end if;
+  if char_length(trim(p_name)) > 250 then
+    raise exception 'Family names can be at most 250 characters';
   end if;
 
   insert into public.groups (name, invite_code, created_by)
@@ -472,6 +475,9 @@ begin
   end if;
   if coalesce(trim(p_name), '') = '' then
     raise exception 'Please enter a family name';
+  end if;
+  if char_length(trim(p_name)) > 250 then
+    raise exception 'Family names can be at most 250 characters';
   end if;
   update public.groups set name = trim(p_name) where id = p_group;
 end;

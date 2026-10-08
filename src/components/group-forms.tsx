@@ -41,7 +41,12 @@ export function GroupForms() {
         </CardHeader>
         <CardContent>
           <form action={createAction} className="flex flex-col gap-3">
-            <Input name="name" placeholder="Family name" required />
+            <Input
+              name="name"
+              placeholder="Family name"
+              maxLength={250}
+              required
+            />
             {createState.error && (
               <p className="text-sm text-destructive">{createState.error}</p>
             )}

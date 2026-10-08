@@ -46,7 +46,7 @@ export function RenameForm({ groupId, name }: { groupId: string; name: string })
         <Input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          maxLength={60}
+          maxLength={250}
           required
           aria-label="Family name"
         />

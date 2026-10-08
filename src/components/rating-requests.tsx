@@ -178,6 +178,7 @@ function RequestRow({
       </div>
 
       <Textarea
+        maxLength={250}
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="Add a note (optional)"

@@ -35,6 +35,7 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   device (Settings → Appearance).
 - **Private by design**: every list is protected in the database with
   row-level security, so only you or your family members can read it.
+- **Limits against abuse**: names and notes are at most 250 characters.
 
 ## Tech stack
 

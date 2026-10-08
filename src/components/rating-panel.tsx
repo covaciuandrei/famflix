@@ -68,6 +68,7 @@ export function RatingPanel({
       </div>
 
       <Textarea
+        maxLength={250}
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         placeholder="Add a note (optional)"
