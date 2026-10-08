@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { saveMedia } from "@/lib/save-media";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { detailsToMediaRow, getMediaDetails } from "@/lib/tmdb";
 import type { MediaType, ReactionValue } from "@/lib/types";
@@ -493,4 +494,27 @@ export async function leaveGroup(groupId: string): Promise<ActionResult> {
   if (error) return { error: error.message };
   revalidateApp();
   redirect("/app/groups");
+}
+
+/**
+ * Deletes the signed-in user's account and everything of theirs. The database first takes them out of each
+ * family, so the others keep the family and its titles (before_profile_delete in db_init.sql).
+ */
+export async function deleteAccount(confirmation: string): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (confirmation.trim().toUpperCase() !== "DELETE") {
+    return { error: "Type DELETE to confirm." };
+  }
+  const admin = createAdminClient();
+  if (!admin) {
+    return { error: "Couldn't delete your account right now. Please try again later." };
+  }
+  const { error } = await admin.auth.admin.deleteUser(user.id);
+  if (error) {
+    console.error("Deleting an account failed:", error.message);
+    return { error: "Couldn't delete your account right now. Please try again later." };
+  }
+  // The account is gone; this just clears the sign-in cookies.
+  await supabase.auth.signOut().catch(() => {});
+  redirect("/?deleted=1");
 }

@@ -24,7 +24,8 @@ create table public.groups (
   id                     uuid primary key default gen_random_uuid(),
   name                   text not null check (char_length(name) <= 250),
   invite_code            text not null unique,
-  created_by             uuid not null references public.profiles (id) on delete cascade,
+  -- Null once the person who created it has deleted their account; the family carries on.
+  created_by             uuid references public.profiles (id) on delete set null,
   created_at             timestamptz not null default now(),
   -- Codes last 24 hours, then refresh_invite_codes() replaces them.
   invite_code_expires_at timestamptz not null default now() + interval '24 hours'
@@ -63,7 +64,9 @@ create table public.media (
 create table public.list_items (
   id         uuid primary key default gen_random_uuid(),
   group_id   uuid references public.groups (id) on delete cascade,
-  added_by   uuid not null references public.profiles (id) on delete cascade,
+  -- Personal titles go with their owner's account. On family titles it becomes null when the person
+  -- who added it deletes their account (before_profile_delete), so the title stays on the list.
+  added_by   uuid references public.profiles (id) on delete cascade,
   media_id   uuid not null references public.media (id) on delete cascade,
   status     text not null default 'want' check (status in ('want', 'watched')),
   created_at timestamptz not null default now(),
@@ -424,6 +427,71 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Deleting an account (Settings -> Delete account, or removing the user in the Supabase dashboard) deletes the
+-- profile, and everything of theirs goes with it: personal list, scores, notes, reactions and watch records.
+-- First, though, they leave each family, so the others keep the family and the titles on its list: an owner
+-- hands over to the longest-standing member, and a family with nobody else in it is deleted. Their name is
+-- also removed from the family histories.
+create function public.before_profile_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  m      record;
+  v_next uuid;
+begin
+  perform set_config('famflix.deleting_account', 'on', true);
+
+  for m in select group_id, role from public.group_members where user_id = old.id loop
+    if not exists (select 1 from public.group_members
+                   where group_id = m.group_id and user_id <> old.id) then
+      delete from public.groups where id = m.group_id;
+      continue;
+    end if;
+    if m.role = 'owner' then
+      select user_id into v_next from public.group_members
+      where group_id = m.group_id and user_id <> old.id
+      order by joined_at, user_id
+      limit 1;
+      update public.group_members set role = 'owner'
+      where group_id = m.group_id and user_id = v_next;
+      perform public.add_activity(m.group_id, 'new_owner', null, v_next);
+    end if;
+    delete from public.group_members where group_id = m.group_id and user_id = old.id;
+  end loop;
+
+  -- Family titles they added stay on the family lists (personal ones go with the account).
+  update public.list_items set added_by = null
+  where added_by = old.id and group_id is not null;
+
+  -- Their name and notes leave the family histories.
+  update public.activity
+  set actor_id = null,
+      actor_name = null,
+      detail = case when kind = 'rated' then null else detail end
+  where actor_id = old.id;
+  update public.activity set subject_id = null, subject_name = null
+  where subject_id = old.id;
+  if coalesce(old.display_name, '') <> '' then
+    update public.activity
+    set detail = array_to_string(array(
+          select case when n = old.display_name then 'someone' else n end
+          from unnest(string_to_array(detail, ', ')) as n
+        ), ', ')
+    where kind = 'watched_together'
+      and old.display_name = any (string_to_array(detail, ', '));
+  end if;
+
+  return old;
+end;
+$$;
+
+create trigger profiles_before_delete
+  before delete on public.profiles
+  for each row execute function public.before_profile_delete();
 
 -- ---------------------------------------------------------------------------
 --  Family functions: families and memberships change only through these
@@ -893,7 +961,8 @@ begin
       new.group_id, case when new.role = 'owner' then 'created' else 'joined' end);
   -- Skipped when the whole family is being deleted.
   elsif exists (select 1 from public.groups where id = old.group_id) then
-    if old.user_id = auth.uid() then
+    if old.user_id = auth.uid()
+       or current_setting('famflix.deleting_account', true) = 'on' then
       perform public.add_activity(old.group_id, 'left');
     else
       perform public.add_activity(old.group_id, 'removed_member', null, old.user_id);
@@ -999,6 +1068,7 @@ revoke execute on function public.ratings_activity() from public, anon, authenti
 revoke execute on function public.group_members_activity() from public, anon, authenticated;
 revoke execute on function public.groups_activity() from public, anon, authenticated;
 revoke execute on function public.react_to_score() from public, anon, authenticated;
+revoke execute on function public.before_profile_delete() from public, anon, authenticated;
 
 -- Signed-in users only.
 revoke execute on function public.refresh_invite_codes() from public, anon;

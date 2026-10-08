@@ -5,8 +5,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 /**
  * A Supabase client with the service-role key, which skips the database's security rules. Server-only, and
  * only for what signed-in users must not be able to do themselves: saving the shared movie info
- * (save-media.ts) and counting requests (rate-limit.ts). Never pass it user-chosen ids other than the
- * signed-in user's own.
+ * (save-media.ts), counting requests (rate-limit.ts) and deleting an account. Never pass it user-chosen ids
+ * other than the signed-in user's own.
  */
 export function createAdminClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -35,7 +35,8 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   device (Settings → Appearance).
 - **Private by design**: sign-in is with Google only. Every list is protected in
   the database with row-level security, so only you or your family members can
-  read it.
+  read it. **Settings → Delete account** deletes your account and data; your
+  families keep the titles you added, without your name.
 - **Limits against abuse**: names and notes are at most 250 characters. Each
   person can add 30 titles and search 60 times a minute, try 10 invite codes
   per 10 minutes, and start 10 families an hour. Each family's activity feed

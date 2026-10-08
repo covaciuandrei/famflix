@@ -5,12 +5,17 @@ import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) redirect("/app");
+  const { deleted } = await searchParams;
 
   const features = [
     {
@@ -42,6 +47,15 @@ export default async function LandingPage() {
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10 opacity-60 [background:radial-gradient(60%_50%_at_50%_0%,rgba(124,92,255,0.25),transparent)]"
         />
+        {deleted === "1" && (
+          <p
+            role="status"
+            className="rounded-lg border border-border bg-card px-4 py-2 text-sm"
+          >
+            Your account and your data have been deleted. Thanks for using
+            FamFlix.
+          </p>
+        )}
         <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground">
           <Film className="size-4 text-primary" />
           FamFlix
