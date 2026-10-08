@@ -190,6 +190,24 @@ as $$
   );
 $$;
 
+-- True if the signed-in user can see this list item: it is on their own list or on a family list they belong to.
+create function public.can_see_item(item uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.list_items li
+    where li.id = item
+      and (
+        (li.group_id is null and li.added_by = auth.uid())
+        or (li.group_id is not null and public.is_group_member(li.group_id, auth.uid()))
+      )
+  );
+$$;
+
 -- Invite codes: 8 characters from 32 easy-to-read symbols.
 create function public.new_invite_code()
 returns text
@@ -275,10 +293,12 @@ create policy ratings_select on public.ratings for select using (
       )
   )
 );
+-- Your own scores, and only on titles you can still see (not after you leave a family).
 create policy ratings_insert_own on public.ratings for insert
-  with check (user_id = auth.uid());
+  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
 create policy ratings_update_own on public.ratings for update
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  using (user_id = auth.uid() and public.can_see_item(list_item_id))
+  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
 create policy ratings_delete_own on public.ratings for delete
   using (user_id = auth.uid());
 
@@ -294,9 +314,10 @@ create policy reactions_select on public.reactions for select using (
   )
 );
 create policy reactions_insert_own on public.reactions for insert
-  with check (user_id = auth.uid());
+  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
 create policy reactions_update_own on public.reactions for update
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  using (user_id = auth.uid() and public.can_see_item(list_item_id))
+  with check (user_id = auth.uid() and public.can_see_item(list_item_id));
 create policy reactions_delete_own on public.reactions for delete
   using (user_id = auth.uid());
 
@@ -881,6 +902,8 @@ revoke execute on function public.log_watch(uuid, date, jsonb) from public, anon
 grant execute on function public.log_watch(uuid, date, jsonb) to authenticated;
 revoke execute on function public.pending_rating_requests() from public, anon;
 grant execute on function public.pending_rating_requests() to authenticated;
+revoke execute on function public.can_see_item(uuid) from public, anon;
+grant execute on function public.can_see_item(uuid) to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.
 notify pgrst, 'reload schema';
