@@ -88,8 +88,12 @@ export default function PrivacyPage() {
         </ul>
       </Section>
 
-      <Section title="Cookies">
-        <p>FamFlix only uses the cookies needed to keep you signed in.</p>
+      <Section title="Cookies and browser storage">
+        <p>
+          FamFlix only uses the cookies needed to keep you signed in. Your
+          browser also remembers two settings for FamFlix: your theme and
+          whether you&apos;ve seen the welcome tour. These stay on your device.
+        </p>
       </Section>
 
       <Section title="Your choices">

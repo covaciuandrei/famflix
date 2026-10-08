@@ -1,18 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
 # FamFlix
 
-A small, free, browser-based watchlist for families and friends. Create a
-shared family list (anyone can add titles, mark them watched, rate them 1–10,
-leave a note, and like/dislike) plus a private personal list. Movie and series
-data comes from **TMDB**. Accounts, storage and access control use **Supabase**.
+A small, free watchlist for families and friends: keep track of the movies and
+series you want to watch and have watched together, and see what everyone
+thought of them. Live at <https://famflix.andreicovaciu.dev>.
 
-- **Stack:** Next.js (App Router) · Supabase (Postgres + Auth + Row-Level Security) · TMDB API · Tailwind CSS
-- **Multi-tenant:** each "family" is isolated by invite code and enforced with RLS.
+## Features
+
+- **Family lists**: start a family and invite people with a code. Everyone can
+  add titles, mark them watched, rate them and react. The owner can rename the
+  family, make a new invite code and remove members (**Manage** on the
+  Families page).
+- **Personal list**: a private "My list" that only you can see.
+- **Browse and add**: search or browse trending movies and series, with
+  trailers and where to stream them.
+- **Scores and reactions**: rate 1–10 with one decimal (8.5) and add a note.
+  A score over 7 also likes the title and under 6 dislikes it; you can still
+  change the thumbs yourself.
+- **Watched together**: log who watched a title with you. FamFlix asks the
+  others for their score, or you can fill it in for them.
+- **Movie night**: shuffle what's left to watch, filter by category, or let
+  the app pick.
+- **Activity feed**: see what happened in each family; removed titles can be
+  restored for 30 days.
+- **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can
+  be added to the home screen. Dark theme by default, or light, or follow the
+  device (Settings → Appearance).
+- **Private by design**: every list is protected in the database with
+  row-level security, so only you or your family members can read it.
+
+**Stack:** Next.js 16 (App Router) · Supabase (Postgres, Auth, row-level
+security) · TMDB API · Tailwind CSS · Azure Static Web Apps.
 
 ## 1. Prerequisites
 
-- Node.js 20+
+- Node.js 20 (the version `package.json` and the deploy use)
 - A free [Supabase](https://supabase.com) project
 - A free [TMDB](https://www.themoviedb.org) account + API Read Access Token
 
@@ -55,9 +76,12 @@ In Supabase → **Authentication → Providers**:
 
 - **Email**: enabled by default. (For instant testing you can turn off "Confirm email".)
 - **Google** (optional): enable it and add your Google OAuth client ID/secret.
+  In Google Cloud, the OAuth client's authorized redirect URI is
+  `https://<your-project>.supabase.co/auth/v1/callback`.
 
-Under **Authentication → URL Configuration**, add your site URL and the redirect
-`http://localhost:3000/auth/callback` (and your production URL when deployed).
+Under **Authentication → URL Configuration**, set the Site URL and add each
+address the app runs on, followed by `/auth/callback`, to the Redirect URLs
+(for example `http://localhost:3000/auth/callback`).
 
 ## 5. Run
 
@@ -67,16 +91,37 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000), create an account, then
-create a family or join one with an invite code.
+create a family or join one with an invite code. Before pushing, check with
+`npx tsc --noEmit`, `npm run lint` and `npm run build`.
 
-## Deploy (free)
+## Deploy
 
-1. Push this repo to GitHub.
-2. Import it into [Vercel](https://vercel.com/new) and add the three env vars.
-3. In Supabase URL Configuration, add your Vercel URL + `/auth/callback`.
+The live site runs on **Azure Static Web Apps** (Free plan).
+[`.github/workflows/azure-static-web-apps.yml`](.github/workflows/azure-static-web-apps.yml)
+builds and deploys every push to `main`; pull requests get a preview site.
+
+1. Create a Static Web App linked to the GitHub repo, then add these
+   repository secrets in GitHub: `AZURE_STATIC_WEB_APPS_API_TOKEN`,
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+   `TMDB_ACCESS_TOKEN`.
+2. In Supabase URL Configuration, set the Site URL to the production address
+   and add `https://<your-domain>/auth/callback` to the Redirect URLs.
+3. Database changes aren't deployed automatically: run any new file from
+   `supabase/migrations` in the SQL Editor before pushing code that needs it.
+
+## Project layout
+
+- `src/app`: pages and routes. Signed-in pages live under `src/app/app`;
+  server actions are in `src/app/app/actions.ts`.
+- `src/components`: UI components.
+- `src/lib`: data loading (`data.ts`), the TMDB client, Supabase clients and
+  the theme helpers.
+- `src/proxy.ts`: refreshes the Supabase session and protects `/app` (the
+  Next.js 16 replacement for middleware).
+- `supabase/migrations`: database tables, security policies and functions.
 
 ## Notes
 
 - This product uses the TMDB API but is not endorsed or certified by TMDB.
 - Personal lists are private to each user; family lists are visible only to
-  members of that family — enforced at the database level via RLS.
+  members of that family, enforced in the database with row-level security.
