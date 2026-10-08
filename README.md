@@ -33,8 +33,17 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
 - **Private by design**: every list is protected in the database with
   row-level security, so only you or your family members can read it.
 
-**Stack:** Next.js 16 (App Router) · Supabase (Postgres, Auth, row-level
-security) · TMDB API · Tailwind CSS · Azure Static Web Apps.
+## Tech stack
+
+| Part                 | Technology                                                                |
+| -------------------- | ------------------------------------------------------------------------- |
+| UI                   | [React 19](https://react.dev) (server and client components)              |
+| Framework            | [Next.js 16](https://nextjs.org) (App Router, server actions)             |
+| Language             | TypeScript 5                                                              |
+| Styling              | [Tailwind CSS v4](https://tailwindcss.com), [Lucide](https://lucide.dev) icons |
+| Database and sign-in | [Supabase](https://supabase.com): Postgres with row-level security, Auth (Google and email) |
+| Movie data           | [TMDB API](https://developer.themoviedb.org)                              |
+| Hosting              | Azure Static Web Apps, deployed by GitHub Actions                         |
 
 ## 1. Prerequisites
 
