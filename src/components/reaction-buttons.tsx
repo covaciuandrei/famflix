@@ -33,6 +33,7 @@ export function ReactionButtons({
         disabled={pending}
         onClick={() => react("like")}
         aria-pressed={mine === "like"}
+        aria-label={`Like (${likeCount})`}
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50",
           mine === "like" && "text-like",
@@ -46,6 +47,7 @@ export function ReactionButtons({
         disabled={pending}
         onClick={() => react("dislike")}
         aria-pressed={mine === "dislike"}
+        aria-label={`Dislike (${dislikeCount})`}
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50",
           mine === "dislike" && "text-dislike",
