@@ -25,7 +25,7 @@ export default async function SettingsPage() {
         <CardContent className="flex flex-col gap-4">
           <ProfileForm displayName={profile?.display_name ?? ""} />
           <p className="text-sm text-muted-foreground">
-            Signed in as {user.email}
+            Signed in with Google as {user.email}
           </p>
         </CardContent>
       </Card>

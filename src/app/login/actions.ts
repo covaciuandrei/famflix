@@ -5,11 +5,6 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 
-export interface AuthState {
-  error?: string;
-  message?: string;
-}
-
 async function siteOrigin(): Promise<string> {
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
@@ -17,62 +12,7 @@ async function siteOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-/** Handles both sign in and sign up based on the `mode` field. */
-export async function authenticate(
-  _prev: AuthState,
-  formData: FormData,
-): Promise<AuthState> {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  const mode = String(formData.get("mode") ?? "signin");
-
-  if (!email || !password) {
-    return { error: "Email and password are required." };
-  }
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters." };
-  }
-
-  const supabase = await createClient();
-
-  if (mode === "signup") {
-    const displayName = String(formData.get("displayName") ?? "").trim();
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: displayName || email.split("@")[0] },
-        emailRedirectTo: `${await siteOrigin()}/auth/callback`,
-      },
-    });
-    if (error) {
-      // Until custom SMTP is set up, Supabase only emails its own team members.
-      const cantEmail =
-        /not authorized|sending confirmation email|rate limit/i.test(
-          error.message,
-        );
-      return {
-        error: cantEmail
-          ? "We couldn't send you a confirmation email. Please use Continue with Google instead."
-          : error.message,
-      };
-    }
-    if (!data.session) {
-      return {
-        message: "Check your email to confirm your account, then sign in.",
-      };
-    }
-  } else {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) return { error: error.message };
-  }
-
-  redirect("/app");
-}
-
+/** The only way in: Google sign-in, which also creates the account on the first visit. */
 export async function signInWithGoogle() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({

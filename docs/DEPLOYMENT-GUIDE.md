@@ -135,7 +135,6 @@ certificate purchase. We did not create a paid Azure DNS zone.
 - Supabase has its own database, auth, storage, email, and inactivity limits.
 - GitHub Actions in a private repository has its own usage/storage allowance.
 - TMDB has its own terms and API limits.
-- Email delivery for public signups may need a separate SMTP provider.
 - Creating unrelated paid Azure resources or upgrading the SKU can incur costs.
 
 Keep the Free SKU, inspect usage, and use budget alerts if appropriate. A budget
@@ -939,17 +938,13 @@ remain logged in between requests.
 Cookies belong to their host/domain. Moving from the apex to `famflix` may
 require signing in again; your database records have not disappeared.
 
-### Email authentication
+### Email authentication is switched off
 
-Email/password sign-in and signup are configured through Supabase's email
-provider. If email confirmation is enabled, the confirmation email must be
-delivered before the user can complete the expected flow.
-
-Supabase's default email service has delivery restrictions and rate limits,
-including restrictions on recipient addresses. If ordinary users cannot receive
-confirmation mail, configure an appropriate custom SMTP provider or use Google
-login. Do not casually disable email confirmation as a production workaround.
-SMTP configuration was not part of our Azure hosting work.
+FamFlix signs people in with Google only: the login page has no email or
+password form, and Supabase's **Email** provider is disabled (Authentication →
+Sign In / Providers), so nobody can sign up with a password through the API
+either. That also means FamFlix sends no emails, so it needs no SMTP provider.
+Google accounts are the protection against sign-up bots.
 
 ## 19. Google login and the two callbacks
 
@@ -1084,8 +1079,7 @@ Use a test account and confirm:
 
 - [ ] Home and login pages load at the intended domain.
 - [ ] Google login returns to `famflix`, not localhost or an old hostname.
-- [ ] Email/password login works if enabled.
-- [ ] Signup/confirmation emails work if that feature is offered.
+- [ ] The login page offers only "Continue with Google".
 - [ ] Refreshing a signed-in page preserves the session.
 - [ ] Signing out prevents access to protected `/app` pages.
 - [ ] Browsing/searching retrieves TMDB data.
@@ -1158,7 +1152,6 @@ change the Mac's DNS settings or hosts file as part of this diagnosis.
 | Google `redirect_uri_mismatch` | Provider OAuth | Google's redirect URI must exactly match the Supabase provider callback |
 | Login returns to localhost | App/Supabase redirect configuration | Saved Site URL, precise allowlist, actual request origin |
 | Some Google users are blocked | Google audience | Test users/publishing status and provider policy |
-| Confirmation email cannot be sent | Email delivery | Supabase SMTP configuration, restrictions, rate limits |
 | "You're doing that too often" | App limits | Someone added titles, searched or tried invite codes faster than the limits in the README; wait and retry |
 | Missing table/function errors | Database | Required SQL migration was not applied |
 | Titles do not load | App/TMDB | Server runtime token, TMDB response/logs, API limits |
@@ -1254,7 +1247,6 @@ not automatically appear in a fresh Git clone.
 - Migration of Supabase data into Azure.
 - Automatic SQL migrations in GitHub Actions.
 - A purchased TLS certificate or a Supabase custom auth domain.
-- A custom SMTP email delivery service.
 - An automatic redirect from apex/`www` to `famflix`.
 - A complete dedicated monitoring/backup/disaster-recovery system.
 

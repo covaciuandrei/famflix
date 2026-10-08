@@ -33,8 +33,9 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
 - **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can
   be added to the home screen. Dark theme by default, or light, or follow the
   device (Settings → Appearance).
-- **Private by design**: every list is protected in the database with
-  row-level security, so only you or your family members can read it.
+- **Private by design**: sign-in is with Google only. Every list is protected in
+  the database with row-level security, so only you or your family members can
+  read it.
 - **Limits against abuse**: names and notes are at most 250 characters. Each
   person can add 30 titles and search 60 times a minute, try 10 invite codes
   per 10 minutes, and start 10 families an hour. Each family's activity feed
@@ -48,7 +49,7 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
 | Framework            | [Next.js 16](https://nextjs.org) (App Router, server actions)             |
 | Language             | TypeScript 5                                                              |
 | Styling              | [Tailwind CSS v4](https://tailwindcss.com), [Lucide](https://lucide.dev) icons |
-| Database and sign-in | [Supabase](https://supabase.com): Postgres with row-level security, Auth (Google and email) |
+| Database and sign-in | [Supabase](https://supabase.com): Postgres with row-level security, Auth (Google) |
 | Movie data           | [TMDB API](https://developer.themoviedb.org)                              |
 | Hosting              | Azure Static Web Apps, deployed by GitHub Actions                         |
 
@@ -85,12 +86,14 @@ empty database. It creates all tables, security policies and functions.
 
 ## 4. Enable authentication
 
-In Supabase → **Authentication → Providers**:
+FamFlix signs people in with Google only. In Supabase → **Authentication →
+Sign In / Providers**:
 
-- **Email**: enabled by default. (For instant testing you can turn off "Confirm email".)
-- **Google** (optional): enable it and add your Google OAuth client ID/secret.
-  In Google Cloud, the OAuth client's authorized redirect URI is
+- **Google**: enable it and add your Google OAuth client ID/secret. In Google
+  Cloud, the OAuth client's authorized redirect URI is
   `https://<your-project>.supabase.co/auth/v1/callback`.
+- **Email**: turn it off, so nobody can sign up with a password through the API
+  either.
 
 Under **Authentication → URL Configuration**, set the Site URL and add each
 address the app runs on, followed by `/auth/callback`, to the Redirect URLs
@@ -103,7 +106,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), create an account, then
+Open [http://localhost:3000](http://localhost:3000), continue with Google, then
 create a family or join one with an invite code. Before pushing, check with
 `npx tsc --noEmit`, `npm run lint` and `npm run build`.
 
