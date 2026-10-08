@@ -10,9 +10,10 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   add titles, mark them watched, rate them and react. Invite codes last 24
   hours, then change by themselves. The owner can rename the family, make a
   new invite code and remove members (**Manage** on the Families page).
-- **Personal list**: a private "My list" that only you can see. Every list can
-  be filtered by release date (2020s, 1990s, ...) and category (genre, movies
-  or series).
+- **Personal list**: a private "My list" that only you can see, with To watch
+  and Watched tabs. **Mark as watched** on a title's page puts it straight on
+  My list as watched. Every list can be filtered by release date (2020s,
+  1990s, ...) and category (genre, movies or series).
 - **Browse and add**: search, browse trending and top rated titles, or pick a
   category (Comedy, Horror, Kids, ...) and decade, with trailers and where to
   stream them.

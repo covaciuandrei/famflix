@@ -184,6 +184,21 @@ function toCard(row: ListItemWithDetails, userId: string): ListItemCard | null {
 }
 
 /** Family titles the signed-in user was marked as having watched but hasn't rated yet. */
+/** The signed-in user's own score and note on one list item, if any. */
+export async function getMyRating(
+  itemId: string,
+  userId: string,
+): Promise<{ score: number | null; comment: string | null } | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ratings")
+    .select("score, comment")
+    .eq("list_item_id", itemId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return (data as { score: number | null; comment: string | null } | null) ?? null;
+}
+
 export async function getPendingRatings(): Promise<PendingRating[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("pending_rating_requests");
@@ -271,7 +286,7 @@ export async function getLibraryIndex(
   const [items, watches, members] = await Promise.all([
     supabase
       .from("list_items")
-      .select("id, group_id, media(tmdb_id, media_type)")
+      .select("id, group_id, status, media(tmdb_id, media_type)")
       .is("deleted_at", null),
     supabase
       .from("watches")
@@ -298,12 +313,14 @@ export async function getLibraryIndex(
   for (const row of (items.data ?? []) as unknown as {
     id: string;
     group_id: string | null;
+    status: string;
     media: MediaRef;
   }[]) {
     if (!row.media) continue;
     entryFor(row.media).lists.push({
       listId: row.group_id,
       itemId: row.id,
+      watched: row.status === "watched",
       label: row.group_id
         ? (groupName.get(row.group_id) ?? "Family list")
         : "My list",

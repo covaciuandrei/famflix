@@ -4,10 +4,16 @@ import { notFound, redirect } from "next/navigation";
 
 import { AddToListButton } from "@/components/add-to-list-button";
 import { ListBadges, SeenBy } from "@/components/library-badges";
+import { MarkWatchedButton } from "@/components/mark-watched-button";
 import { MediaPoster } from "@/components/media-poster";
 import { Badge } from "@/components/ui/badge";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
-import { getLibraryIndex, getMyGroups, getSessionProfile } from "@/lib/data";
+import {
+  getLibraryIndex,
+  getMyGroups,
+  getMyRating,
+  getSessionProfile,
+} from "@/lib/data";
 import { tmdbImage } from "@/lib/images";
 import { getMediaDetails, TmdbError } from "@/lib/tmdb";
 import type { MediaType } from "@/lib/types";
@@ -34,6 +40,8 @@ export default async function MediaDetailPage({
   const library = (await getLibraryIndex(user.id, groups))[
     libraryKey(mediaType, id)
   ];
+  const onMyList = library?.lists.find((l) => l.listId === null);
+  const myRating = onMyList ? await getMyRating(onMyList.itemId, user.id) : null;
 
   // Only a TMDB 404 means "no such title"; anything else goes to the error page.
   const details = await getMediaDetails(mediaType, id).catch((e) => {
@@ -111,6 +119,21 @@ export default async function MediaDetailPage({
             )}
 
             <div className="flex flex-wrap items-center gap-3 pt-1">
+              <MarkWatchedButton
+                tmdbId={details.tmdbId}
+                mediaType={mediaType}
+                title={details.title}
+                mine={
+                  onMyList
+                    ? {
+                        itemId: onMyList.itemId,
+                        watched: onMyList.watched,
+                        score: myRating?.score ?? null,
+                        comment: myRating?.comment ?? null,
+                      }
+                    : null
+                }
+              />
               <AddToListButton
                 tmdbId={details.tmdbId}
                 mediaType={mediaType}

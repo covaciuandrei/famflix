@@ -36,14 +36,11 @@ async function requireUser() {
   return { supabase, user };
 }
 
-/** Add a TMDB title to a shared (groupId) or personal (null) list. */
-export async function addToList(input: {
+/** Checks a title id sent by the browser, fetches the title from TMDB and saves its movie info; returns its media id. */
+async function saveTitle(input: {
   tmdbId: number;
   mediaType: MediaType;
-  groupId: string | null;
-}): Promise<ActionResult> {
-  const { supabase, user } = await requireUser();
-
+}): Promise<{ id: string } | { error: string }> {
   // Server actions get whatever the browser sends, and these two pick what is asked from TMDB and saved.
   if (
     !Number.isSafeInteger(input.tmdbId) ||
@@ -60,7 +57,18 @@ export async function addToList(input: {
     return { error: "Couldn't reach the movie database. Please try again." };
   }
   // The movie info is shared by everyone, so the server saves it, not the signed-in user.
-  const saved = await saveMedia(detailsToMediaRow(details));
+  return saveMedia(detailsToMediaRow(details));
+}
+
+/** Add a TMDB title to a shared (groupId) or personal (null) list. */
+export async function addToList(input: {
+  tmdbId: number;
+  mediaType: MediaType;
+  groupId: string | null;
+}): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+
+  const saved = await saveTitle(input);
   if ("error" in saved) return { error: saved.error };
   const mediaId = saved.id;
 
@@ -139,6 +147,57 @@ export async function toggleWatched(
   if (error) return { error: error.message };
   revalidateApp();
   return {};
+}
+
+/** Marks a title watched on My list from its page, adding it there (or restoring it) first. Returns the list item. */
+export async function markWatched(input: {
+  tmdbId: number;
+  mediaType: MediaType;
+}): Promise<ActionResult & { itemId?: string }> {
+  const { supabase, user } = await requireUser();
+
+  const saved = await saveTitle(input);
+  if ("error" in saved) return { error: saved.error };
+
+  const { data: found } = await supabase
+    .from("list_items")
+    .select("id")
+    .eq("media_id", saved.id)
+    .is("group_id", null)
+    .eq("added_by", user.id)
+    .maybeSingle();
+  let itemId = (found as { id: string } | null)?.id;
+
+  if (!itemId) {
+    const { data, error } = await supabase
+      .from("list_items")
+      .insert({
+        group_id: null,
+        added_by: user.id,
+        media_id: saved.id,
+        status: "watched",
+      })
+      .select("id")
+      .single();
+    if (error || !data) {
+      return { error: error?.message ?? "Couldn't save this title." };
+    }
+    itemId = (data as { id: string }).id;
+  }
+
+  // Also brings back a title that was removed from My list.
+  const { error } = await supabase
+    .from("list_items")
+    .update({
+      status: "watched",
+      watched_at: new Date().toISOString(),
+      deleted_at: null,
+    })
+    .eq("id", itemId);
+  if (error) return { error: error.message };
+
+  revalidateApp();
+  return { itemId };
 }
 
 export async function setRating(
