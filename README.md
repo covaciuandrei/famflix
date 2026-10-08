@@ -17,8 +17,9 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   category (Comedy, Horror, Kids, ...) and decade, with trailers and where to
   stream them.
 - **Scores and reactions**: rate 1–10 with one decimal (8.5) using a slider,
-  and add a note. A score over 7 also likes the title and under 6 dislikes it;
-  you can still change the thumbs yourself.
+  and add a note. Marking a title watched asks for both right away. A score
+  over 7 also likes the title and under 6 dislikes it; you can still change the
+  thumbs yourself.
 - **Watched together**: log who watched a title with you. FamFlix asks the
   others for their score, or you can fill it in for them. Family lists are split
   into To watch and Watched together, so a title one person marked Watched on

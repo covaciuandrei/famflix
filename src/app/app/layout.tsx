@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
+import { WatchedPromptProvider } from "@/components/watched-prompt";
 import { WelcomeTour } from "@/components/welcome-tour";
 import { getMyGroups, getPendingRatings, getSessionProfile } from "@/lib/data";
 
@@ -30,7 +31,7 @@ export default async function AppLayout({
       />
       <WelcomeTour name={name} hasFamily={groups.length > 0} />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-24 pt-6 sm:px-6 sm:pb-12">
-        {children}
+        <WatchedPromptProvider>{children}</WatchedPromptProvider>
       </main>
     </div>
   );

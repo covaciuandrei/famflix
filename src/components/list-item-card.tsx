@@ -105,6 +105,9 @@ export function ListItemCard({
             <WatchedToggle
               itemId={item.id}
               watched={item.status === "watched"}
+              title={media.title}
+              myScore={card.myScore}
+              myComment={card.myComment}
             />
             {members && item.group_id && (
               <WatchedTogetherDialog

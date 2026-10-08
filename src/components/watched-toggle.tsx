@@ -5,15 +5,23 @@ import { useTransition } from "react";
 
 import { toggleWatched } from "@/app/app/actions";
 import { Button } from "@/components/ui/button";
+import { useWatchedPrompt } from "@/components/watched-prompt";
 
 export function WatchedToggle({
   itemId,
   watched,
+  title,
+  myScore,
+  myComment,
 }: {
   itemId: string;
   watched: boolean;
+  title: string;
+  myScore: number | null;
+  myComment: string | null;
 }) {
   const [pending, start] = useTransition();
+  const askHowItWas = useWatchedPrompt();
 
   return (
     <Button
@@ -22,7 +30,10 @@ export function WatchedToggle({
       disabled={pending}
       onClick={() =>
         start(async () => {
-          await toggleWatched(itemId, !watched);
+          const res = await toggleWatched(itemId, !watched);
+          if (!res.error && !watched) {
+            askHowItWas({ itemId, title, score: myScore, comment: myComment });
+          }
         })
       }
     >
