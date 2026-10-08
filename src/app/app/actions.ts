@@ -347,7 +347,7 @@ export async function skipRatingRequest(itemId: string): Promise<ActionResult> {
   return {};
 }
 
-/** "I wasn't there": removes the signed-in user from a title's watch records. */
+/** "I wasn't there": removes the signed-in user from a title's watch records, and any score filled in for them. */
 export async function removeMeFromWatch(itemId: string): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   const { error } = await supabase
@@ -356,6 +356,13 @@ export async function removeMeFromWatch(itemId: string): Promise<ActionResult> {
     .eq("list_item_id", itemId)
     .eq("user_id", user.id);
   if (error) return { error: error.message };
+  const { error: ratingError } = await supabase
+    .from("ratings")
+    .delete()
+    .eq("list_item_id", itemId)
+    .eq("user_id", user.id)
+    .neq("rated_by", user.id);
+  if (ratingError) return { error: ratingError.message };
   revalidateApp();
   return {};
 }

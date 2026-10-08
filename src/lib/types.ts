@@ -93,7 +93,7 @@ export interface Watch {
   skipped_at: string | null;
 }
 
-/** A family title you were marked as having watched but haven't rated or skipped. */
+/** A family title you were marked as having watched but haven't rated yourself or skipped. */
 export interface PendingRating {
   list_item_id: string;
   group_name: string;
@@ -105,6 +105,9 @@ export interface PendingRating {
   title: string;
   release_year: number | null;
   poster_path: string | null;
+  /** A score someone else filled in for you, to confirm or change. */
+  filled_in_score: number | null;
+  filled_in_by_name: string | null;
 }
 
 /** A title removed from a list in the last 30 days, which can still be restored. */

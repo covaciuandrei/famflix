@@ -21,8 +21,9 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   and add a note. Marking a title watched asks for both right away. A score
   over 7 also likes the title and under 6 dislikes it; you can still change the
   thumbs yourself.
-- **Watched together**: log who watched a title with you. FamFlix asks the
-  others for their score, or you can fill it in for them. Family lists are split
+- **Watched together**: log who watched a title with you and add your own note.
+  You can fill in the others' scores; FamFlix then asks each of them to confirm
+  their score (or rate it) and add their note. Family lists are split
   into To watch and Watched together, so a title one person marked Watched on
   their own stays on the family's To watch list.
 - **Movie night**: shuffle what's left to watch, filter by category, or let

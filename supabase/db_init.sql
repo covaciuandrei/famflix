@@ -677,19 +677,23 @@ begin
 end;
 $$;
 
--- The caller's open rating requests: titles they were marked as having watched but haven't rated or skipped.
+-- The caller's open rating requests: titles they were marked as having watched and haven't skipped, while they
+-- have no rating of their own yet: none at all, or only a score someone else filled in (they can confirm or change
+-- it, and add their note).
 create function public.pending_rating_requests()
 returns table (
-  list_item_id   uuid,
-  group_name     text,
-  watched_on     date,
-  logged_by      uuid,
-  logged_by_name text,
-  media_type     text,
-  tmdb_id        integer,
-  title          text,
-  release_year   integer,
-  poster_path    text
+  list_item_id      uuid,
+  group_name        text,
+  watched_on        date,
+  logged_by         uuid,
+  logged_by_name    text,
+  media_type        text,
+  tmdb_id           integer,
+  title             text,
+  release_year      integer,
+  poster_path       text,
+  filled_in_score   numeric,
+  filled_in_by_name text
 )
 language sql
 stable
@@ -697,20 +701,20 @@ security invoker
 set search_path = public
 as $$
   select w.list_item_id, g.name, w.watched_on, w.logged_by, p.display_name,
-         m.media_type, m.tmdb_id, m.title, m.release_year, m.poster_path
+         m.media_type, m.tmdb_id, m.title, m.release_year, m.poster_path,
+         r.score, fp.display_name
   from public.watches w
   join public.list_items li on li.id = w.list_item_id
   join public.groups g on g.id = li.group_id
   join public.media m on m.id = li.media_id
   left join public.profiles p on p.id = w.logged_by
+  left join public.ratings r on r.list_item_id = w.list_item_id and r.user_id = auth.uid()
+  left join public.profiles fp on fp.id = r.rated_by
   where w.user_id = auth.uid()
     and w.skipped_at is null
     and li.deleted_at is null
     and public.is_group_member(li.group_id, auth.uid())
-    and not exists (
-      select 1 from public.ratings r
-      where r.list_item_id = w.list_item_id and r.user_id = auth.uid()
-    )
+    and (r.id is null or r.rated_by is distinct from auth.uid())
   order by w.watched_on desc, w.created_at desc;
 $$;
 
@@ -864,12 +868,13 @@ language plpgsql
 set search_path = public
 as $$
 begin
-  -- Only scores you gave yourself (not ones filled in for you), and only when the score changes,
-  -- so editing just the note keeps a reaction you picked by hand.
+  -- Only scores you gave yourself (not ones filled in for you), and only when the score changes or you take over a
+  -- score someone filled in for you, so editing just the note keeps a reaction you picked by hand.
   if new.score is null or new.rated_by is distinct from new.user_id then
     return null;
   end if;
-  if tg_op = 'UPDATE' and new.score is not distinct from old.score then
+  if tg_op = 'UPDATE' and new.score is not distinct from old.score
+     and new.rated_by is not distinct from old.rated_by then
     return null;
   end if;
 

@@ -14,7 +14,7 @@ import { ScoreInput, SCORE_REACTION_HINT } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
-import { formatDay } from "@/lib/format";
+import { formatDay, formatScore } from "@/lib/format";
 import type { PendingRating } from "@/lib/types";
 
 const DISMISSED_KEY = "famflix:dismissed-rating-requests";
@@ -126,7 +126,8 @@ function RequestRow({
   request: PendingRating;
   loggedBy: string;
 }) {
-  const [score, setScore] = useState<number | null>(null);
+  // A score someone filled in starts in the slider; saving it (changed or not) makes it yours.
+  const [score, setScore] = useState<number | null>(request.filled_in_score);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -162,6 +163,14 @@ function RequestRow({
           </p>
         </div>
       </div>
+
+      {request.filled_in_score !== null && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {request.filled_in_by_name ?? "Someone"} filled in{" "}
+          {formatScore(request.filled_in_score)}/10 for you. Keep it or change
+          it, and add your note.
+        </p>
+      )}
 
       <div className="mt-3">
         <ScoreInput value={score} onChange={setScore} />
