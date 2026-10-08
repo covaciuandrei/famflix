@@ -29,7 +29,41 @@
   --dislike: #ef4444;
   --star: #f5b301;
 
+  --slider-thumb: #ededf2;
+
   --radius: 0.75rem;
+}
+
+/* Light theme, picked in Settings (src/lib/theme.ts sets data-theme). Text colours keep 4.5:1 contrast. */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #f6f6f9;
+  --foreground: #16161d;
+
+  --card: #ffffff;
+  --card-foreground: #16161d;
+
+  --muted: #ececf1;
+  --muted-foreground: #5d5d70;
+
+  --border: #dedee6;
+  --input: #f6f6f9;
+
+  --primary: #6246ea;
+  --primary-foreground: #ffffff;
+
+  --accent: #ececf1;
+  --accent-foreground: #16161d;
+
+  --destructive: #dc2626;
+  --ring: #6246ea;
+
+  --like: #15803d;
+  --dislike: #dc2626;
+  --star: #b45309;
+
+  --slider-thumb: #ffffff;
 }
 
 @theme inline {
@@ -145,7 +179,7 @@ body {
     margin-top: calc((0.5rem - var(--score-thumb)) / 2);
     border-radius: 9999px;
     border: 3px solid var(--star);
-    background: var(--foreground);
+    background: var(--slider-thumb);
     box-shadow: 0 1px 6px rgb(0 0 0 / 0.5);
     transition: transform 120ms;
   }
@@ -155,7 +189,7 @@ body {
     height: var(--score-thumb);
     border-radius: 9999px;
     border: 3px solid var(--star);
-    background: var(--foreground);
+    background: var(--slider-thumb);
     box-shadow: 0 1px 6px rgb(0 0 0 / 0.5);
   }
   .score-slider:active::-webkit-slider-thumb {

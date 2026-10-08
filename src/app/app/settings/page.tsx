@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/login/actions";
 import { ProfileForm } from "@/components/profile-form";
+import { ThemePicker } from "@/components/theme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShowTourButton } from "@/components/welcome-tour";
@@ -25,6 +26,19 @@ export default async function SettingsPage() {
           <ProfileForm displayName={profile?.display_name ?? ""} />
           <p className="text-sm text-muted-foreground">
             Signed in as {user.email}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Appearance</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <ThemePicker />
+          <p className="text-sm text-muted-foreground">
+            Dark is the default. System follows your device. Saved on this
+            device.
           </p>
         </CardContent>
       </Card>
