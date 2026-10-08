@@ -4,7 +4,6 @@ import { CategoryLinks } from "@/components/category-chips";
 import { MediaRow } from "@/components/media-row";
 import { SearchBox } from "@/components/search-box";
 import { YearSelectLinks } from "@/components/year-select";
-import { libraryKey } from "@/lib/constants";
 import {
   getLibraryIndex,
   getMyGroups,
@@ -19,10 +18,9 @@ import {
   getRecommendations,
   type TmdbRow,
 } from "@/lib/tmdb";
-import type { LibraryIndex } from "@/lib/types";
 
-/** "Because your family liked X" rows, without titles already on the user's lists. */
-async function getSuggestionRows(library: LibraryIndex): Promise<TmdbRow[]> {
+/** "Because your family liked X" rows. Titles already on a list stay, so adding one doesn't make it vanish. */
+async function getSuggestionRows(): Promise<TmdbRow[]> {
   const seeds = await getSuggestionSeeds(3);
   const results = await Promise.allSettled(
     seeds.map((s) => getRecommendations(s.mediaType, s.tmdbId)),
@@ -30,9 +28,7 @@ async function getSuggestionRows(library: LibraryIndex): Promise<TmdbRow[]> {
   return seeds.flatMap((seed, i) => {
     const result = results[i];
     if (result.status === "rejected") return [];
-    const items = result.value
-      .filter((item) => !library[libraryKey(item.mediaType, item.tmdbId)])
-      .slice(0, 12);
+    const items = result.value.slice(0, 12);
     if (items.length === 0) return [];
     return [
       {
@@ -72,7 +68,7 @@ export default async function BrowsePage({
     [rows, suggestions] =
       genre || decade
         ? [await getDiscoverRows({ genre, decade }), []]
-        : await Promise.all([getBrowseRows(), getSuggestionRows(library)]);
+        : await Promise.all([getBrowseRows(), getSuggestionRows()]);
   } catch (e) {
     console.error("Browse rows failed:", e);
     error = true;

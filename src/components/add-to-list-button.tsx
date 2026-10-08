@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, Loader2, Plus } from "lucide-react";
+import { Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 
-import { addToList } from "@/app/app/actions";
+import { addToList, removeListItem } from "@/app/app/actions";
 import { Button } from "@/components/ui/button";
 import { placePopover } from "@/lib/popover";
 import type { MediaType } from "@/lib/types";
@@ -28,13 +28,12 @@ export function AddToListButton({
   /** Shown in the phone sheet: "Add Dune to…". */
   title?: string;
   targets: AddTarget[];
-  /** List ids that already have this title (null = My list). */
-  alreadyOn?: (string | null)[];
+  /** Lists that already have this title (listId null = My list), with the list item to remove. */
+  alreadyOn?: { listId: string | null; itemId: string }[];
   size?: "sm" | "default";
   className?: string;
 }) {
   const [pending, start] = useTransition();
-  const [addedTo, setAddedTo] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
@@ -42,9 +41,11 @@ export function AddToListButton({
   const menuRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDialogElement>(null);
 
-  const key = (t: AddTarget) => t.id ?? "personal";
-  const already = new Set((alreadyOn ?? []).map((id) => id ?? "personal"));
-  const isDone = (t: AddTarget) => addedTo.has(key(t)) || already.has(key(t));
+  const key = (listId: string | null) => listId ?? "personal";
+  // No local copy: each action's response re-renders the page with fresh lists.
+  const itemIds = new Map(
+    (alreadyOn ?? []).map((l) => [key(l.listId), l.itemId]),
+  );
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -61,7 +62,8 @@ export function AddToListButton({
     };
   }, [menuOpen]);
 
-  function add(target: AddTarget) {
+  /** Adds the title to the list, or removes it if it's already there. */
+  function toggle(target: AddTarget) {
     setError(null);
     const menu = menuRef.current;
     // Older iPhones have no Popover API (and no :popover-open selector).
@@ -69,37 +71,66 @@ export function AddToListButton({
       menu.hidePopover();
     }
     sheetRef.current?.close();
+    const itemId = itemIds.get(key(target.id));
     start(async () => {
-      const res = await addToList({
-        tmdbId,
-        mediaType,
-        groupId: target.id,
-      });
+      const res = itemId
+        ? await removeListItem(itemId)
+        : await addToList({ tmdbId, mediaType, groupId: target.id });
       if (res?.error) setError(res.error);
-      else setAddedTo((prev) => new Set(prev).add(key(target)));
     });
   }
 
+  const errorText = error && (
+    <p className="mt-1 text-xs text-destructive">{error}</p>
+  );
+
   if (targets.length === 1) {
     const t = targets[0];
-    const done = isDone(t);
     return (
-      <Button
-        size={size}
-        variant={done ? "secondary" : "default"}
-        className={className}
-        disabled={pending || done}
-        onClick={() => add(t)}
-      >
-        {pending ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : done ? (
-          <Check className="size-4" />
+      <div>
+        {itemIds.has(key(t.id)) ? (
+          <div className={cn("flex gap-1", className)}>
+            <Button
+              size={size}
+              variant="secondary"
+              disabled
+              className="min-w-0 flex-1"
+            >
+              <Check className="size-4" />
+              Added
+            </Button>
+            <Button
+              size={size}
+              variant="ghost"
+              disabled={pending}
+              onClick={() => toggle(t)}
+              aria-label={`Remove from ${t.label}`}
+              className="px-2.5 text-muted-foreground hover:text-destructive"
+            >
+              {pending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+            </Button>
+          </div>
         ) : (
-          <Plus className="size-4" />
+          <Button
+            size={size}
+            className={className}
+            disabled={pending}
+            onClick={() => toggle(t)}
+          >
+            {pending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+            Add
+          </Button>
         )}
-        {done ? "Added" : "Add"}
-      </Button>
+        {errorText}
+      </div>
     );
   }
 
@@ -110,20 +141,30 @@ export function AddToListButton({
   );
   const options = (large: boolean) =>
     targets.map((t) => {
-      const done = isDone(t);
+      const on = itemIds.has(key(t.id));
       return (
         <button
-          key={key(t)}
+          key={key(t.id)}
           type="button"
-          onClick={() => add(t)}
-          disabled={done}
+          onClick={() => toggle(t)}
+          aria-label={on ? `Remove from ${t.label}` : undefined}
           className={cn(
-            "flex w-full items-center justify-between gap-2 rounded-md px-2.5 text-left hover:bg-muted disabled:cursor-default disabled:text-muted-foreground disabled:hover:bg-transparent",
+            "flex w-full items-center justify-between gap-2 rounded-md px-2.5 text-left hover:bg-muted",
             large ? "py-3.5 text-base" : "py-2 text-sm",
           )}
         >
           <span className="truncate">{t.label}</span>
-          {done && <Check className="size-4 shrink-0 text-like" />}
+          {on && (
+            <span
+              className={cn(
+                "flex shrink-0 items-center gap-1 text-muted-foreground",
+                large ? "text-sm" : "text-xs",
+              )}
+            >
+              <Check className="size-4 text-like" />
+              Remove
+            </span>
+          )}
         </button>
       );
     });
@@ -157,7 +198,7 @@ export function AddToListButton({
         popover="auto"
         onBeforeToggle={(e) => placePopover(e, () => buttonRef.current)}
         onToggle={(e) => setMenuOpen(e.newState === "open")}
-        className="inset-auto w-48 overflow-hidden rounded-lg border border-border bg-card p-1 text-card-foreground shadow-lg"
+        className="inset-auto w-56 overflow-hidden rounded-lg border border-border bg-card p-1 text-card-foreground shadow-lg"
       >
         {options(false)}
       </div>
@@ -192,7 +233,7 @@ export function AddToListButton({
           </Button>
         </div>
       </dialog>
-      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      {errorText}
     </div>
   );
 }

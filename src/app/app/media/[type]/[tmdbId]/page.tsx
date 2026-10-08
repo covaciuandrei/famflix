@@ -116,7 +116,7 @@ export default async function MediaDetailPage({
                 mediaType={mediaType}
                 title={details.title}
                 targets={targets}
-                alreadyOn={library?.lists.map((l) => l.listId)}
+                alreadyOn={library?.lists}
                 size="default"
               />
               <SeenBy names={library?.seenBy} />

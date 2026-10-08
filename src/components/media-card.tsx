@@ -53,7 +53,7 @@ export function MediaCard({
         mediaType={item.mediaType}
         title={item.title}
         targets={targets}
-        alreadyOn={library?.lists.map((l) => l.listId)}
+        alreadyOn={library?.lists}
         className="w-full"
       />
     </div>
