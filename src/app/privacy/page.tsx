@@ -1,48 +1,50 @@
-import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
+
+import { ContactLink, LegalPage, Section } from "@/components/legal-page";
 
 export const metadata: Metadata = {
   title: "Privacy policy — FamFlix",
 };
 
-const CONTACT = "etticov@gmail.com";
-
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-12 text-sm leading-relaxed text-muted-foreground">
-      <div className="flex flex-col gap-3">
-        <Link
-          href="/"
-          className="inline-flex w-fit items-center gap-1 hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          FamFlix
-        </Link>
-        <h1 className="text-3xl font-bold text-foreground">Privacy policy</h1>
-        <p>Last updated: October 8, 2026</p>
+    <LegalPage
+      title="Privacy policy"
+      updated="October 8, 2026"
+      intro={
         <p>
-          FamFlix is a small, private watchlist for families and friends. This
-          page explains what it stores and who can see it.
+          FamFlix is a small, private watchlist for families and friends, run
+          by Andrei Covaciu (<ContactLink />
+          ). This page explains what it stores, who can see it, and how to
+          delete it.
         </p>
-      </div>
-
+      }
+    >
       <Section title="What FamFlix stores">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong className="text-foreground">Your account:</strong> your
-            name, email address and, if you sign in with Google, your Google
-            profile picture. Google only shares these basic details; FamFlix
-            never sees your Google password or anything else in your Google
-            account.
+            <strong className="text-foreground">Your account:</strong> you
+            sign in with Google, which shares your name, email address and
+            profile picture with FamFlix. FamFlix never sees your Google
+            password or anything else in your Google account.
           </li>
           <li>
             <strong className="text-foreground">What you add:</strong> the
             titles on your lists, your scores, notes, likes and dislikes, who
             watched what and when, the families you belong to, and a history of
-            family activity (for example &ldquo;Ana added Dune&rdquo;).
+            family activity (for example &ldquo;Ana added Dune&rdquo;; each
+            family keeps its latest 500 events).
+          </li>
+          <li>
+            <strong className="text-foreground">Counters:</strong> how often
+            you add titles, search or try invite codes, kept for a day, to
+            stop abuse.
           </li>
         </ul>
+        <p>
+          FamFlix uses this only to run the watchlist for you and your
+          families.
+        </p>
       </Section>
 
       <Section title="Who can see it">
@@ -59,85 +61,70 @@ export default function PrivacyPage() {
         </ul>
       </Section>
 
-      <Section title="Services FamFlix uses">
+      <Section title="Where it's kept, and the services FamFlix uses">
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong className="text-foreground">Supabase</strong> stores the
-            data and handles sign-in.
+            data and handles sign-in, in the EU (Ireland).
           </li>
           <li>
             <strong className="text-foreground">Microsoft Azure</strong> hosts
-            the website.
+            the website, in the EU (Netherlands).
           </li>
           <li>
             <strong className="text-foreground">Google</strong> handles
-            &ldquo;Continue with Google&rdquo;; profile pictures load from
-            Google&apos;s servers.
+            sign-in. Profile pictures load from Google&apos;s servers.
           </li>
           <li>
             <strong className="text-foreground">
               The Movie Database (TMDB)
             </strong>{" "}
-            supplies movie and series information. FamFlix asks TMDB about
-            titles, never about you.
+            supplies movie and series information. FamFlix never tells TMDB who
+            you are, but posters and pictures load straight from TMDB&apos;s
+            servers, which see your device&apos;s IP address like any site
+            you load pictures from.
           </li>
           <li>
-            <strong className="text-foreground">YouTube</strong> provides the
-            trailers on title pages, and may set its own cookies there.
+            <strong className="text-foreground">YouTube</strong> plays trailers.
+            Nothing loads from YouTube until you press play; then it plays in
+            YouTube&apos;s privacy-enhanced mode and may set its own cookies.
           </li>
         </ul>
       </Section>
 
       <Section title="Cookies and browser storage">
         <p>
-          FamFlix only uses the cookies needed to keep you signed in. Your
-          browser also remembers two settings for FamFlix: your theme and
-          whether you&apos;ve seen the welcome tour. These stay on your device.
+          FamFlix only uses the cookies needed to keep you signed in, so it
+          doesn&apos;t ask for cookie consent. Your browser also remembers two
+          settings for FamFlix: your theme and whether you&apos;ve seen the
+          welcome tour. These stay on your device.
         </p>
       </Section>
 
-      <Section title="Your choices">
+      <Section title="Deleting your data">
         <p>
-          You can change your display name in Settings, remove titles, delete
-          your scores and notes, and leave a family at any time. To delete your
-          account and everything linked to it, email{" "}
-          <a
-            href={`mailto:${CONTACT}`}
-            className="text-foreground underline underline-offset-2"
-          >
-            {CONTACT}
-          </a>
-          .
+          You can change your name in Settings, remove titles, delete your
+          scores and notes, and leave a family at any time.
         </p>
-      </Section>
-
-      <Section title="Contact">
         <p>
-          Questions about this policy:{" "}
-          <a
-            href={`mailto:${CONTACT}`}
-            className="text-foreground underline underline-offset-2"
-          >
-            {CONTACT}
-          </a>
-          .
+          <strong className="text-foreground">
+            Settings → Account → Delete account
+          </strong>{" "}
+          deletes your account right away, with your personal list and your
+          scores, notes, likes and dislikes. Families you shared keep the
+          titles you added to their lists, without your name, and your name is
+          removed from their activity history. If database backups are kept,
+          deleted data drops out of them within 7 days.
         </p>
       </Section>
-    </main>
-  );
-}
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-      {children}
-    </section>
+      <Section title="Your rights">
+        <p>
+          You can ask for a copy of your data, or have it corrected or
+          deleted, by writing to <ContactLink />. You can also complain to your
+          data protection authority (in Romania, the ANSPDCP).
+        </p>
+      </Section>
+    </LegalPage>
   );
 }

@@ -6,6 +6,7 @@ import { AddToListButton } from "@/components/add-to-list-button";
 import { ListBadges, SeenBy } from "@/components/library-badges";
 import { MarkWatchedButton } from "@/components/mark-watched-button";
 import { MediaPoster } from "@/components/media-poster";
+import { Trailer } from "@/components/trailer";
 import { Badge } from "@/components/ui/badge";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
 import {
@@ -149,18 +150,11 @@ export default async function MediaDetailPage({
       </div>
 
       {details.trailerKey && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">Trailer</h2>
-          <div className="aspect-video overflow-hidden rounded-xl border border-border">
-            <iframe
-              className="h-full w-full"
-              src={`https://www.youtube.com/embed/${details.trailerKey}`}
-              title={`${details.title} trailer`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-        </section>
+        <Trailer
+          youtubeKey={details.trailerKey}
+          title={details.title}
+          backdrop={tmdbImage(details.backdropPath, "w780")}
+        />
       )}
     </div>
   );

@@ -97,12 +97,14 @@ export default async function SettingsPage() {
             </a>
             .
           </p>
-          <Link
-            href="/privacy"
-            className="w-fit underline hover:text-foreground"
-          >
-            Privacy policy
-          </Link>
+          <p className="flex gap-4">
+            <Link href="/privacy" className="underline hover:text-foreground">
+              Privacy policy
+            </Link>
+            <Link href="/terms" className="underline hover:text-foreground">
+              Terms
+            </Link>
+          </p>
           <ShowTourButton />
         </CardContent>
       </Card>

@@ -32,9 +32,15 @@ export function LoginForm({ signInError }: { signInError?: string }) {
         )}
 
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          <Link href="/privacy" className="underline hover:text-foreground">
-            Privacy policy
+          By continuing you agree to the{" "}
+          <Link href="/terms" className="underline hover:text-foreground">
+            Terms
           </Link>
+          . We only use the cookies needed to keep you signed in (
+          <Link href="/privacy" className="underline hover:text-foreground">
+            Privacy
+          </Link>
+          ).
         </p>
       </div>
     </main>

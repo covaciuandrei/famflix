@@ -111,9 +111,16 @@ export default async function LandingPage({
           />
         </a>
         This product uses the TMDB API but is not endorsed or certified by TMDB.
-        <Link href="/privacy" className="underline hover:text-foreground">
-          Privacy policy
-        </Link>
+        <p>
+          Only the cookies needed to keep you signed in.{" "}
+          <Link href="/privacy" className="underline hover:text-foreground">
+            Privacy
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terms" className="underline hover:text-foreground">
+            Terms
+          </Link>
+        </p>
       </footer>
     </main>
   );

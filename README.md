@@ -15,7 +15,8 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   My list as watched. Every list can be filtered by release date (2020s,
   1990s, ...) and category (genre, movies or series).
 - **Browse and add**: search, browse trending and top rated titles, or pick a
-  category (Comedy, Horror, Kids, ...) and decade, with trailers.
+  category (Comedy, Horror, Kids, ...) and decade. Trailers play from YouTube
+  only once you press play.
 - **Scores and reactions**: rate 1–10 with one decimal (8.5) using a slider,
   and add a note. Marking a title watched asks for both right away. A score
   over 7 also likes the title and under 6 dislikes it; you can still change the
