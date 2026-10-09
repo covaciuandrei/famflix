@@ -23,9 +23,11 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   thumbs yourself.
 - **Watched together**: log who watched a title with you and add your own note.
   You can fill in the others' scores; FamFlix then asks each of them to confirm
-  their score (or rate it) and add their note. Family lists are split
-  into To watch and Watched together, so a title one person marked Watched on
-  their own stays on the family's To watch list.
+  their score (or rate it) and add their note, or to say "I wasn't there", which
+  takes them off the record and drops the score filled in for them. Family lists
+  are split into To watch and Watched together, so a title one person marked
+  Watched on their own stays on the family's To watch list, and a title everyone
+  on the record says they weren't at goes back to To watch.
 - **Movie night**: shuffle what's left to watch, filter by category, or let
   the app pick.
 - **Activity feed**: see what happened in each family; removed titles can be

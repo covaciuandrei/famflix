@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 
@@ -101,6 +108,55 @@ export function firstCard(page: Page, row: string): Locator {
     .locator("section", { has: page.getByRole("heading", { name: row, exact: true }) })
     .locator(":scope > div > div")
     .first();
+}
+
+/** A browser window for one signed-in person, sized like the project's screen (a computer or a phone). */
+export async function openAs(
+  browser: Browser,
+  project: TestInfo["project"],
+  user: TestUser,
+): Promise<Page> {
+  const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, baseURL } =
+    project.use;
+  const context = await browser.newContext({
+    viewport,
+    userAgent,
+    deviceScaleFactor,
+    isMobile,
+    hasTouch,
+    baseURL,
+  });
+  await signIn(context, user);
+  return context.newPage();
+}
+
+/** The owner starts a family and the others join it with its invite code. */
+export async function startFamily(owner: Page, others: Page[], name: string) {
+  await owner.goto("/app/groups");
+  await owner.getByPlaceholder("Family name").fill(name);
+  await owner.getByRole("button", { name: "Create family" }).click();
+  await expect(owner.getByRole("heading", { name })).toBeVisible();
+  const code = (await owner.getByTitle("Copy invite code").first().textContent())!.trim();
+  for (const page of others) {
+    await page.goto("/app/groups");
+    await page.getByPlaceholder("Invite code").fill(code.toLowerCase());
+    await page.getByRole("button", { name: "Join family" }).click();
+    await expect(page.getByRole("heading", { name })).toBeVisible();
+  }
+}
+
+/** Opens a family's list from the Families page. */
+export async function openFamily(page: Page, name: string) {
+  await page.goto("/app/groups");
+  await page.getByRole("link", { name, exact: true }).click();
+  await expect(page.getByRole("heading", { name })).toBeVisible();
+}
+
+/** A title's card on a list page. */
+export function listCard(page: Page, title: string): Locator {
+  return page
+    .locator("div.rounded-xl", { has: page.getByRole("link", { name: title, exact: true }) })
+    .last();
 }
 
 export { expect };

@@ -2,7 +2,8 @@ import type { ListItemCard } from "@/lib/types";
 
 /**
  * A family title the family has logged as watched together. Unmarking Watched undoes it,
- * which puts the title back on To watch.
+ * which puts the title back on To watch; so does the last person on the record saying
+ * "I wasn't there" (the database unmarks it then).
  */
 export function isWatchedTogether(card: ListItemCard): boolean {
   return card.item.status === "watched" && card.viewers.length > 0;

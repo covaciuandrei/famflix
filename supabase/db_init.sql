@@ -845,6 +845,29 @@ as $$
   order by w.watched_on desc, w.created_at desc;
 $$;
 
+-- When the last person leaves a title's watch record ("I wasn't there", or deleting their account), nobody is left
+-- who watched it, so the title goes back to To watch, as if Watched had been unmarked. While anyone else is still
+-- on the record it stays watched together.
+create function public.after_watch_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.watches where list_item_id = old.list_item_id) then
+    update public.list_items
+    set status = 'want', watched_at = null
+    where id = old.list_item_id and status = 'watched';
+  end if;
+  return null;
+end;
+$$;
+
+create trigger watches_after_delete
+  after delete on public.watches
+  for each row execute function public.after_watch_delete();
+
 -- ---------------------------------------------------------------------------
 --  Activity feed: written only by these triggers and functions
 -- ---------------------------------------------------------------------------
@@ -1069,6 +1092,7 @@ revoke execute on function public.group_members_activity() from public, anon, au
 revoke execute on function public.groups_activity() from public, anon, authenticated;
 revoke execute on function public.react_to_score() from public, anon, authenticated;
 revoke execute on function public.before_profile_delete() from public, anon, authenticated;
+revoke execute on function public.after_watch_delete() from public, anon, authenticated;
 
 -- Signed-in users only.
 revoke execute on function public.refresh_invite_codes() from public, anon;

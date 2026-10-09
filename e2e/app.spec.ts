@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 
 import {
   addTo,
@@ -6,8 +6,12 @@ import {
   createUser,
   expect,
   firstCard,
+  listCard,
+  openAs,
+  openFamily,
   setSlider,
   signIn,
+  startFamily,
 } from "./helpers";
 
 test("the login page only offers Google", async ({ page }) => {
@@ -75,34 +79,18 @@ test("mark a title watched from its page, with a score and a note", async ({ pag
   await expect(page.locator("iframe")).toHaveAttribute("src", /youtube-nocookie\.com\/embed\//);
 });
 
-test("watched together: the others confirm their score and add a note", async ({ browser }) => {
+test("watched together: the others confirm their score and add a note", async ({ browser }, testInfo) => {
   const ana = await createUser("Ana");
   const bogdan = await createUser("Bogdan");
-  const anaContext = await browser.newContext({ baseURL: "http://127.0.0.1:3100" });
-  const bogdanContext = await browser.newContext({ baseURL: "http://127.0.0.1:3100" });
-  await signIn(anaContext, ana);
-  await signIn(bogdanContext, bogdan);
-  const anaPage = await anaContext.newPage();
-  const bogdanPage = await bogdanContext.newPage();
-
-  // Ana starts a family; Bogdan joins with its code.
-  await anaPage.goto("/app/groups");
-  await anaPage.getByPlaceholder("Family name").fill("Test family");
-  await anaPage.getByRole("button", { name: "Create family" }).click();
-  await expect(anaPage.getByRole("heading", { name: "Test family" })).toBeVisible();
-  const code = (await anaPage.getByTitle("Copy invite code").first().textContent())!.trim();
-
-  await bogdanPage.goto("/app/groups");
-  await bogdanPage.getByPlaceholder("Invite code").fill(code.toLowerCase());
-  await bogdanPage.getByRole("button", { name: "Join family" }).click();
-  await expect(bogdanPage.getByRole("heading", { name: "Test family" })).toBeVisible();
+  const anaPage = await openAs(browser, testInfo.project, ana);
+  const bogdanPage = await openAs(browser, testInfo.project, bogdan);
+  await startFamily(anaPage, [bogdanPage], "Test family");
 
   // Ana adds Dune and logs that they watched it together, filling in Bogdan's score.
   await anaPage.goto("/app/media/movie/438631");
   await addTo(anaPage, anaPage, "Test family");
   await expect(anaPage.getByRole("img", { name: /On Test family/ })).toBeVisible();
-  await anaPage.goto("/app/groups");
-  await anaPage.getByRole("link", { name: "Test family", exact: true }).click();
+  await openFamily(anaPage, "Test family");
   // The card's button (the family list also has a "Watched together" tab, with a count).
   await anaPage.getByRole("button", { name: "Watched together", exact: true }).click();
   const dialog = anaPage.getByRole("dialog", { name: /Who watched Dune/ });
@@ -131,8 +119,67 @@ test("watched together: the others confirm their score and add a note", async ({
     { user_id: ana.id, score: null, comment: "Ana's note", rated_by: ana.id },
     { user_id: bogdan.id, score: 8.5, comment: "Bogdan's note", rated_by: bogdan.id },
   ]);
-  await anaContext.close();
-  await bogdanContext.close();
+  await Promise.all([anaPage, bogdanPage].map((page) => page.context().close()));
+});
+
+test("I wasn't there: the title goes back to To watch only when nobody else was there", async ({ browser }, testInfo) => {
+  const ana = await createUser("Ana");
+  const bogdan = await createUser("Bogdan");
+  const anaPage = await openAs(browser, testInfo.project, ana);
+  const bogdanPage = await openAs(browser, testInfo.project, bogdan);
+  await startFamily(anaPage, [bogdanPage], "Test family");
+
+  await anaPage.goto("/app/media/movie/438631");
+  await addTo(anaPage, anaPage, "Test family");
+  await expect(anaPage.getByRole("img", { name: /On Test family/ })).toBeVisible();
+
+  const dune = async () => {
+    const { data } = await admin
+      .from("list_items")
+      .select("status, watches(user_id)")
+      .eq("added_by", ana.id)
+      .not("group_id", "is", null)
+      .single();
+    const row = data as { status: string; watches: { user_id: string }[] };
+    return { status: row.status, viewers: row.watches.map((w) => w.user_id) };
+  };
+  async function logWatchedTogether(page: Page, who: { ana: boolean; bogdan: boolean }) {
+    await openFamily(page, "Test family");
+    await page.getByRole("button", { name: "Watched together", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: /Who watched Dune/ });
+    await dialog.getByRole("checkbox").nth(0).setChecked(who.ana);
+    await dialog.getByRole("checkbox").nth(1).setChecked(who.bogdan);
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(dialog).toBeHidden();
+  }
+  async function bogdanSaysHeWasntThere() {
+    await bogdanPage.goto("/app");
+    const ask = bogdanPage.getByRole("dialog", { name: "How did you like it?" });
+    await ask.getByRole("button", { name: "I wasn't there" }).click();
+    await expect(ask).toBeHidden();
+  }
+
+  // Ana logs only Bogdan; he says he wasn't there. Nobody watched it, so it is back on To watch, unticked.
+  await logWatchedTogether(anaPage, { ana: false, bogdan: true });
+  expect(await dune()).toEqual({ status: "watched", viewers: [bogdan.id] });
+  await bogdanSaysHeWasntThere();
+  await openFamily(bogdanPage, "Test family");
+  const card = listCard(bogdanPage, "Dune");
+  await expect(card.getByRole("button", { name: "Mark watched" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Watched", exact: true })).toHaveCount(0);
+  expect(await dune()).toEqual({ status: "want", viewers: [] });
+
+  // Ana logs both and Bogdan says it again. Ana was there, so it stays watched together, with only her on it.
+  await logWatchedTogether(anaPage, { ana: true, bogdan: true });
+  await bogdanSaysHeWasntThere();
+  await openFamily(bogdanPage, "Test family");
+  await bogdanPage.getByRole("button", { name: /^Watched together \d+$/ }).click();
+  await expect(
+    listCard(bogdanPage, "Dune").getByRole("button", { name: "Watched", exact: true }),
+  ).toBeVisible();
+  expect(await dune()).toEqual({ status: "watched", viewers: [ana.id] });
+
+  await Promise.all([anaPage, bogdanPage].map((page) => page.context().close()));
 });
 
 test("delete an account", async ({ page, context }) => {
