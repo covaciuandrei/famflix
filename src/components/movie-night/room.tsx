@@ -6,15 +6,19 @@ import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import {
+  addNightTitle,
+  addTopTitles,
   cancelNight,
   finishStack,
   joinNight,
   requestMoreStack,
   revealNight,
 } from "@/app/app/movie-night/actions";
-import { Leaderboard } from "@/components/movie-night/leaderboard";
+import { Leaderboard, type RowActions } from "@/components/movie-night/leaderboard";
 import { NightHeader } from "@/components/movie-night/night-header";
+import { PickDialog } from "@/components/movie-night/pick-dialog";
 import { ProgressStrip } from "@/components/movie-night/progress-strip";
+import { SharePick } from "@/components/movie-night/share-pick";
 import { SwipeDeck } from "@/components/movie-night/swipe-deck";
 import { useNightState } from "@/components/movie-night/use-night-state";
 import { useVoteQueue } from "@/components/movie-night/use-vote-queue";
@@ -58,9 +62,17 @@ export function Room({ initial }: { initial: NightState }) {
   );
   const [finishing, setFinishing] = useState(false);
   const finishingNow = useRef(false);
-  const [adding, setAdding] = useState(false);
-  const addingNow = useRef(false);
+  // What the room is doing for me besides swiping ("more", "more:<card>", "add:<card>:<list>", "top"): one at a time.
+  const [busy, setBusy] = useState<string | null>(null);
+  const busyNow = useRef(false);
+  const [pickId, setPickId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const swipingStack = isOpen
     ? (stacks.find((s) => s.id === swipingId && !s.my_finished && !s.revealed) ?? null)
@@ -122,22 +134,56 @@ export function Room({ initial }: { initial: NightState }) {
     setSwipingId(null);
   }
 
-  /** Asks for another stack, in the night's mood or like one of its titles, and goes straight to swiping it. */
-  async function moreSuggestions(likeCandidateId?: string) {
-    if (addingNow.current) return;
-    addingNow.current = true;
-    setAdding(true);
+  /** Runs one of the room's actions on its own: nothing else starts while it is going. */
+  async function work(key: string, run: () => Promise<void>) {
+    if (busyNow.current) return;
+    busyNow.current = true;
+    setBusy(key);
     setMessage(null);
-    const res = await requestMoreStack({ nightId: night.id, knownStacks: stacks.length, likeCandidateId });
-    if (res.error) {
-      setMessage(res.error);
-    } else if (await refresh(true)) {
-      if (res.stackId) setSwipingId(res.stackId);
-    } else {
-      setMessage("The new suggestions are ready but didn't load yet. They'll show up in a moment.");
+    setNotice(null);
+    try {
+      await run();
+    } finally {
+      busyNow.current = false;
+      setBusy(null);
     }
-    addingNow.current = false;
-    setAdding(false);
+  }
+
+  /** Asks for another stack, in the night's mood or like one of its titles, and goes straight to swiping it. */
+  function moreSuggestions(likeCandidateId?: string) {
+    return work(likeCandidateId ? `more:${likeCandidateId}` : "more", async () => {
+      const res = await requestMoreStack({ nightId: night.id, knownStacks: stacks.length, likeCandidateId });
+      if (res.error) {
+        setMessage(res.error);
+      } else if (await refresh(true)) {
+        if (res.stackId) setSwipingId(res.stackId);
+      } else {
+        setMessage("The new suggestions are ready but didn't load yet. They'll show up in a moment.");
+      }
+    });
+  }
+
+  /** Puts one of the night's titles on the family's list or on My list. */
+  function addTitle(candidateId: string, target: "family" | "mine") {
+    return work(`add:${candidateId}:${target}`, async () => {
+      const res = await addNightTitle({ nightId: night.id, candidateId, target });
+      const title = state.candidates.find((c) => c.id === candidateId)?.title ?? "That title";
+      // Already there is what was asked for; the row's chip catches up below.
+      if (res.error && !/already on this list/i.test(res.error)) setMessage(res.error);
+      else setNotice(`${title} is on ${target === "family" ? `${night.group_name}'s list` : "My list"}.`);
+      await refresh(true);
+    });
+  }
+
+  /** For a night nobody picked from: the same best titles a pick would have added. */
+  function addTop() {
+    return work("top", async () => {
+      const res = await addTopTitles(night.id);
+      if (res.error) setMessage(res.error);
+      else if (!res.added) setNotice(`The best titles are on ${night.group_name}'s list already.`);
+      else setNotice(`Added ${res.added} ${res.added === 1 ? "title" : "titles"} to ${night.group_name}'s list.`);
+      await refresh(true);
+    });
   }
 
   async function reveal() {
@@ -185,12 +231,21 @@ export function Room({ initial }: { initial: NightState }) {
   // Another stack can be asked for by anyone who sees the leaderboard, once they've swiped the ones already there.
   const canAddMore = isOpen && !waiting && stacks.length < MAX_STACKS && stacks.some((s) => s.can_see_results);
   const someoneStillSwiping = isOpen && members.some((m) => !isDone(m, state));
+  const pickCandidate = isOpen && pickId ? state.candidates.find((c) => c.id === pickId) : undefined;
+  const actions: RowActions = {
+    familyName: night.group_name,
+    onPick: isOpen ? setPickId : undefined,
+    onAdd: addTitle,
+    onMoreLike: canAddMore ? moreSuggestions : undefined,
+    busy,
+  };
 
   const ended =
     night.status === "closed" ? (
       <p>
         <strong>{night.ended_by_name ?? "Someone"}</strong> picked <strong>{night.picked_title ?? "a title"}</strong> on{" "}
         {formatDay(night.happened_on)}.
+        {night.source === "swipe" && ` The best titles joined ${night.group_name}'s list.`}
       </p>
     ) : night.status === "cancelled" ? (
       <p>
@@ -199,6 +254,8 @@ export function Room({ initial }: { initial: NightState }) {
     ) : night.status === "expired" ? (
       <p>This movie night ended after 12 hours with nobody voting.</p>
     ) : null;
+  // Nobody picked, so nothing was added for the family: it can be done by hand.
+  const canAddTop = (night.status === "cancelled" || night.status === "expired") && state.results.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -213,9 +270,18 @@ export function Room({ initial }: { initial: NightState }) {
       {ended && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm">
           {ended}
-          <Link href={`/app/movie-night?who=${night.group_id}`} className={buttonVariants({ size: "sm", variant: "outline" })}>
-            Back to Movie night
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {night.status === "closed" && night.picked_title && <SharePick title={night.picked_title} />}
+            {canAddTop && (
+              <Button size="sm" onClick={addTop} disabled={busy !== null}>
+                {busy === "top" && <Loader2 className="size-3.5 animate-spin" />}
+                Add the top {TOP_TITLES} to {night.group_name}&apos;s list
+              </Button>
+            )}
+            <Link href={`/app/movie-night?who=${night.group_id}`} className={buttonVariants({ size: "sm", variant: "outline" })}>
+              Back to Movie night
+            </Link>
+          </div>
         </div>
       )}
       {resultsShownOnMe && (
@@ -226,6 +292,11 @@ export function Room({ initial }: { initial: NightState }) {
       {message && (
         <p role="alert" className="text-sm text-destructive">
           {message}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {notice}
         </p>
       )}
 
@@ -289,14 +360,14 @@ export function Room({ initial }: { initial: NightState }) {
                 )}
               </div>
               {canAddMore && (
-                <Button size="sm" variant="outline" onClick={() => moreSuggestions()} disabled={adding}>
-                  {adding ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                  {adding ? "Finding titles…" : "More suggestions"}
+                <Button size="sm" variant="outline" onClick={() => moreSuggestions()} disabled={busy !== null}>
+                  {busy === "more" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                  {busy === "more" ? "Finding titles…" : "More suggestions"}
                 </Button>
               )}
             </div>
             {state.results.length > 0 ? (
-              <Leaderboard state={state} onMoreLike={canAddMore ? moreSuggestions : undefined} busy={adding} />
+              <Leaderboard state={state} actions={actions} />
             ) : (
               <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                 {stacks.some((s) => s.can_see_results)
@@ -306,6 +377,19 @@ export function Room({ initial }: { initial: NightState }) {
             )}
           </section>
         </div>
+      )}
+
+      {pickCandidate && (
+        <PickDialog
+          nightId={night.id}
+          groupName={night.group_name}
+          card={pickCandidate}
+          members={members}
+          meId={me}
+          onPicked={() => void refresh(true)}
+          onFailed={() => void refresh(true)}
+          onClose={() => setPickId(null)}
+        />
       )}
     </div>
   );

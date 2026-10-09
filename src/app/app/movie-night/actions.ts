@@ -16,9 +16,11 @@ import {
   type Vote,
 } from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
+import { putOnList } from "@/lib/list-add";
 import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
 import type { MediaType } from "@/lib/types";
+import { cleanScore, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
 
 export interface ActionResult {
   error?: string;
@@ -27,6 +29,16 @@ export interface ActionResult {
 /** Most titles sent to My list in one go. */
 const MAX_BATCH = 10;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar day written as YYYY-MM-DD (not 2026-13-45). */
+function isDay(value: unknown): value is string {
+  if (typeof value !== "string" || !DAY.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+/** A family is never this big; it only keeps a request from carrying a huge list. */
+const MAX_VIEWERS = 50;
 
 /**
  * Starts a solo stack: counts it against the person's limit, picks a seed and sends them to the stack. The seed is in
@@ -334,4 +346,105 @@ export async function requestMoreStack(input: {
     p_candidates: built.candidates,
   });
   return error ? { error: error.message } : { stackId: data as string };
+}
+
+/**
+ * Picks a title from the leaderboard: whoever picks says who watched it and when, like Watched together on the family
+ * list. In one go the title joins the family list if it isn't there, the watch is logged and the night ends (the best
+ * titles join the list too). Then the picker's own note is saved. Nothing changes if the watch is refused, and a night
+ * that someone already picked gets "Ana already picked Dune".
+ */
+export async function pickCard(input: {
+  nightId: string;
+  candidateId: string;
+  watchedOn: string;
+  viewers: { userId: string; score: number | null }[];
+  /** The signed-in user's own note, when they are among the viewers and wrote one. */
+  note?: string;
+}): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  const viewers = Array.isArray(input?.viewers) ? input.viewers : [];
+  if (
+    !UUID.test(String(input?.nightId)) ||
+    !UUID.test(String(input?.candidateId)) ||
+    !isDay(input?.watchedOn) ||
+    viewers.length === 0 ||
+    viewers.length > MAX_VIEWERS ||
+    viewers.some((v) => !UUID.test(String(v?.userId))) ||
+    new Set(viewers.map((v) => v.userId)).size !== viewers.length
+  ) {
+    return { error: "Pick at least one person who watched it, and a date." };
+  }
+  const scores = viewers.map((v) => cleanScore(v.score ?? null));
+  if (scores.some((score) => score === undefined)) return { error: "Scores must be between 1 and 10." };
+  // Checked before the pick, so a note that is too long can't leave a night picked and its note missing.
+  const note = typeof input.note === "string" ? input.note : undefined;
+  if (note !== undefined && tooLong(note.trim())) {
+    return { error: `Notes can be at most ${MAX_TEXT} characters.` };
+  }
+
+  const { data: itemId, error } = await supabase.rpc("pick_movie_night_card", {
+    p_night: input.nightId,
+    p_candidate: input.candidateId,
+    p_watched_on: input.watchedOn,
+    p_viewers: viewers.map((v, i) => ({ user_id: v.userId, score: scores[i] })),
+  });
+  if (error) return { error: error.message };
+
+  // Only your own note: the others add theirs when they're asked to rate it.
+  if (note !== undefined && viewers.some((v) => v.userId === user.id)) {
+    const saved = await saveOwnNote(supabase, itemId as string, user.id, note);
+    if (saved.error) return saved;
+  }
+  revalidatePath("/app", "layout");
+  return {};
+}
+
+/**
+ * Adds one title of a night to the family's list or to My list, restoring it if it was removed. The title is looked up
+ * from the night, so only cards of a night you belong to can be added.
+ */
+export async function addNightTitle(input: {
+  nightId: string;
+  candidateId: string;
+  target: "family" | "mine";
+}): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (
+    !UUID.test(String(input?.nightId)) ||
+    !UUID.test(String(input?.candidateId)) ||
+    (input.target !== "family" && input.target !== "mine")
+  ) {
+    return { error: "That isn't a title of a movie night." };
+  }
+  const limited = await overRateLimit(user.id, LIMITS.addTitle);
+  if (limited) return { error: limited };
+
+  // Members only (row level security), and the card has to belong to this night.
+  const { data } = await supabase
+    .from("movie_night_candidates")
+    .select("media_id, movie_nights!inner(group_id)")
+    .eq("id", input.candidateId)
+    .eq("night_id", input.nightId)
+    .maybeSingle();
+  const card = data as { media_id: string; movie_nights: { group_id: string } } | null;
+  if (!card) return { error: "That title isn't in this movie night." };
+
+  const res = await putOnList(supabase, user.id, card.media_id, input.target === "family" ? card.movie_nights.group_id : null);
+  if (res.error) return res;
+  revalidatePath("/app", "layout");
+  return {};
+}
+
+/**
+ * For a night that ended with nobody picking (cancelled, or 12 hours of nothing): adds its best titles to the family
+ * list, the same ones a pick adds. Says how many were new.
+ */
+export async function addTopTitles(nightId: string): Promise<ActionResult & { added?: number }> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { data, error } = await supabase.rpc("add_movie_night_top_titles", { p_night: nightId });
+  if (error) return { error: error.message };
+  revalidatePath("/app", "layout");
+  return { added: Number(data) };
 }

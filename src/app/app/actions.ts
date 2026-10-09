@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { putOnList } from "@/lib/list-add";
 import { saveTitle } from "@/lib/save-title";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import type { MediaType, ReactionValue } from "@/lib/types";
+import { cleanScore, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
 
 export interface ActionResult {
   error?: string;
@@ -21,21 +22,6 @@ function revalidateApp() {
   revalidatePath("/app", "layout");
 }
 
-/** Names and notes: at most this many characters (the database refuses longer ones too). */
-const MAX_TEXT = 250;
-
-/** Characters as the database counts them (an emoji is one, though it is two JavaScript chars). */
-function tooLong(text: string): boolean {
-  return [...text].length > MAX_TEXT;
-}
-
-/** Scores run from 1 to 10 with one decimal (6.7); returns undefined if out of range. */
-function cleanScore(score: number | null): number | null | undefined {
-  if (score === null) return null;
-  if (!Number.isFinite(score) || score < 1 || score > 10) return undefined;
-  return Math.round(score * 10) / 10;
-}
-
 /** Add a TMDB title to a shared (groupId) or personal (null) list. */
 export async function addToList(input: {
   tmdbId: number;
@@ -46,40 +32,9 @@ export async function addToList(input: {
 
   const saved = await saveTitle(user.id, input);
   if ("error" in saved) return { error: saved.error };
-  const mediaId = saved.id;
 
-  let existing = supabase
-    .from("list_items")
-    .select("id, deleted_at")
-    .eq("media_id", mediaId);
-  existing = input.groupId
-    ? existing.eq("group_id", input.groupId)
-    : existing.is("group_id", null).eq("added_by", user.id);
-
-  const { data: found } = await existing.maybeSingle();
-  const prior = found as { id: string; deleted_at: string | null } | null;
-  if (prior && !prior.deleted_at) {
-    return { error: "It's already on this list." };
-  }
-  // Removed titles are only hidden, so re-adding one restores it with its ratings.
-  if (prior) {
-    const { error } = await supabase
-      .from("list_items")
-      .update({ deleted_at: null })
-      .eq("id", prior.id);
-    if (error) return { error: error.message };
-    revalidateApp();
-    return {};
-  }
-
-  const { error: insertError } = await supabase.from("list_items").insert({
-    group_id: input.groupId,
-    added_by: user.id,
-    media_id: mediaId,
-    status: "want",
-  });
-  if (insertError) return { error: insertError.message };
-
+  const res = await putOnList(supabase, user.id, saved.id, input.groupId);
+  if (res.error) return res;
   revalidateApp();
   return {};
 }
@@ -284,37 +239,6 @@ export async function logWatchTogether(input: {
 
   revalidateApp();
   return {};
-}
-
-/** Sets the note on the user's rating, creating one without a score if needed (but never an empty one). */
-async function saveOwnNote(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  itemId: string,
-  userId: string,
-  note: string,
-): Promise<ActionResult> {
-  const comment = note.trim() || null;
-  if (comment && tooLong(comment)) {
-    return { error: `Notes can be at most ${MAX_TEXT} characters.` };
-  }
-  const { data: existing } = await supabase
-    .from("ratings")
-    .select("id")
-    .eq("list_item_id", itemId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (existing) {
-    const { error } = await supabase
-      .from("ratings")
-      .update({ comment, updated_at: new Date().toISOString() })
-      .eq("id", (existing as { id: string }).id);
-    return error ? { error: error.message } : {};
-  }
-  if (!comment) return {};
-  const { error } = await supabase
-    .from("ratings")
-    .insert({ list_item_id: itemId, user_id: userId, comment });
-  return error ? { error: error.message } : {};
 }
 
 export async function skipRatingRequest(itemId: string): Promise<ActionResult> {

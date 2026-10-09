@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Eye, Heart, Info, Loader2, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ChevronDown, Eye, Heart, Info, Loader2, Plus, Sparkles, Star, ThumbsDown, ThumbsUp, Users } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 
 import { MediaPoster } from "@/components/media-poster";
@@ -43,6 +43,16 @@ function Stat({ vote, count }: { vote: Vote; count: number }) {
   );
 }
 
+/** What can be done with a title, and what is going on right now (`busy` names it; the other buttons wait). */
+export interface RowActions {
+  familyName: string;
+  /** "We watched this": only while the night is open. */
+  onPick?: (candidateId: string) => void;
+  onAdd?: (candidateId: string, target: "family" | "mine") => void;
+  onMoreLike?: (candidateId: string) => void;
+  busy: string | null;
+}
+
 function Row({
   row,
   card,
@@ -50,8 +60,7 @@ function Row({
   open,
   onToggle,
   onDetails,
-  onMoreLike,
-  busy,
+  actions,
 }: {
   row: ResultRow;
   card: NightCandidate;
@@ -59,9 +68,10 @@ function Row({
   open: boolean;
   onToggle: () => void;
   onDetails: () => void;
-  onMoreLike?: () => void;
-  busy: boolean;
+  actions: RowActions;
 }) {
+  const { familyName, onPick, onAdd, onMoreLike, busy } = actions;
+  const working = (key: string) => busy === key;
   const panelId = useId();
   const groups = groupVotes(row.votes, meId);
   return (
@@ -128,13 +138,58 @@ function Row({
             })}
           </dl>
           <div className="flex flex-wrap gap-2">
+            {onPick && (
+              <Button size="sm" onClick={() => onPick(row.candidate_id)} disabled={busy !== null}>
+                <Users className="size-3.5" />
+                We watched this
+              </Button>
+            )}
+            {onAdd && !row.on_family_list && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onAdd(row.candidate_id, "family")}
+                disabled={busy !== null}
+              >
+                {working(`add:${row.candidate_id}:family`) ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                Add to {familyName} list
+              </Button>
+            )}
+            {onAdd && !row.on_my_list && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onAdd(row.candidate_id, "mine")}
+                disabled={busy !== null}
+              >
+                {working(`add:${row.candidate_id}:mine`) ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                Add to My list
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={onDetails}>
               <Info className="size-3.5" />
               Details
             </Button>
             {onMoreLike && (
-              <Button size="sm" variant="outline" onClick={onMoreLike} disabled={busy}>
-                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onMoreLike(row.candidate_id)}
+                disabled={busy !== null}
+              >
+                {working(`more:${row.candidate_id}`) ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="size-3.5" />
+                )}
                 More like this
               </Button>
             )}
@@ -147,17 +202,9 @@ function Row({
 
 /**
  * The ranked titles of a night, as far as the viewer may see them. Tap a row to see who voted what and what can be
- * done with the title. `onMoreLike` (while the night is open) asks for a stack of titles like that one.
+ * done with the title (`actions`; a button is only there when its action is).
  */
-export function Leaderboard({
-  state,
-  onMoreLike,
-  busy = false,
-}: {
-  state: NightState;
-  onMoreLike?: (candidateId: string) => void;
-  busy?: boolean;
-}) {
+export function Leaderboard({ state, actions }: { state: NightState; actions: RowActions }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [info, setInfo] = useState<DeckCard | null>(null);
   const cards = useMemo(() => new Map(state.candidates.map((c) => [c.id, c])), [state.candidates]);
@@ -177,8 +224,7 @@ export function Leaderboard({
               open={openId === row.candidate_id}
               onToggle={() => setOpenId((id) => (id === row.candidate_id ? null : row.candidate_id))}
               onDetails={() => setInfo(candidateToCard(card))}
-              onMoreLike={onMoreLike && (() => onMoreLike(row.candidate_id))}
-              busy={busy}
+              actions={actions}
             />
           );
         })}
