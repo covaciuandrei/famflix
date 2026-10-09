@@ -54,3 +54,23 @@ export function ProgressStrip({
     </ul>
   );
 }
+
+/** Who watched the title a night ended with. */
+export function WatchedBy({ members, meId }: { members: MemberProgress[]; meId: string }) {
+  const people = members.filter((m) => m.watched);
+  if (people.length === 0) return null;
+  return (
+    <ul className="flex flex-wrap items-center gap-2" aria-label="Who watched it">
+      <li className="text-sm text-muted-foreground">Watched by</li>
+      {people.map((member) => (
+        <li
+          key={member.user_id}
+          className="flex items-center gap-2 rounded-full border border-border py-1 pr-3 pl-1 text-sm"
+        >
+          <Avatar name={member.name} url={member.avatar_url} className="size-6" />
+          <span className="max-w-28 truncate font-medium">{member.user_id === meId ? "You" : member.name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}

@@ -293,6 +293,25 @@ export function groupVotes(votes: ResultRow["votes"], meId: string): { vote: Vot
     .filter((group) => group.names.length > 0);
 }
 
+/** One finished night in a family's history: a pick, a night nobody picked from, or a Watched together log. */
+export interface HistoryEntry {
+  id: string;
+  /** "logged" is a Watched together log with no swiping behind it. */
+  source: "swipe" | "logged";
+  status: Exclude<NightStatus, "open">;
+  /** When it started, or once a title was picked, the day it was watched. */
+  happenedOn: string;
+  /** The mood a swipe night started with (category slugs). */
+  genres: string[];
+  /** Who cancelled it. */
+  endedByName: string | null;
+  picked: { title: string; posterPath: string | null; tmdbId: number; mediaType: MediaType; year: number | null } | null;
+  /** Who watched the pick, or for a night nobody picked from, who took part. */
+  people: { name: string; avatarUrl: string | null }[];
+  stacks: number;
+  cards: number;
+}
+
 /** A night's card as the swipe stack shows it. */
 export function candidateToCard(c: NightCandidate): DeckCard {
   return {

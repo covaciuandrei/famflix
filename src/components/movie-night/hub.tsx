@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { cancelNight, startMovieNight, startSoloStack } from "@/app/app/movie-night/actions";
+import { History } from "@/components/movie-night/history";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { BROWSE_GENRES, findGenre } from "@/lib/genres";
 import {
   type ActiveNight,
   DEFAULT_STACK_SIZE,
+  type HistoryEntry,
   MAX_GENRES,
   MOODS,
   RUNTIME_LIMITS,
@@ -43,12 +45,15 @@ export function Hub({
   families,
   who,
   openNight,
+  history,
 }: {
   families: { id: string; name: string; members: number }[];
   /** The family chosen in the address, if any. */
   who: string | null;
   /** The chosen family's open night, if it has one. */
   openNight: ActiveNight | null;
+  /** The chosen family's first page of past nights. */
+  history: { entries: HistoryEntry[]; hasMore: boolean } | null;
 }) {
   const router = useRouter();
   const family = families.find((f) => f.id === who) ?? null;
@@ -305,6 +310,16 @@ export function Hub({
             </p>
           </div>
         </>
+      )}
+
+      {family && history && (
+        <History
+          key={family.id}
+          groupId={family.id}
+          familyName={family.name}
+          initial={history.entries}
+          initialHasMore={history.hasMore}
+        />
       )}
 
       <p className="text-sm text-muted-foreground">

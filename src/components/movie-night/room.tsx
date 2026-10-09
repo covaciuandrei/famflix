@@ -17,7 +17,7 @@ import {
 import { Leaderboard, type RowActions } from "@/components/movie-night/leaderboard";
 import { NightHeader } from "@/components/movie-night/night-header";
 import { PickDialog } from "@/components/movie-night/pick-dialog";
-import { ProgressStrip } from "@/components/movie-night/progress-strip";
+import { ProgressStrip, WatchedBy } from "@/components/movie-night/progress-strip";
 import { SharePick } from "@/components/movie-night/share-pick";
 import { SwipeDeck } from "@/components/movie-night/swipe-deck";
 import { useNightState } from "@/components/movie-night/use-night-state";
@@ -241,11 +241,15 @@ export function Room({ initial }: { initial: NightState }) {
   };
 
   const ended =
-    night.status === "closed" ? (
+    night.status === "closed" && night.source === "logged" ? (
+      <p>
+        <strong>{night.ended_by_name ?? "Someone"}</strong> logged <strong>{night.picked_title ?? "a title"}</strong> as
+        watched together on {formatDay(night.happened_on)}.
+      </p>
+    ) : night.status === "closed" ? (
       <p>
         <strong>{night.ended_by_name ?? "Someone"}</strong> picked <strong>{night.picked_title ?? "a title"}</strong> on{" "}
-        {formatDay(night.happened_on)}.
-        {night.source === "swipe" && ` The best titles joined ${night.group_name}'s list.`}
+        {formatDay(night.happened_on)}. The best titles joined {night.group_name}&apos;s list.
       </p>
     ) : night.status === "cancelled" ? (
       <p>
@@ -325,7 +329,11 @@ export function Room({ initial }: { initial: NightState }) {
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <ProgressStrip members={members} stacks={stacks} meId={me} />
+            {night.status === "closed" ? (
+              <WatchedBy members={members} meId={me} />
+            ) : (
+              <ProgressStrip members={members} stacks={stacks} meId={me} />
+            )}
             {someoneStillSwiping && (
               <button
                 type="button"
@@ -347,35 +355,37 @@ export function Room({ initial }: { initial: NightState }) {
               </Button>
             </div>
           )}
-          <section aria-labelledby="board-title" className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-              <div>
-                <h2 id="board-title" className="text-lg font-semibold">
-                  Leaderboard
-                </h2>
-                {isOpen && (
-                  <p className="text-xs text-muted-foreground">
-                    When you pick one, the {TOP_TITLES} best titles join {night.group_name}&apos;s list.
-                  </p>
+          {night.source === "swipe" && (
+            <section aria-labelledby="board-title" className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <div>
+                  <h2 id="board-title" className="text-lg font-semibold">
+                    Leaderboard
+                  </h2>
+                  {isOpen && (
+                    <p className="text-xs text-muted-foreground">
+                      When you pick one, the {TOP_TITLES} best titles join {night.group_name}&apos;s list.
+                    </p>
+                  )}
+                </div>
+                {canAddMore && (
+                  <Button size="sm" variant="outline" onClick={() => moreSuggestions()} disabled={busy !== null}>
+                    {busy === "more" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                    {busy === "more" ? "Finding titles…" : "More suggestions"}
+                  </Button>
                 )}
               </div>
-              {canAddMore && (
-                <Button size="sm" variant="outline" onClick={() => moreSuggestions()} disabled={busy !== null}>
-                  {busy === "more" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                  {busy === "more" ? "Finding titles…" : "More suggestions"}
-                </Button>
+              {state.results.length > 0 ? (
+                <Leaderboard state={state} actions={actions} />
+              ) : (
+                <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  {stacks.some((s) => s.can_see_results)
+                    ? "Nobody has voted yet."
+                    : "Finish swiping to see how the family is voting."}
+                </p>
               )}
-            </div>
-            {state.results.length > 0 ? (
-              <Leaderboard state={state} actions={actions} />
-            ) : (
-              <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                {stacks.some((s) => s.can_see_results)
-                  ? "Nobody has voted yet."
-                  : "Finish swiping to see how the family is voting."}
-              </p>
-            )}
-          </section>
+            </section>
+          )}
         </div>
       )}
 

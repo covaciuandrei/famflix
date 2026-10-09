@@ -5,7 +5,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
-import type { ActiveNight, NightState } from "@/lib/movie-night";
+import type { ActiveNight, HistoryEntry, NightState } from "@/lib/movie-night";
 import type {
   ActivityEvent,
   Group,
@@ -434,6 +434,87 @@ export async function getActiveMovieNights(): Promise<ActiveNight[]> {
     return [];
   }
   return (data ?? []) as ActiveNight[];
+}
+
+/**
+ * A family's finished movie nights, newest first (the open one isn't history yet), `limit` at a time from `offset`.
+ * Anyone outside the family gets nothing. `hasMore` says whether there is another page.
+ */
+export async function getNightHistory(
+  groupId: string,
+  offset: number,
+  limit: number,
+): Promise<{ entries: HistoryEntry[]; hasMore: boolean }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("movie_nights")
+    .select(
+      `id, source, status, genres, happened_on, ended_by,
+       picked:media!picked_media_id(title, poster_path, tmdb_id, media_type, release_year),
+       members:movie_night_members(watched, profile:profiles(display_name, avatar_url)),
+       stacks:movie_night_stacks(count),
+       cards:movie_night_candidates(count)`,
+    )
+    .eq("group_id", groupId)
+    .neq("status", "open")
+    .order("happened_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(offset, offset + limit);
+  if (error) {
+    console.error("Could not load movie night history:", error.message);
+    return { entries: [], hasMore: false };
+  }
+
+  type Row = {
+    id: string;
+    source: "swipe" | "logged";
+    status: HistoryEntry["status"];
+    genres: string[];
+    happened_on: string;
+    ended_by: string | null;
+    picked: { title: string; poster_path: string | null; tmdb_id: number; media_type: MediaType; release_year: number | null } | null;
+    members: { watched: boolean; profile: { display_name: string; avatar_url: string | null } | null }[];
+    stacks: { count: number }[];
+    cards: { count: number }[];
+  };
+  const rows = (data ?? []) as unknown as Row[];
+
+  // Whoever cancelled isn't linked to a profile (it is cleared with their account), so their names come separately.
+  const enders = [...new Set(rows.filter((r) => r.status === "cancelled" && r.ended_by).map((r) => r.ended_by as string))];
+  const names = new Map<string, string>();
+  if (enders.length > 0) {
+    const { data: people } = await supabase.from("profiles").select("id, display_name").in("id", enders);
+    for (const person of (people ?? []) as { id: string; display_name: string }[]) names.set(person.id, person.display_name);
+  }
+
+  const entries = rows.slice(0, limit).map((r): HistoryEntry => {
+    const picked = r.status === "closed";
+    return {
+      id: r.id,
+      source: r.source,
+      status: r.status,
+      happenedOn: r.happened_on,
+      genres: r.genres,
+      endedByName: r.ended_by ? (names.get(r.ended_by) ?? null) : null,
+      picked: r.picked
+        ? {
+            title: r.picked.title,
+            posterPath: r.picked.poster_path,
+            tmdbId: r.picked.tmdb_id,
+            mediaType: r.picked.media_type,
+            year: r.picked.release_year,
+          }
+        : null,
+      people: r.members
+        .filter((m) => m.profile && (picked ? m.watched : true))
+        .map((m) => ({ name: m.profile!.display_name, avatarUrl: m.profile!.avatar_url }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      stacks: r.stacks[0]?.count ?? 0,
+      cards: r.cards[0]?.count ?? 0,
+    };
+  });
+  return { entries, hasMore: rows.length > limit };
 }
 
 /**

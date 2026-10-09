@@ -84,6 +84,12 @@ export default async function FamilyPage({
               {members.length} member{members.length === 1 ? "" : "s"}
             </span>
           </div>
+          <Link
+            href={`/app/movie-night?who=${group.id}#history`}
+            className="mt-2 inline-block text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            Past movie nights
+          </Link>
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

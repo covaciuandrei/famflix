@@ -2,7 +2,8 @@ import { Popcorn } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { Hub } from "@/components/movie-night/hub";
-import { getActiveMovieNights, getMyGroups, getSessionProfile } from "@/lib/data";
+import { getActiveMovieNights, getMyGroups, getNightHistory, getSessionProfile } from "@/lib/data";
+import { HISTORY_PAGE } from "@/lib/movie-night";
 
 /** Movie night: swipe through titles on your own, or start one for a family and let the votes decide. */
 export default async function MovieNightPage({
@@ -16,7 +17,11 @@ export default async function MovieNightPage({
   const { who: whoParam } = await searchParams;
   const groups = await getMyGroups();
   const who = groups.find((g) => g.id === (Array.isArray(whoParam) ? whoParam[0] : whoParam))?.id ?? null;
-  const openNight = who ? ((await getActiveMovieNights()).find((n) => n.group_id === who) ?? null) : null;
+  const [nights, history] = await Promise.all([
+    who ? getActiveMovieNights() : Promise.resolve([]),
+    who ? getNightHistory(who, 0, HISTORY_PAGE) : Promise.resolve(null),
+  ]);
+  const openNight = nights.find((n) => n.group_id === who) ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -33,6 +38,7 @@ export default async function MovieNightPage({
         families={groups.map((g) => ({ id: g.id, name: g.name, members: g.memberCount }))}
         who={who}
         openNight={openNight}
+        history={history}
       />
     </div>
   );
