@@ -30,9 +30,11 @@ export function VoteButtons({
   onVote: (vote: Vote) => void;
   onUndo: () => void;
   canUndo: boolean;
-  lovesLeft: number;
+  /** Loves still available in this stack, or null when there is no limit (solo). */
+  lovesLeft: number | null;
   disabled?: boolean;
 }) {
+  const noLoves = lovesLeft !== null && lovesLeft <= 0;
   return (
     <div className="flex items-start justify-center gap-1 sm:gap-3">
       <Control caption="Undo">
@@ -59,13 +61,15 @@ export function VoteButtons({
           <X className="size-7" strokeWidth={3} />
         </button>
       </Control>
-      <Control caption={`Love · ${lovesLeft} left`}>
+      <Control caption={lovesLeft === null ? "Love" : `Love · ${lovesLeft} left`}>
         <button
           type="button"
           onClick={() => onVote("love")}
-          disabled={disabled || lovesLeft <= 0}
-          aria-label={`Love it, ${lovesLeft} of ${LOVES_PER_STACK} loves left`}
-          title={lovesLeft > 0 ? "Love it (↑ or L)" : "You've used your loves in this stack"}
+          disabled={disabled || noLoves}
+          aria-label={
+            lovesLeft === null ? "Love it" : `Love it, ${lovesLeft} of ${LOVES_PER_STACK} loves left`
+          }
+          title={noLoves ? "You've used your loves in this stack" : "Love it (↑ or L)"}
           className={cn(round, "size-16 bg-pink-500 text-white shadow-lg hover:bg-pink-500/90")}
         >
           <Heart className="size-8 fill-current" />

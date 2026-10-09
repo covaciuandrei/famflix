@@ -36,7 +36,8 @@ const REST_TRANSITION = "transform 200ms ease-out";
 const BEHIND_CARDS = 2;
 // Each card behind is a little smaller and lower, so its edge peeks out under the one on top.
 const BEHIND_TRANSFORMS = ["none", "scale(0.94) translateY(26px)", "scale(0.88) translateY(50px)"];
-const STACK_HEIGHT = "h-[min(62dvh,36rem)]";
+// Fits between the app's header and bottom bar on a phone (and under the header on a computer), up to a sensible size.
+const STACK_HEIGHT = "h-[clamp(20rem,calc(100dvh-21.5rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-19rem),36rem)]";
 
 function subscribeReducedMotion(onChange: () => void) {
   const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -102,8 +103,8 @@ export function SwipeDeck({
   cards: DeckCard[];
   /** The card to start on, when picking up where someone left off. */
   startAt?: number;
-  /** Loves still available in this stack (the caller counts them, undo included). */
-  lovesLeft: number;
+  /** Loves still available in this stack (the caller counts them, undo included), or null for no limit. */
+  lovesLeft: number | null;
   onVote: (card: DeckCard, vote: Vote) => void;
   onUndo: (card: DeckCard) => void;
   /** A few seconds after the last card, or right away from the done note's button. */
@@ -146,7 +147,7 @@ export function SwipeDeck({
 
   function vote(kind: Vote) {
     if (busy.current || !current) return;
-    if (kind === "love" && lovesLeft <= 0) return;
+    if (kind === "love" && lovesLeft !== null && lovesLeft <= 0) return;
     busy.current = true;
     setRestored(false);
     onVote(current, kind);

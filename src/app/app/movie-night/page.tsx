@@ -1,37 +1,12 @@
 import { Popcorn } from "lucide-react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { MovieNight } from "@/components/movie-night";
-import { getListCards, getMyGroups, getSessionProfile } from "@/lib/data";
-import { isToWatch } from "@/lib/list-status";
-import { cn } from "@/lib/utils";
+import { Hub } from "@/components/movie-night/hub";
+import { getSessionProfile } from "@/lib/data";
 
-export default async function MovieNightPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ list?: string | string[] }>;
-}) {
+export default async function MovieNightPage() {
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
-
-  const { list } = await searchParams;
-  const groups = await getMyGroups();
-  const lists = [
-    ...groups.map((g) => ({ id: g.id, label: g.name })),
-    { id: "mine", label: "My list" },
-  ];
-  const current = lists.find((l) => l.id === list) ?? lists[0];
-
-  const cards = (
-    await getListCards({
-      groupId: current.id === "mine" ? null : current.id,
-      userId: user.id,
-    })
-  ).filter(isToWatch);
-  // Picked here and passed down so the server and the browser shuffle identically.
-  // eslint-disable-next-line react-hooks/purity -- server component, renders once per request (it reads cookies); a new order per visit is intended
-  const seed = Math.floor(Math.random() * 2 ** 31);
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,31 +16,10 @@ export default async function MovieNightPage({
           Movie night
         </h1>
         <p className="text-muted-foreground">
-          Can&apos;t decide? Look through your To watch list in random order or
-          by category, or let the app pick for you.
+          Can&apos;t decide what to watch? Swipe through titles that fit your mood.
         </p>
       </div>
-
-      {lists.length > 1 && (
-        <nav className="flex flex-wrap gap-1.5" aria-label="Choose a list">
-          {lists.map((l) => (
-            <Link
-              key={l.id}
-              href={`/app/movie-night?list=${l.id}`}
-              className={cn(
-                "rounded-md border border-border px-3 py-1.5 text-sm transition-colors",
-                l.id === current.id
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {l.label}
-            </Link>
-          ))}
-        </nav>
-      )}
-
-      <MovieNight key={current.id} cards={cards} seed={seed} />
+      <Hub />
     </div>
   );
 }

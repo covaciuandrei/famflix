@@ -1,0 +1,71 @@
+import { ArrowLeft, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { SoloDeck } from "@/components/movie-night/solo-deck-loader";
+import { buttonVariants } from "@/components/ui/button";
+import { getSessionProfile } from "@/lib/data";
+import { buildSoloDeck } from "@/lib/deck";
+import { findGenre } from "@/lib/genres";
+import { parseMood } from "@/lib/movie-night";
+
+const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+/** A stack just for you. The address holds the mood and the seed, so a refresh shows the same stack. */
+export default async function SoloPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { user } = await getSessionProfile();
+  if (!user) redirect("/login");
+
+  const params = await searchParams;
+  const seedText = first(params.seed);
+  const seed = Number(seedText);
+  if (!seedText || !Number.isSafeInteger(seed) || seed < 0 || seed >= 2 ** 31) {
+    redirect("/app/movie-night");
+  }
+  const mood = parseMood({
+    genres: first(params.genres),
+    series: first(params.series),
+    count: first(params.count),
+    max: first(params.max),
+  });
+
+  const result = await buildSoloDeck({ userId: user.id, mood, seed });
+  if ("error" in result) {
+    return (
+      <div
+        role="alert"
+        className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center"
+      >
+        <TriangleAlert className="size-10 text-destructive" />
+        <div>
+          <h1 className="text-xl font-semibold">We couldn&apos;t make your stack</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{result.error}</p>
+        </div>
+        <Link href="/app/movie-night" className={buttonVariants()}>
+          Back to Movie night
+        </Link>
+      </div>
+    );
+  }
+
+  const labels = mood.genres.map((slug) => findGenre(slug)?.label).filter(Boolean);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <Link href="/app/movie-night" className="inline-flex items-center gap-1 hover:text-foreground">
+          <ArrowLeft className="size-4" />
+          Change mood
+        </Link>
+        <p className="truncate">{labels.length > 0 ? labels.join(", ") : "A bit of everything"}</p>
+      </div>
+      <SoloDeck
+        cards={result.cards}
+        storageKey={`${seed}:${mood.genres.join(",")}:${mood.series ? 1 : 0}:${mood.count}:${mood.maxRuntime ?? 0}`}
+      />
+    </div>
+  );
+}
