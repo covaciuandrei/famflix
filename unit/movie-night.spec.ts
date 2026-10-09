@@ -6,6 +6,7 @@ import { BROWSE_GENRES, matchesAnyGenre, matchesGenreSlug } from "../src/lib/gen
 import {
   deckOrder,
   DEFAULT_MOOD,
+  groupVotes,
   MAX_GENRES,
   moodParams,
   MOODS,
@@ -160,4 +161,27 @@ test("formatRuntime reads like a film listing", () => {
   expect(formatRuntime(45)).toBe("45 min");
   expect(formatRuntime(95)).toBe("1 h 35 min");
   expect(formatRuntime(120)).toBe("2 h");
+});
+
+test.describe("groupVotes", () => {
+  const votes = [
+    { user_id: "u-cara", name: "Cara", vote: "yes" as const },
+    { user_id: "u-ana", name: "Ana", vote: "love" as const },
+    { user_id: "u-ben", name: "Ben", vote: "yes" as const },
+    { user_id: "u-dan", name: "Dan", vote: "nope" as const },
+    { user_id: "u-eva", name: "Eva", vote: "yes" as const },
+  ];
+
+  test("goes from the strongest vote down and leaves out votes nobody gave", () => {
+    expect(groupVotes(votes, "u-zed").map((g) => g.vote)).toEqual(["love", "yes", "nope"]);
+  });
+
+  test("lists you first, then the others by name", () => {
+    const yes = groupVotes(votes, "u-eva").find((g) => g.vote === "yes");
+    expect(yes?.names).toEqual(["You", "Ben", "Cara"]);
+  });
+
+  test("a night nobody voted on has nothing to show", () => {
+    expect(groupVotes([], "u-ana")).toEqual([]);
+  });
 });

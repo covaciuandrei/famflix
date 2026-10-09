@@ -16,41 +16,48 @@ const OVER = /already (finished|picked|out)|was cancelled|ended after|not availa
 
 /**
  * A person's votes in a night: shown at once, sent to the server in small batches in the background (so a swipe is
- * never a wait), and kept if the connection drops. `problem` says when the server stopped taking them.
+ * never a wait), and kept if the connection drops. Each stack's votes are sent to that stack, so moving between
+ * stacks can't mix them up. `problem` says when a batch couldn't be sent (it is tried again).
  */
-export function useVoteQueue(stackId: string | null, initial: Record<string, Vote>) {
+export function useVoteQueue(initial: Record<string, Vote>) {
   const [votes, setVotes] = useState<Record<string, Vote>>(initial);
   const [problem, setProblem] = useState<string | null>(null);
-  const pending = useRef(new Map<string, Vote | null>());
+  // Not sent yet, by stack and then by card (null takes a vote back).
+  const pending = useRef(new Map<string, Map<string, Vote | null>>());
   const timer = useRef<number | null>(null);
   const chain = useRef<Promise<boolean>>(Promise.resolve(true));
   const retries = useRef(0);
 
   const send = useCallback((): Promise<boolean> => {
-    if (!stackId) return Promise.resolve(true);
     chain.current = chain.current.then(async () => {
-      while (pending.current.size > 0) {
-        const batch = [...pending.current].slice(0, BATCH);
-        let error: string | undefined;
-        try {
-          error = (await castVotes(stackId, batch.map(([candidateId, vote]) => ({ candidateId, vote })))).error;
-        } catch {
-          error = "You seem to be offline.";
+      for (const [stackId, queue] of pending.current) {
+        while (queue.size > 0) {
+          const batch = [...queue].slice(0, BATCH);
+          let error: string | undefined;
+          try {
+            error = (await castVotes(stackId, batch.map(([candidateId, vote]) => ({ candidateId, vote })))).error;
+          } catch {
+            error = "You seem to be offline.";
+          }
+          if (error) {
+            if (OVER.test(error)) {
+              // Nothing more can be saved here; the room shows what happened.
+              queue.clear();
+              break;
+            }
+            setProblem(error);
+            return false;
+          }
+          for (const [id, vote] of batch) {
+            if (queue.get(id) === vote) queue.delete(id);
+          }
+          setProblem(null);
         }
-        if (error) {
-          if (OVER.test(error)) pending.current.clear();
-          setProblem(error);
-          return false;
-        }
-        for (const [id, vote] of batch) {
-          if (pending.current.get(id) === vote) pending.current.delete(id);
-        }
-        setProblem(null);
       }
       return true;
     });
     return chain.current;
-  }, [stackId]);
+  }, []);
 
   const schedule = useCallback(
     (delay: number) => {
@@ -59,8 +66,7 @@ export function useVoteQueue(stackId: string | null, initial: Record<string, Vot
         timer.current = null;
         if (await send()) {
           retries.current = 0;
-        } else if (pending.current.size > 0) {
-          // Still something to send: try again a little later.
+        } else {
           timer.current = window.setTimeout(run, RETRY_MS[Math.min(retries.current++, RETRY_MS.length - 1)]);
         }
       };
@@ -69,17 +75,19 @@ export function useVoteQueue(stackId: string | null, initial: Record<string, Vot
     [send],
   );
 
-  /** A vote, or null to take it back. */
+  /** A vote on a card of `stackId`, or null to take it back. */
   const setVote = useCallback(
-    (candidateId: string, vote: Vote | null) => {
+    (stackId: string, candidateId: string, vote: Vote | null) => {
       setVotes((current) => {
         const next = { ...current };
         if (vote === null) delete next[candidateId];
         else next[candidateId] = vote;
         return next;
       });
-      pending.current.set(candidateId, vote);
-      schedule(pending.current.size >= SEND_AT ? 0 : SEND_DELAY_MS);
+      const queue = pending.current.get(stackId) ?? new Map<string, Vote | null>();
+      queue.set(candidateId, vote);
+      pending.current.set(stackId, queue);
+      schedule(queue.size >= SEND_AT ? 0 : SEND_DELAY_MS);
     },
     [schedule],
   );

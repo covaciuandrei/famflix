@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Loader2, Sparkles, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import {
   cancelNight,
   finishStack,
   joinNight,
+  requestMoreStack,
   revealNight,
 } from "@/app/app/movie-night/actions";
 import { Leaderboard } from "@/components/movie-night/leaderboard";
@@ -23,8 +24,10 @@ import {
   candidateToCard,
   deckOrder,
   LOVES_PER_STACK,
+  MAX_STACKS,
   type MemberProgress,
   type NightState,
+  TOP_TITLES,
 } from "@/lib/movie-night";
 
 /** How often a room checks in with the server while it is open. */
@@ -55,12 +58,14 @@ export function Room({ initial }: { initial: NightState }) {
   );
   const [finishing, setFinishing] = useState(false);
   const finishingNow = useRef(false);
+  const [adding, setAdding] = useState(false);
+  const addingNow = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const swipingStack = isOpen
     ? (stacks.find((s) => s.id === swipingId && !s.my_finished && !s.revealed) ?? null)
     : null;
-  const { votes, setVote, flush, problem } = useVoteQueue(swipingStack?.id ?? null, initial.my_votes);
+  const { votes, setVote, flush, problem } = useVoteQueue(initial.my_votes);
 
   // Taking part: someone who opens the night is on its list, even before the first swipe.
   const join = useEffectEvent(() => {
@@ -79,9 +84,9 @@ export function Room({ initial }: { initial: NightState }) {
   }, [state.candidates, swipingStack, me]);
   // Picks up where someone left off: the first card in their own order they haven't voted on.
   const startAt = useMemo(() => {
-    const first = cards.findIndex((card) => !(card.id in initial.my_votes));
+    const first = cards.findIndex((card) => !(card.id in votes));
     return first === -1 ? cards.length : first;
-    // Only the first load matters (the stack remounts with its own key).
+    // Only when a stack opens (the deck remounts with its own key); not on every vote.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [swipingStack?.id]);
   const lovesUsed = cards.filter((card) => votes[card.id] === "love").length;
@@ -109,6 +114,30 @@ export function Room({ initial }: { initial: NightState }) {
     }
     setSwipingId(null);
     stop();
+  }
+
+  /** Leaves the stack as it is (swiping it later picks up at the next card) to look at the leaderboard. */
+  async function peekAtBoard() {
+    await flush();
+    setSwipingId(null);
+  }
+
+  /** Asks for another stack, in the night's mood or like one of its titles, and goes straight to swiping it. */
+  async function moreSuggestions(likeCandidateId?: string) {
+    if (addingNow.current) return;
+    addingNow.current = true;
+    setAdding(true);
+    setMessage(null);
+    const res = await requestMoreStack({ nightId: night.id, knownStacks: stacks.length, likeCandidateId });
+    if (res.error) {
+      setMessage(res.error);
+    } else if (await refresh(true)) {
+      if (res.stackId) setSwipingId(res.stackId);
+    } else {
+      setMessage("The new suggestions are ready but didn't load yet. They'll show up in a moment.");
+    }
+    addingNow.current = false;
+    setAdding(false);
   }
 
   async function reveal() {
@@ -153,6 +182,9 @@ export function Room({ initial }: { initial: NightState }) {
   // A stack someone added that I haven't swiped.
   const waiting = isOpen ? stacks.find((s) => !s.my_finished && !s.revealed && s.id !== swipingStack?.id) : undefined;
   const resultsShownOnMe = isOpen && swipingId !== null && !swipingStack;
+  // Another stack can be asked for by anyone who sees the leaderboard, once they've swiped the ones already there.
+  const canAddMore = isOpen && !waiting && stacks.length < MAX_STACKS && stacks.some((s) => s.can_see_results);
+  const someoneStillSwiping = isOpen && members.some((m) => !isDone(m, state));
 
   const ended =
     night.status === "closed" ? (
@@ -170,7 +202,13 @@ export function Room({ initial }: { initial: NightState }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <NightHeader night={night} canAct={isOpen} onReveal={reveal} onCancel={cancel} />
+      <NightHeader
+        night={night}
+        canAct={isOpen}
+        onBoard={swipingStack && stacks.some((s) => s.can_see_results) ? peekAtBoard : undefined}
+        onReveal={reveal}
+        onCancel={cancel}
+      />
 
       {ended && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm">
@@ -198,8 +236,8 @@ export function Room({ initial }: { initial: NightState }) {
             cards={cards}
             startAt={startAt}
             lovesLeft={Math.max(0, LOVES_PER_STACK - lovesUsed)}
-            onVote={(card, vote) => setVote(card.id, vote)}
-            onUndo={(card) => setVote(card.id, null)}
+            onVote={(card, vote) => setVote(swipingStack.id, card.id, vote)}
+            onUndo={(card) => setVote(swipingStack.id, card.id, null)}
             onFinish={finish}
             onSkip={finish}
             finishText={finishing ? "Saving your votes…" : "That was the last one."}
@@ -215,11 +253,23 @@ export function Room({ initial }: { initial: NightState }) {
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <ProgressStrip members={members} stacks={stacks} meId={me} />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <ProgressStrip members={members} stacks={stacks} meId={me} />
+            {someoneStillSwiping && (
+              <button
+                type="button"
+                onClick={reveal}
+                className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                Show results now
+              </button>
+            )}
+          </div>
           {waiting && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/50 bg-primary/10 px-4 py-3 text-sm">
               <p>
-                <strong>{waiting.created_by_name ?? "Someone"}</strong> added {waiting.total} more suggestions.
+                <strong>{waiting.created_by === me ? "You" : (waiting.created_by_name ?? "Someone")}</strong> added{" "}
+                {waiting.total} more suggestions. Their results show up once you&apos;ve swiped them.
               </p>
               <Button size="sm" onClick={() => setSwipingId(waiting.id)}>
                 Swipe them
@@ -227,11 +277,26 @@ export function Room({ initial }: { initial: NightState }) {
             </div>
           )}
           <section aria-labelledby="board-title" className="flex flex-col gap-3">
-            <h2 id="board-title" className="text-lg font-semibold">
-              Leaderboard
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+              <div>
+                <h2 id="board-title" className="text-lg font-semibold">
+                  Leaderboard
+                </h2>
+                {isOpen && (
+                  <p className="text-xs text-muted-foreground">
+                    When you pick one, the {TOP_TITLES} best titles join {night.group_name}&apos;s list.
+                  </p>
+                )}
+              </div>
+              {canAddMore && (
+                <Button size="sm" variant="outline" onClick={() => moreSuggestions()} disabled={adding}>
+                  {adding ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                  {adding ? "Finding titles…" : "More suggestions"}
+                </Button>
+              )}
+            </div>
             {state.results.length > 0 ? (
-              <Leaderboard state={state} />
+              <Leaderboard state={state} onMoreLike={canAddMore ? moreSuggestions : undefined} busy={adding} />
             ) : (
               <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                 {stacks.some((s) => s.can_see_results)

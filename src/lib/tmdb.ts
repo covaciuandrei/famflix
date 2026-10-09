@@ -366,13 +366,33 @@ export async function getDeckSuggestions({
 export async function getRecommendations(
   mediaType: MediaType,
   tmdbId: number,
+  page = 1,
 ): Promise<TmdbItem[]> {
   const data = await tmdbFetch<{ results: RawResult[] }>(
     `/${mediaType}/${tmdbId}/recommendations`,
-    { page: "1" },
+    { page: String(page) },
     86_400,
   );
   return normalizeMany(data.results, mediaType);
+}
+
+/**
+ * Titles like one a family loved, for a movie night: TMDB's recommendations (two pages), already released and with
+ * a poster. Throws if TMDB can't be reached.
+ */
+export async function getLikeSuggestions(mediaType: MediaType, tmdbId: number): Promise<TmdbItem[]> {
+  const [first, second] = await Promise.allSettled([
+    getRecommendations(mediaType, tmdbId, 1),
+    getRecommendations(mediaType, tmdbId, 2),
+  ]);
+  if (first.status === "rejected") throw first.reason;
+  const thisYear = new Date().getFullYear();
+  const seen = new Set<number>();
+  return [...first.value, ...(second.status === "fulfilled" ? second.value : [])].filter((item) => {
+    if (!item.posterPath || (item.year !== null && item.year > thisYear) || seen.has(item.tmdbId)) return false;
+    seen.add(item.tmdbId);
+    return true;
+  });
 }
 
 /** Full details for a single title, including its trailer. */

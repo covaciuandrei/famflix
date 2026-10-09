@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import { getMovieNightState } from "@/lib/data";
-import { buildFamilyCandidates } from "@/lib/deck";
+import { buildFamilyCandidates, type LikeTitle } from "@/lib/deck";
 import {
   cardKey,
   MAX_STACKS,
@@ -278,12 +278,15 @@ export async function cancelNight(nightId: string): Promise<ActionResult> {
 
 /**
  * Asks for another stack of suggestions in the same spirit as the night (same genres and options, nothing it or its
- * family's last nights already showed). `knownStacks` is how many stacks the caller can see: if someone added one in
- * the meantime, the caller gets that one back instead of a second.
+ * family's last nights already showed), or, with `likeCandidateId`, titles like one of its cards. `knownStacks` is
+ * how many stacks the caller can see: if someone added one in the meantime, the caller gets that one back instead
+ * of a second.
  */
 export async function requestMoreStack(input: {
   nightId: string;
   knownStacks: number;
+  /** One of the night's cards to find more titles like, instead of more in the night's mood. */
+  likeCandidateId?: string;
 }): Promise<ActionResult & { stackId?: string }> {
   const { supabase, user } = await requireUser();
   if (
@@ -298,6 +301,14 @@ export async function requestMoreStack(input: {
   if (!state) return { error: "This movie night isn't available." };
   if (state.night.status !== "open") return { error: "This movie night is over." };
   if (input.knownStacks >= MAX_STACKS) return { error: `A movie night has at most ${MAX_STACKS} stacks.` };
+  let like: LikeTitle | undefined;
+  if (input.likeCandidateId !== undefined) {
+    const base = UUID.test(String(input.likeCandidateId))
+      ? state.candidates.find((c) => c.id === input.likeCandidateId)
+      : undefined;
+    if (!base) return { error: "That title isn't in this movie night." };
+    like = { mediaType: base.media_type, tmdbId: base.tmdb_id };
+  }
   const limited = await overRateLimit(user.id, LIMITS.deck);
   if (limited) return { error: limited };
 
@@ -313,6 +324,7 @@ export async function requestMoreStack(input: {
     seed: randomSeed(),
     suggestionsOnly: true,
     exclude,
+    like,
   });
   if ("error" in built) return { error: built.error };
 

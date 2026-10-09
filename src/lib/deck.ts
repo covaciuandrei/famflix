@@ -15,6 +15,7 @@ import { saveMediaMany } from "@/lib/save-media";
 import {
   detailsToMediaRow,
   getDeckSuggestions,
+  getLikeSuggestions,
   getMediaDetails,
   type TmdbDetails,
 } from "@/lib/tmdb";
@@ -27,6 +28,7 @@ import type { ListItemCard, MediaType } from "@/lib/types";
 
 const NOT_ENOUGH =
   "We couldn't find enough titles for that mood. Try a few more genres, or include series.";
+const NOT_ENOUGH_LIKE = "There aren't enough more titles like that one. Ask for more suggestions in the same mood instead.";
 const TMDB_DOWN = "Couldn't reach the movie database. Please try again.";
 
 function listKey(card: ListItemCard): string {
@@ -48,28 +50,39 @@ function fitsMood(card: ListItemCard, mood: MoodOptions): boolean {
   return matchesAnyGenre(media.genres, mood.genres);
 }
 
+/** A title to find more like, instead of searching by mood. */
+export interface LikeTitle {
+  mediaType: MediaType;
+  tmdbId: number;
+}
+
 /**
  * Up to `wanted` suggestions with full details (genres, length, trailer), skipping titles in `exclude`. Details come
- * from TMDB a batch at a time: a few more than needed at first, since some fail or turn out not to fit.
+ * from TMDB a batch at a time: a few more than needed at first, since some fail or turn out not to fit. With `like`,
+ * they are titles TMDB recommends for that one (the mood's genres don't apply, its length limit still does).
  */
 async function collectSuggestions({
   mood,
   seed,
   exclude,
   wanted,
+  like,
 }: {
   mood: MoodOptions;
   seed: number;
   exclude: ReadonlySet<string>;
   wanted: number;
+  like?: LikeTitle;
 }): Promise<TmdbDetails[]> {
   if (wanted <= 0) return [];
-  const found = await getDeckSuggestions({
-    genres: mood.genres,
-    series: mood.series,
-    maxRuntime: mood.maxRuntime,
-    seed,
-  });
+  const found = like
+    ? await getLikeSuggestions(like.mediaType, like.tmdbId)
+    : await getDeckSuggestions({
+        genres: mood.genres,
+        series: mood.series,
+        maxRuntime: mood.maxRuntime,
+        seed,
+      });
   const queue = found.filter((item) => !exclude.has(cardKey(item)));
   const ready: TmdbDetails[] = [];
   let next = 0;
@@ -167,6 +180,7 @@ export async function buildFamilyCandidates({
   size = mood.count,
   suggestionsOnly = false,
   exclude = new Set<string>(),
+  like,
 }: {
   userId: string;
   groupId: string;
@@ -175,6 +189,8 @@ export async function buildFamilyCandidates({
   size?: number;
   suggestionsOnly?: boolean;
   exclude?: ReadonlySet<string>;
+  /** Suggest titles like this one (a "more like this" stack). */
+  like?: LikeTitle;
 }): Promise<{ candidates: FamilyCandidate[] } | { error: string }> {
   try {
     const cards = await getListCards({ groupId, userId });
@@ -198,6 +214,7 @@ export async function buildFamilyCandidates({
       seed,
       exclude: new Set([...cards.map(listKey), ...exclude]),
       wanted: slots,
+      like,
     });
     const suggestions: PoolItem[] = found.map((details) => ({
       mediaType: details.mediaType,
@@ -208,7 +225,7 @@ export async function buildFamilyCandidates({
     }));
 
     const deck = composeDeck({ list: listPool, suggestions, size, seed });
-    if (deck.length < MIN_STACK_SIZE) return { error: NOT_ENOUGH };
+    if (deck.length < MIN_STACK_SIZE) return { error: like ? NOT_ENOUGH_LIKE : NOT_ENOUGH };
 
     const saved = await saveMediaMany(
       deck.flatMap(({ card }) => (card.details ? [detailsToMediaRow(card.details)] : [])),

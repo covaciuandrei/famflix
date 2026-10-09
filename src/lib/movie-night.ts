@@ -278,6 +278,21 @@ export interface ActiveNight {
   done_members: number;
 }
 
+/** Who voted what on one title: the strongest vote first, and within a vote you first, then by name. */
+export function groupVotes(votes: ResultRow["votes"], meId: string): { vote: Vote; names: string[] }[] {
+  const order: Vote[] = ["love", "yes", "seen", "nope"];
+  return order
+    .map((vote) => ({
+      vote,
+      names: votes
+        .filter((v) => v.vote === vote)
+        .map((v) => ({ mine: v.user_id === meId, name: v.name }))
+        .sort((a, b) => Number(b.mine) - Number(a.mine) || a.name.localeCompare(b.name))
+        .map((v) => (v.mine ? "You" : v.name)),
+    }))
+    .filter((group) => group.names.length > 0);
+}
+
 /** A night's card as the swipe stack shows it. */
 export function candidateToCard(c: NightCandidate): DeckCard {
   return {

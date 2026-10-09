@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, EyeIcon, MoreVertical, Popcorn, XCircle } from "lucide-react";
+import { ArrowLeft, EyeIcon, ListOrdered, MoreVertical, Popcorn, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -12,11 +12,14 @@ import { cn } from "@/lib/utils";
 export function NightHeader({
   night,
   canAct,
+  onBoard,
   onReveal,
   onCancel,
 }: {
   night: NightInfo;
   canAct: boolean;
+  /** Offered while swiping, when there is a leaderboard to look at first. */
+  onBoard?: () => void;
   onReveal: () => void;
   onCancel: () => void;
 }) {
@@ -69,6 +72,20 @@ export function NightHeader({
             role="menu"
             className="absolute top-full right-0 z-20 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-lg"
           >
+            {onBoard && (
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                onClick={() => {
+                  setOpen(false);
+                  onBoard();
+                }}
+              >
+                <ListOrdered className="size-4" />
+                See the leaderboard
+              </button>
+            )}
             {canAct && (
               <>
                 <button
