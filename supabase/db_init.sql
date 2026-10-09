@@ -999,6 +999,656 @@ create trigger watches_after_delete
   for each row execute function public.after_watch_delete();
 
 -- ---------------------------------------------------------------------------
+--  Movie nights: stacks of titles to swipe, votes, and the results
+-- ---------------------------------------------------------------------------
+
+-- A night nobody has touched for 12 hours is over. Everything that reads or changes a night calls this first.
+create function public.settle_movie_night(p_night uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.movie_nights
+  set status = 'expired', ended_at = now()
+  where id = p_night and status = 'open' and last_activity_at < now() - interval '12 hours';
+$$;
+
+-- Loads a night for a member of its family (after expiring it if it went quiet); anyone else is told it isn't there.
+create function public.movie_night_for_member(p_night uuid)
+returns public.movie_nights
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n public.movie_nights;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in';
+  end if;
+  perform public.settle_movie_night(p_night);
+  select * into n from public.movie_nights where id = p_night;
+  if not found or not public.is_group_member(n.group_id, auth.uid()) then
+    raise exception 'This movie night is not available';
+  end if;
+  return n;
+end;
+$$;
+
+-- Stops with a plain message unless the night is still open.
+create function public.movie_night_require_open(n public.movie_nights)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if n.status = 'open' then
+    return;
+  end if;
+  if n.status = 'closed' then
+    raise exception '% already picked %',
+      coalesce((select display_name from public.profiles where id = n.ended_by), 'Someone'),
+      coalesce((select title from public.media where id = n.picked_media_id), 'a title');
+  elsif n.status = 'cancelled' then
+    raise exception 'This movie night was cancelled';
+  end if;
+  raise exception 'This movie night ended after 12 hours without anyone voting';
+end;
+$$;
+
+-- Checks the cards of a new stack: [{"media_id": ..., "list_item_id": ... or null, "origin": "list" or "suggested"}].
+-- Only a night's first stack may use family list titles (p_allow_list).
+create function public.movie_night_check_candidates(p_group uuid, p_candidates jsonb, p_allow_list boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_n integer;
+begin
+  if jsonb_typeof(p_candidates) is distinct from 'array' then
+    raise exception 'Pick the titles for the stack';
+  end if;
+  v_n := jsonb_array_length(p_candidates);
+  if v_n < 8 or v_n > 40 then
+    raise exception 'A stack has 8 to 40 titles';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_candidates) as e(elem)
+    where jsonb_typeof(e.elem) is distinct from 'object'
+       or e.elem ->> 'media_id' is null
+       or coalesce(e.elem ->> 'origin', '') not in ('list', 'suggested')
+       or (e.elem ->> 'origin' = 'list' and (not p_allow_list or e.elem ->> 'list_item_id' is null))
+       or (e.elem ->> 'origin' = 'suggested' and e.elem ->> 'list_item_id' is not null)
+  ) then
+    raise exception 'Some of these titles are not valid';
+  end if;
+  if (select count(distinct e.elem ->> 'media_id') from jsonb_array_elements(p_candidates) as e(elem)) <> v_n then
+    raise exception 'A title can only be in a stack once';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_candidates) as e(elem)
+    where not exists (select 1 from public.media m where m.id = (e.elem ->> 'media_id')::uuid)
+  ) then
+    raise exception 'Some of these titles are not valid';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_candidates) as e(elem)
+    where e.elem ->> 'origin' = 'list'
+      and not exists (
+        select 1 from public.list_items li
+        where li.id = (e.elem ->> 'list_item_id')::uuid
+          and li.group_id = p_group
+          and li.media_id = (e.elem ->> 'media_id')::uuid
+          and li.deleted_at is null
+      )
+  ) then
+    raise exception 'Some of these titles are not on the family list';
+  end if;
+end;
+$$;
+
+-- Starts a movie night for a family with its first stack. Any member can; one night at a time per family.
+-- p_genres: up to 5 browse category slugs. p_options: {"series": bool, "count": 8-40, "max": minutes or null}.
+create function public.start_movie_night(
+  p_group      uuid,
+  p_genres     text[],
+  p_options    jsonb,
+  p_candidates jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_genres  text[] := coalesce(p_genres, '{}');
+  v_options jsonb;
+  v_night   uuid;
+  v_stack   uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in';
+  end if;
+  if not public.is_group_member(p_group, auth.uid()) then
+    raise exception 'You are not in this family';
+  end if;
+  perform public.hit_rate_limit(auth.uid(), 'start_movie_night', 6, 3600);
+
+  if cardinality(v_genres) > 5
+     or exists (select 1 from unnest(v_genres) as g where g is null or g = '' or char_length(g) > 40) then
+    raise exception 'Pick up to 5 genres';
+  end if;
+  if jsonb_typeof(coalesce(p_options, '{}'::jsonb)) is distinct from 'object' then
+    raise exception 'Those options are not valid';
+  end if;
+  v_options := jsonb_build_object(
+    'series', coalesce((p_options ->> 'series')::boolean, false),
+    'count',  coalesce((p_options ->> 'count')::integer, 25),
+    'max',    (p_options ->> 'max')::integer
+  );
+  if (v_options ->> 'count')::integer not between 8 and 40 then
+    raise exception 'A stack has 8 to 40 titles';
+  end if;
+
+  -- A night that went quiet is over; one that is still going blocks a new one.
+  update public.movie_nights
+  set status = 'expired', ended_at = now()
+  where group_id = p_group and status = 'open' and last_activity_at < now() - interval '12 hours';
+  if exists (select 1 from public.movie_nights where group_id = p_group and status = 'open') then
+    raise exception 'This family already has a movie night open';
+  end if;
+
+  perform public.movie_night_check_candidates(p_group, p_candidates, true);
+
+  insert into public.movie_nights (group_id, started_by, genres, options)
+  values (p_group, auth.uid(), v_genres, v_options)
+  returning id into v_night;
+  insert into public.movie_night_members (night_id, user_id) values (v_night, auth.uid());
+  insert into public.movie_night_stacks (night_id, position, created_by)
+  values (v_night, 1, auth.uid())
+  returning id into v_stack;
+  insert into public.movie_night_candidates (night_id, stack_id, media_id, list_item_id, origin, position)
+  select v_night, v_stack, (e.elem ->> 'media_id')::uuid, (e.elem ->> 'list_item_id')::uuid,
+         e.elem ->> 'origin', e.pos::smallint
+  from jsonb_array_elements(p_candidates) with ordinality as e(elem, pos);
+
+  perform public.add_activity(
+    p_group, 'movie_night_started', null, null, null,
+    case when cardinality(v_genres) = 0 then null else array_to_string(v_genres, ', ') end
+  );
+  return v_night;
+end;
+$$;
+
+-- Takes part in a night (so people can see who is in), without voting yet.
+create function public.join_movie_night(p_night uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n public.movie_nights;
+begin
+  n := public.movie_night_for_member(p_night);
+  if n.status <> 'open' then
+    return;
+  end if;
+  insert into public.movie_night_members (night_id, user_id)
+  values (p_night, auth.uid())
+  on conflict do nothing;
+  if found then
+    update public.movie_nights set last_activity_at = now() where id = p_night;
+  end if;
+end;
+$$;
+
+-- Saves a batch of votes on one stack: [{"candidate_id": ..., "vote": "nope"|"yes"|"love"|"seen" or null to take it back}].
+-- At most 3 loves per person in a stack; any problem and none of the batch is saved. Returns the loves used.
+create function public.cast_movie_night_votes(p_stack uuid, p_votes jsonb)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n       public.movie_nights;
+  v_stack public.movie_night_stacks;
+  v_loves integer;
+  r       record;
+begin
+  select * into v_stack from public.movie_night_stacks where id = p_stack;
+  if not found then
+    raise exception 'This movie night is not available';
+  end if;
+  n := public.movie_night_for_member(v_stack.night_id);
+  perform public.movie_night_require_open(n);
+  if v_stack.revealed_at is not null then
+    raise exception 'The results for this stack are already out';
+  end if;
+  if exists (select 1 from public.movie_night_finishes where stack_id = p_stack and user_id = auth.uid()) then
+    raise exception 'You have already finished this stack';
+  end if;
+  if jsonb_typeof(p_votes) is distinct from 'array' or jsonb_array_length(p_votes) > 60 then
+    raise exception 'Too many votes at once';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_votes) as e(elem)
+    where jsonb_typeof(e.elem) is distinct from 'object'
+       or not exists (
+            select 1 from public.movie_night_candidates c
+            where c.id = (e.elem ->> 'candidate_id')::uuid and c.stack_id = p_stack)
+       or (e.elem ->> 'vote' is not null and e.elem ->> 'vote' not in ('nope', 'yes', 'love', 'seen'))
+  ) then
+    raise exception 'Those votes are not for this stack';
+  end if;
+
+  for r in
+    select (e.elem ->> 'candidate_id')::uuid as candidate_id, e.elem ->> 'vote' as vote
+    from jsonb_array_elements(p_votes) with ordinality as e(elem, pos)
+    order by e.pos
+  loop
+    if r.vote is null then
+      delete from public.movie_night_votes where candidate_id = r.candidate_id and user_id = auth.uid();
+    else
+      insert into public.movie_night_votes (candidate_id, user_id, vote)
+      values (r.candidate_id, auth.uid(), r.vote)
+      on conflict (candidate_id, user_id) do update set vote = excluded.vote, voted_at = now();
+    end if;
+  end loop;
+
+  select count(*) into v_loves
+  from public.movie_night_votes v
+  join public.movie_night_candidates c on c.id = v.candidate_id
+  where c.stack_id = p_stack and v.user_id = auth.uid() and v.vote = 'love';
+  if v_loves > 3 then
+    raise exception 'You can love at most 3 titles in a stack';
+  end if;
+
+  insert into public.movie_night_members (night_id, user_id) values (n.id, auth.uid()) on conflict do nothing;
+  update public.movie_nights set last_activity_at = now() where id = n.id;
+  return v_loves;
+end;
+$$;
+
+-- Marks the caller's swiping of a stack as done. Quietly does nothing once the night is over.
+create function public.finish_movie_night_stack(p_stack uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n       public.movie_nights;
+  v_stack public.movie_night_stacks;
+begin
+  select * into v_stack from public.movie_night_stacks where id = p_stack;
+  if not found then
+    raise exception 'This movie night is not available';
+  end if;
+  n := public.movie_night_for_member(v_stack.night_id);
+  if n.status <> 'open' then
+    return;
+  end if;
+  insert into public.movie_night_finishes (stack_id, user_id) values (p_stack, auth.uid()) on conflict do nothing;
+  insert into public.movie_night_members (night_id, user_id) values (n.id, auth.uid()) on conflict do nothing;
+  update public.movie_nights set last_activity_at = now() where id = n.id;
+end;
+$$;
+
+-- Adds another stack of suggestions (up to 5 stacks per night). p_known_stacks is how many the caller can see:
+-- if someone added one in the meantime, the caller gets that one back instead of a second.
+create function public.add_movie_night_stack(p_night uuid, p_known_stacks integer, p_candidates jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n       public.movie_nights;
+  v_count integer;
+  v_stack uuid;
+begin
+  n := public.movie_night_for_member(p_night);
+  perform public.movie_night_require_open(n);
+  perform public.hit_rate_limit(auth.uid(), 'add_movie_night_stack', 10, 3600);
+
+  -- Two people asking at once take turns.
+  perform 1 from public.movie_nights where id = p_night for update;
+  select count(*) into v_count from public.movie_night_stacks where night_id = p_night;
+  if v_count <> p_known_stacks then
+    select id into v_stack from public.movie_night_stacks where night_id = p_night order by position desc limit 1;
+    return v_stack;
+  end if;
+  if v_count >= 5 then
+    raise exception 'This movie night already has 5 stacks';
+  end if;
+
+  perform public.movie_night_check_candidates(n.group_id, p_candidates, false);
+  if exists (
+    select 1
+    from jsonb_array_elements(p_candidates) as e(elem)
+    join public.movie_night_candidates c
+      on c.night_id = p_night and c.media_id = (e.elem ->> 'media_id')::uuid
+  ) then
+    raise exception 'Some of these titles are already in this movie night';
+  end if;
+
+  insert into public.movie_night_stacks (night_id, position, created_by)
+  values (p_night, v_count + 1, auth.uid())
+  returning id into v_stack;
+  insert into public.movie_night_candidates (night_id, stack_id, media_id, origin, position)
+  select p_night, v_stack, (e.elem ->> 'media_id')::uuid, 'suggested', e.pos::smallint
+  from jsonb_array_elements(p_candidates) with ordinality as e(elem, pos);
+  update public.movie_nights set last_activity_at = now() where id = p_night;
+  return v_stack;
+end;
+$$;
+
+-- Shows the results now: voting on the stacks that are still open ends, so everyone can see how they came out.
+create function public.reveal_movie_night(p_night uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n public.movie_nights;
+begin
+  n := public.movie_night_for_member(p_night);
+  perform public.movie_night_require_open(n);
+  update public.movie_night_stacks set revealed_at = now() where night_id = p_night and revealed_at is null;
+  update public.movie_nights set last_activity_at = now() where id = p_night;
+end;
+$$;
+
+create function public.cancel_movie_night(p_night uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n public.movie_nights;
+begin
+  n := public.movie_night_for_member(p_night);
+  perform public.movie_night_require_open(n);
+  update public.movie_nights
+  set status = 'cancelled', ended_at = now(), ended_by = auth.uid()
+  where id = p_night;
+  perform public.add_activity(n.group_id, 'movie_night_cancelled');
+end;
+$$;
+
+-- Everything the room needs about one night, as the caller may see it, in one go: the night, its stacks, who is
+-- taking part and how far they are, the caller's own votes and, for each stack the caller has finished (or that
+-- someone revealed, or once the night is over), the ranked results with who voted what. p_full also sends the cards.
+create function public.movie_night_state(p_night uuid, p_full boolean default false)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n            public.movie_nights;
+  v_me         uuid := auth.uid();
+  v_ended      boolean;
+  v_night      jsonb;
+  v_stacks     jsonb;
+  v_members    jsonb;
+  v_candidates jsonb := '[]'::jsonb;
+  v_votes      jsonb;
+  v_results    jsonb;
+begin
+  n := public.movie_night_for_member(p_night);
+  v_ended := n.status <> 'open';
+
+  v_night := jsonb_build_object(
+    'id', n.id,
+    'group_id', n.group_id,
+    'group_name', (select name from public.groups where id = n.group_id),
+    'status', n.status,
+    'source', n.source,
+    'started_by', n.started_by,
+    'started_by_name', (select display_name from public.profiles where id = n.started_by),
+    'genres', to_jsonb(n.genres),
+    'options', n.options,
+    'created_at', n.created_at,
+    'last_activity_at', n.last_activity_at,
+    'ended_at', n.ended_at,
+    'ended_by', n.ended_by,
+    'ended_by_name', (select display_name from public.profiles where id = n.ended_by),
+    'picked_media_id', n.picked_media_id,
+    'picked_title', (select title from public.media where id = n.picked_media_id),
+    'picked_list_item_id', n.picked_list_item_id,
+    'happened_on', n.happened_on
+  );
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', s.id,
+      'position', s.position,
+      'created_by', s.created_by,
+      'created_by_name', (select display_name from public.profiles where id = s.created_by),
+      'created_at', s.created_at,
+      'revealed', s.revealed_at is not null,
+      'total', (select count(*) from public.movie_night_candidates c where c.stack_id = s.id),
+      'my_voted', (select count(*) from public.movie_night_votes v
+                   join public.movie_night_candidates c on c.id = v.candidate_id
+                   where c.stack_id = s.id and v.user_id = v_me),
+      'my_loves', (select count(*) from public.movie_night_votes v
+                   join public.movie_night_candidates c on c.id = v.candidate_id
+                   where c.stack_id = s.id and v.user_id = v_me and v.vote = 'love'),
+      'my_finished', exists (select 1 from public.movie_night_finishes f where f.stack_id = s.id and f.user_id = v_me),
+      'can_see_results', v_ended or s.revealed_at is not null
+                         or exists (select 1 from public.movie_night_finishes f where f.stack_id = s.id and f.user_id = v_me)
+    ) order by s.position), '[]'::jsonb)
+  into v_stacks
+  from public.movie_night_stacks s
+  where s.night_id = p_night;
+
+  -- The whole family, plus anyone who took part and has left since.
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'user_id', u.user_id,
+      'name', p.display_name,
+      'avatar_url', p.avatar_url,
+      'joined', mm.user_id is not null,
+      'watched', coalesce(mm.watched, false),
+      'stacks', (select coalesce(jsonb_agg(jsonb_build_object(
+                   'stack_id', s.id,
+                   'voted', (select count(*) from public.movie_night_votes v
+                             join public.movie_night_candidates c on c.id = v.candidate_id
+                             where c.stack_id = s.id and v.user_id = u.user_id),
+                   'finished', exists (select 1 from public.movie_night_finishes f
+                                       where f.stack_id = s.id and f.user_id = u.user_id)
+                 ) order by s.position), '[]'::jsonb)
+                 from public.movie_night_stacks s where s.night_id = p_night)
+    ) order by p.display_name, u.user_id), '[]'::jsonb)
+  into v_members
+  from (
+    select gm.user_id from public.group_members gm where gm.group_id = n.group_id
+    union
+    select mm2.user_id from public.movie_night_members mm2 where mm2.night_id = p_night
+  ) u
+  join public.profiles p on p.id = u.user_id
+  left join public.movie_night_members mm on mm.night_id = p_night and mm.user_id = u.user_id;
+
+  if p_full then
+    select coalesce(jsonb_agg(jsonb_build_object(
+        'id', c.id,
+        'stack_id', c.stack_id,
+        'position', c.position,
+        'origin', c.origin,
+        'list_item_id', c.list_item_id,
+        'media_id', m.id,
+        'tmdb_id', m.tmdb_id,
+        'media_type', m.media_type,
+        'title', m.title,
+        'year', m.release_year,
+        'poster_path', m.poster_path,
+        'backdrop_path', m.backdrop_path,
+        'overview', m.overview,
+        'rating', m.tmdb_rating,
+        'runtime', m.runtime,
+        'genres', m.genres,
+        'trailer_key', m.trailer_key
+      ) order by s.position, c.position), '[]'::jsonb)
+    into v_candidates
+    from public.movie_night_candidates c
+    join public.movie_night_stacks s on s.id = c.stack_id
+    join public.media m on m.id = c.media_id
+    where c.night_id = p_night;
+  end if;
+
+  select coalesce(jsonb_object_agg(v.candidate_id, v.vote), '{}'::jsonb)
+  into v_votes
+  from public.movie_night_votes v
+  join public.movie_night_candidates c on c.id = v.candidate_id
+  where c.night_id = p_night and v.user_id = v_me;
+
+  -- Ranked: points, then fewer nopes, more loves, the better TMDB score, and the order of the cards.
+  with visible as (
+    select s.id
+    from public.movie_night_stacks s
+    where s.night_id = p_night
+      and (v_ended or s.revealed_at is not null
+           or exists (select 1 from public.movie_night_finishes f where f.stack_id = s.id and f.user_id = v_me))
+  ), tally as (
+    select c.id as candidate_id, c.media_id, c.position, m.tmdb_rating,
+           sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 1 else -1 end)::integer as points,
+           count(*) filter (where v.vote = 'love')::integer as loves,
+           count(*) filter (where v.vote = 'yes')::integer as yes,
+           count(*) filter (where v.vote = 'seen')::integer as seen,
+           count(*) filter (where v.vote = 'nope')::integer as nopes
+    from public.movie_night_candidates c
+    join visible on visible.id = c.stack_id
+    join public.movie_night_votes v on v.candidate_id = c.id
+    join public.media m on m.id = c.media_id
+    group by c.id, c.media_id, c.position, m.tmdb_rating
+  ), ranked as (
+    select t.*,
+           row_number() over (order by t.points desc, t.nopes asc, t.loves desc,
+                                       t.tmdb_rating desc nulls last, t.position asc, t.candidate_id) as rank
+    from tally t
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'candidate_id', r.candidate_id,
+      'rank', r.rank,
+      'points', r.points,
+      'loves', r.loves,
+      'yes', r.yes,
+      'seen', r.seen,
+      'nopes', r.nopes,
+      'votes', (select jsonb_agg(jsonb_build_object('user_id', v.user_id, 'name', p.display_name, 'vote', v.vote)
+                                 order by p.display_name, v.user_id)
+                from public.movie_night_votes v
+                join public.profiles p on p.id = v.user_id
+                where v.candidate_id = r.candidate_id),
+      'on_family_list', exists (select 1 from public.list_items li
+                                where li.group_id = n.group_id and li.media_id = r.media_id and li.deleted_at is null),
+      'family_item_id', (select li.id from public.list_items li
+                         where li.group_id = n.group_id and li.media_id = r.media_id and li.deleted_at is null),
+      'on_my_list', exists (select 1 from public.list_items li
+                            where li.group_id is null and li.added_by = v_me and li.media_id = r.media_id
+                              and li.deleted_at is null)
+    ) order by r.rank), '[]'::jsonb)
+  into v_results
+  from ranked r;
+
+  return jsonb_build_object(
+    'me', v_me,
+    'night', v_night,
+    'stacks', v_stacks,
+    'members', v_members,
+    'candidates', v_candidates,
+    'my_votes', v_votes,
+    'results', v_results
+  );
+end;
+$$;
+
+-- The caller's open movie nights, for the invite popup, the dot on the menu and the banners.
+create function public.active_movie_nights()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null then
+    return '[]'::jsonb;
+  end if;
+  update public.movie_nights mn
+  set status = 'expired', ended_at = now()
+  where mn.status = 'open' and mn.last_activity_at < now() - interval '12 hours'
+    and public.is_group_member(mn.group_id, v_me);
+
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'night_id', n.id,
+      'group_id', n.group_id,
+      'group_name', g.name,
+      'started_by', n.started_by,
+      'started_by_name', p.display_name,
+      'created_at', n.created_at,
+      'genres', to_jsonb(n.genres),
+      'joined', exists (select 1 from public.movie_night_members mm where mm.night_id = n.id and mm.user_id = v_me),
+      'stacks', (select count(*) from public.movie_night_stacks s where s.night_id = n.id),
+      -- Stacks still open for voting that the caller hasn't finished.
+      'waiting_stacks', (select count(*) from public.movie_night_stacks s
+                         where s.night_id = n.id and s.revealed_at is null
+                           and not exists (select 1 from public.movie_night_finishes f
+                                           where f.stack_id = s.id and f.user_id = v_me)),
+      'members', (select count(*) from public.group_members gm where gm.group_id = n.group_id),
+      'done_members', (select count(*) from public.group_members gm
+                       where gm.group_id = n.group_id
+                         and not exists (select 1 from public.movie_night_stacks s
+                                         where s.night_id = n.id and s.revealed_at is null
+                                           and not exists (select 1 from public.movie_night_finishes f
+                                                           where f.stack_id = s.id and f.user_id = gm.user_id)))
+    ) order by n.created_at desc)
+    from public.movie_nights n
+    join public.groups g on g.id = n.group_id
+    left join public.profiles p on p.id = n.started_by
+    where n.status = 'open' and public.is_group_member(n.group_id, v_me)
+  ), '[]'::jsonb);
+end;
+$$;
+
+-- Someone who leaves a family drops out of its movie night that is still going; nights that are over keep their votes.
+create function public.movie_night_member_left()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.movie_night_votes v
+  using public.movie_night_candidates c, public.movie_nights n
+  where v.candidate_id = c.id and c.night_id = n.id
+    and n.group_id = old.group_id and n.status = 'open' and v.user_id = old.user_id;
+  delete from public.movie_night_finishes f
+  using public.movie_night_stacks s, public.movie_nights n
+  where f.stack_id = s.id and s.night_id = n.id
+    and n.group_id = old.group_id and n.status = 'open' and f.user_id = old.user_id;
+  delete from public.movie_night_members m
+  using public.movie_nights n
+  where m.night_id = n.id
+    and n.group_id = old.group_id and n.status = 'open' and m.user_id = old.user_id;
+  return null;
+end;
+$$;
+
+create trigger group_members_movie_night
+  after delete on public.group_members
+  for each row execute function public.movie_night_member_left();
+
+-- ---------------------------------------------------------------------------
 --  Activity feed: written only by these triggers and functions
 -- ---------------------------------------------------------------------------
 
@@ -1246,6 +1896,31 @@ revoke execute on function public.can_see_item(uuid) from public, anon;
 grant execute on function public.can_see_item(uuid) to authenticated;
 revoke execute on function public.can_see_night(uuid) from public, anon;
 grant execute on function public.can_see_night(uuid) to authenticated;
+
+-- Movie nights: the helpers are internal; the rest is for signed-in users.
+revoke execute on function public.settle_movie_night(uuid) from public, anon, authenticated;
+revoke execute on function public.movie_night_for_member(uuid) from public, anon, authenticated;
+revoke execute on function public.movie_night_require_open(public.movie_nights) from public, anon, authenticated;
+revoke execute on function public.movie_night_check_candidates(uuid, jsonb, boolean) from public, anon, authenticated;
+revoke execute on function public.movie_night_member_left() from public, anon, authenticated;
+revoke execute on function public.start_movie_night(uuid, text[], jsonb, jsonb) from public, anon;
+grant execute on function public.start_movie_night(uuid, text[], jsonb, jsonb) to authenticated;
+revoke execute on function public.join_movie_night(uuid) from public, anon;
+grant execute on function public.join_movie_night(uuid) to authenticated;
+revoke execute on function public.cast_movie_night_votes(uuid, jsonb) from public, anon;
+grant execute on function public.cast_movie_night_votes(uuid, jsonb) to authenticated;
+revoke execute on function public.finish_movie_night_stack(uuid) from public, anon;
+grant execute on function public.finish_movie_night_stack(uuid) to authenticated;
+revoke execute on function public.add_movie_night_stack(uuid, integer, jsonb) from public, anon;
+grant execute on function public.add_movie_night_stack(uuid, integer, jsonb) to authenticated;
+revoke execute on function public.reveal_movie_night(uuid) from public, anon;
+grant execute on function public.reveal_movie_night(uuid) to authenticated;
+revoke execute on function public.cancel_movie_night(uuid) from public, anon;
+grant execute on function public.cancel_movie_night(uuid) to authenticated;
+revoke execute on function public.movie_night_state(uuid, boolean) from public, anon;
+grant execute on function public.movie_night_state(uuid, boolean) to authenticated;
+revoke execute on function public.active_movie_nights() from public, anon;
+grant execute on function public.active_movie_nights() to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.
 notify pgrst, 'reload schema';
