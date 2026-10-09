@@ -98,6 +98,7 @@ export function SwipeDeck({
   onSkip,
   finishText,
   finishButton,
+  heightClass = STACK_HEIGHT,
 }: {
   /** In the order they should be shown. */
   cards: DeckCard[];
@@ -113,6 +114,8 @@ export function SwipeDeck({
   onSkip?: () => void;
   finishText: string;
   finishButton: string;
+  /** The stack's height; the default leaves room for the app's header and bottom bar plus one line above the stack. */
+  heightClass?: string;
 }) {
   const [index, setIndex] = useState(() => Math.min(Math.max(startAt, 0), cards.length));
   const [history, setHistory] = useState<number[]>([]);
@@ -324,7 +327,7 @@ export function SwipeDeck({
         <div
           className={cn(
             "flex w-full max-w-sm flex-col items-center justify-center gap-4 rounded-2xl border border-border bg-card p-6 text-center",
-            STACK_HEIGHT,
+            heightClass,
           )}
         >
           <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
@@ -338,7 +341,7 @@ export function SwipeDeck({
           </div>
         </div>
       ) : (
-        <div className={cn("relative mx-auto mb-6 aspect-[2/3] max-w-full", STACK_HEIGHT)}>
+        <div className={cn("relative mx-auto mb-6 aspect-[2/3] max-w-full", heightClass)}>
           {shown.map((card, pos) => {
             const top = pos === 0;
             const style: CSSProperties = {
@@ -367,7 +370,7 @@ export function SwipeDeck({
                 )}
                 style={style}
               >
-                <SwipeCardFace card={card} priority={top} onInfo={top ? () => setInfo(card) : undefined} />
+                <SwipeCardFace card={card} priority={pos < 2} onInfo={top ? () => setInfo(card) : undefined} />
               </div>
             );
           })}

@@ -2,11 +2,21 @@ import { Popcorn } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { Hub } from "@/components/movie-night/hub";
-import { getSessionProfile } from "@/lib/data";
+import { getActiveMovieNights, getMyGroups, getSessionProfile } from "@/lib/data";
 
-export default async function MovieNightPage() {
+/** Movie night: swipe through titles on your own, or start one for a family and let the votes decide. */
+export default async function MovieNightPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
+
+  const { who: whoParam } = await searchParams;
+  const groups = await getMyGroups();
+  const who = groups.find((g) => g.id === (Array.isArray(whoParam) ? whoParam[0] : whoParam))?.id ?? null;
+  const openNight = who ? ((await getActiveMovieNights()).find((n) => n.group_id === who) ?? null) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -16,10 +26,14 @@ export default async function MovieNightPage() {
           Movie night
         </h1>
         <p className="text-muted-foreground">
-          Can&apos;t decide what to watch? Swipe through titles that fit your mood.
+          Can&apos;t decide what to watch? Swipe through titles that fit your mood, alone or with your family.
         </p>
       </div>
-      <Hub />
+      <Hub
+        families={groups.map((g) => ({ id: g.id, name: g.name, members: g.memberCount }))}
+        who={who}
+        openNight={openNight}
+      />
     </div>
   );
 }

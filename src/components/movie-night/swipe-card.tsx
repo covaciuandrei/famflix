@@ -17,7 +17,7 @@ export function SwipeCardFace({
   onInfo,
 }: {
   card: DeckCard;
-  /** The top card's poster loads first. */
+  /** The top card's poster loads first, and the next one with it so it is ready after a swipe. */
   priority: boolean;
   onInfo?: () => void;
 }) {
