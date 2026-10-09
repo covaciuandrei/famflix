@@ -122,7 +122,7 @@ test("watched together: the others confirm their score and add a note", async ({
   await Promise.all([anaPage, bogdanPage].map((page) => page.context().close()));
 });
 
-test("I wasn't there: the title goes back to To watch only when nobody else was there", async ({ browser }, testInfo) => {
+test("I wasn't there, or deleting an account: the title goes back to To watch only when nobody is left on the record", async ({ browser }, testInfo) => {
   const ana = await createUser("Ana");
   const bogdan = await createUser("Bogdan");
   const anaPage = await openAs(browser, testInfo.project, ana);
@@ -133,12 +133,17 @@ test("I wasn't there: the title goes back to To watch only when nobody else was 
   await addTo(anaPage, anaPage, "Test family");
   await expect(anaPage.getByRole("img", { name: /On Test family/ })).toBeVisible();
 
+  const { data: item } = await admin
+    .from("list_items")
+    .select("id")
+    .eq("added_by", ana.id)
+    .not("group_id", "is", null)
+    .single();
   const dune = async () => {
     const { data } = await admin
       .from("list_items")
       .select("status, watches(user_id)")
-      .eq("added_by", ana.id)
-      .not("group_id", "is", null)
+      .eq("id", (item as { id: string }).id)
       .single();
     const row = data as { status: string; watches: { user_id: string }[] };
     return { status: row.status, viewers: row.watches.map((w) => w.user_id) };
@@ -178,6 +183,19 @@ test("I wasn't there: the title goes back to To watch only when nobody else was 
     listCard(bogdanPage, "Dune").getByRole("button", { name: "Watched", exact: true }),
   ).toBeVisible();
   expect(await dune()).toEqual({ status: "watched", viewers: [ana.id] });
+
+  // Ana, the only one left on the record, deletes her account, which takes her off it too. Bogdan carries on with
+  // the family and its titles, and Dune is back on his To watch.
+  await anaPage.goto("/app/settings");
+  await anaPage.getByRole("button", { name: "Delete account" }).click();
+  await anaPage.getByLabel("Type DELETE to confirm").fill("DELETE");
+  await anaPage.getByRole("button", { name: "Delete my account" }).click();
+  await expect(anaPage.getByText("Your account and your data have been deleted.")).toBeVisible();
+  expect(await dune()).toEqual({ status: "want", viewers: [] });
+  await openFamily(bogdanPage, "Test family");
+  await expect(
+    listCard(bogdanPage, "Dune").getByRole("button", { name: "Mark watched" }),
+  ).toBeVisible();
 
   await Promise.all([anaPage, bogdanPage].map((page) => page.context().close()));
 });
