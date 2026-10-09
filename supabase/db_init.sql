@@ -871,6 +871,7 @@ declare
   v_group uuid;
   v record;
   v_names text;
+  v_users uuid[] := '{}';
 begin
   if auth.uid() is null then
     raise exception 'You must be signed in';
@@ -902,6 +903,7 @@ begin
     if v.score is not null and (v.score < 1 or v.score > 10) then
       raise exception 'Scores must be between 1 and 10';
     end if;
+    v_users := v_users || v.user_id;
 
     insert into public.watches as w (list_item_id, user_id, watched_on, logged_by)
     values (p_item, v.user_id, p_watched_on, auth.uid())
@@ -931,6 +933,9 @@ begin
   update public.list_items
   set status = 'watched', watched_at = now()
   where id = p_item and status <> 'watched';
+
+  -- A movie night the family has going for this title ends with it; otherwise it goes in the history as a night.
+  perform public.record_movie_night_watch(p_item, p_watched_on, v_users);
 end;
 $$;
 
@@ -990,6 +995,16 @@ begin
     set status = 'want', watched_at = null
     where id = old.list_item_id and status = 'watched';
   end if;
+
+  -- The movie night history follows: that person didn't watch it after all, and a "logged" night nobody is left
+  -- on never happened.
+  update public.movie_night_members m
+  set watched = false
+  from public.movie_nights n
+  where n.id = m.night_id and n.picked_list_item_id = old.list_item_id and m.user_id = old.user_id;
+  delete from public.movie_nights n
+  where n.source = 'logged' and n.picked_list_item_id = old.list_item_id
+    and not exists (select 1 from public.movie_night_members m where m.night_id = n.id and m.watched);
   return null;
 end;
 $$;
@@ -1648,6 +1663,174 @@ create trigger group_members_movie_night
   after delete on public.group_members
   for each row execute function public.movie_night_member_left();
 
+-- Puts a night's best titles on the family list: the first 7 by rank (as in movie_night_state) among those with more than
+-- 0 points, skipping what is already on the list and bringing back what was removed. Writes one "added N titles"
+-- event in the caller's name. Returns how many went on the list.
+create function public.movie_night_add_top_titles(p_night uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group   uuid;
+  r         record;
+  v_item    uuid;
+  v_deleted timestamptz;
+  v_added   integer := 0;
+begin
+  select group_id into v_group from public.movie_nights where id = p_night;
+  perform set_config('famflix.adding_from_night', 'on', true);
+  for r in
+    select c.media_id
+    from public.movie_night_candidates c
+    join public.movie_night_votes v on v.candidate_id = c.id
+    join public.media m on m.id = c.media_id
+    where c.night_id = p_night
+    group by c.id, c.media_id, c.position, m.tmdb_rating
+    having sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 1 else -1 end) > 0
+    order by sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 1 else -1 end) desc,
+             count(*) filter (where v.vote = 'nope') asc,
+             count(*) filter (where v.vote = 'love') desc,
+             m.tmdb_rating desc nulls last, c.position asc, c.id
+    limit 7
+  loop
+    select id, deleted_at into v_item, v_deleted
+    from public.list_items where group_id = v_group and media_id = r.media_id;
+    if not found then
+      insert into public.list_items (group_id, added_by, media_id) values (v_group, auth.uid(), r.media_id);
+      v_added := v_added + 1;
+    elsif v_deleted is not null then
+      update public.list_items set deleted_at = null where id = v_item;
+      v_added := v_added + 1;
+    end if;
+  end loop;
+  perform set_config('famflix.adding_from_night', 'off', true);
+  if v_added > 0 then
+    perform public.add_activity(v_group, 'movie_night_added', null, null, null, v_added::text);
+  end if;
+  return v_added;
+end;
+$$;
+
+-- For a night that ended with nobody picking (cancelled or expired): adds its best titles to the family list.
+create function public.add_movie_night_top_titles(p_night uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n public.movie_nights;
+begin
+  n := public.movie_night_for_member(p_night);
+  if n.source <> 'swipe' or n.status not in ('cancelled', 'expired') then
+    raise exception 'The best titles are added when someone picks one';
+  end if;
+  return public.movie_night_add_top_titles(p_night);
+end;
+$$;
+
+-- Called by log_watch once a watch is saved. If the family has a movie night going with this title as one of its cards,
+-- the night ends with it (a pick), and its best titles join the family list. Otherwise the watch becomes a "logged" night
+-- in the history, merging with one for the same title and day. The people who watched are marked on it.
+create function public.record_movie_night_watch(p_item uuid, p_date date, p_viewers uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group uuid;
+  v_media uuid;
+  v_night uuid;
+begin
+  select group_id, media_id into v_group, v_media from public.list_items where id = p_item;
+  if v_group is null then
+    return;
+  end if;
+  update public.movie_nights
+  set status = 'expired', ended_at = now()
+  where group_id = v_group and status = 'open' and last_activity_at < now() - interval '12 hours';
+
+  select n.id into v_night
+  from public.movie_nights n
+  join public.movie_night_candidates c on c.night_id = n.id
+  where n.group_id = v_group and n.status = 'open' and c.media_id = v_media
+  limit 1;
+
+  if v_night is not null then
+    update public.movie_nights
+    set status = 'closed', ended_at = now(), ended_by = auth.uid(), picked_media_id = v_media,
+        picked_list_item_id = p_item, happened_on = p_date, last_activity_at = now()
+    where id = v_night;
+    perform public.movie_night_add_top_titles(v_night);
+  else
+    -- Someone else saving the same pick a moment later joins that night instead of making another.
+    select id into v_night
+    from public.movie_nights
+    where group_id = v_group and status = 'closed' and picked_media_id = v_media and happened_on = p_date
+    order by created_at
+    limit 1;
+    if v_night is null then
+      insert into public.movie_nights
+        (group_id, source, status, started_by, ended_at, ended_by, picked_media_id, picked_list_item_id, happened_on)
+      values (v_group, 'logged', 'closed', auth.uid(), now(), auth.uid(), v_media, p_item, p_date)
+      returning id into v_night;
+    end if;
+  end if;
+
+  insert into public.movie_night_members (night_id, user_id, watched)
+  select v_night, u, true from unnest(p_viewers) as u
+  on conflict (night_id, user_id) do update set watched = true;
+end;
+$$;
+
+-- Picks one of a night's cards to watch together: the title goes on the family list if it isn't there (or comes back
+-- if it was removed), and the watch is logged like Watched together does, which ends the night and adds its best titles.
+-- All in one go, so if the watch is refused nothing is added. Returns the list item, for the picker's note.
+create function public.pick_movie_night_card(
+  p_night      uuid,
+  p_candidate  uuid,
+  p_watched_on date,
+  p_viewers    jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n         public.movie_nights;
+  v_media   uuid;
+  v_item    uuid;
+  v_deleted timestamptz;
+begin
+  n := public.movie_night_for_member(p_night);
+  perform public.movie_night_require_open(n);
+  select media_id into v_media from public.movie_night_candidates where id = p_candidate and night_id = p_night;
+  if v_media is null then
+    raise exception 'That title is not in this movie night';
+  end if;
+
+  -- (set_config comes first: PERFORM would reset FOUND between the lookup and the check below.)
+  perform set_config('famflix.adding_from_night', 'on', true);
+  select id, deleted_at into v_item, v_deleted
+  from public.list_items where group_id = n.group_id and media_id = v_media;
+  if not found then
+    insert into public.list_items (group_id, added_by, media_id)
+    values (n.group_id, auth.uid(), v_media)
+    returning id into v_item;
+  elsif v_deleted is not null then
+    update public.list_items set deleted_at = null where id = v_item;
+  end if;
+  perform set_config('famflix.adding_from_night', 'off', true);
+
+  perform public.log_watch(v_item, p_watched_on, p_viewers);
+  return v_item;
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 --  Activity feed: written only by these triggers and functions
 -- ---------------------------------------------------------------------------
@@ -1703,6 +1886,10 @@ set search_path = public
 as $$
 begin
   if new.group_id is null then
+    return null;
+  end if;
+  -- A movie night putting titles on the list writes one "added N titles" event for all of them instead.
+  if current_setting('famflix.adding_from_night', true) = 'on' then
     return null;
   end if;
   if tg_op = 'INSERT' then
@@ -1903,6 +2090,8 @@ revoke execute on function public.movie_night_for_member(uuid) from public, anon
 revoke execute on function public.movie_night_require_open(public.movie_nights) from public, anon, authenticated;
 revoke execute on function public.movie_night_check_candidates(uuid, jsonb, boolean) from public, anon, authenticated;
 revoke execute on function public.movie_night_member_left() from public, anon, authenticated;
+revoke execute on function public.movie_night_add_top_titles(uuid) from public, anon, authenticated;
+revoke execute on function public.record_movie_night_watch(uuid, date, uuid[]) from public, anon, authenticated;
 revoke execute on function public.start_movie_night(uuid, text[], jsonb, jsonb) from public, anon;
 grant execute on function public.start_movie_night(uuid, text[], jsonb, jsonb) to authenticated;
 revoke execute on function public.join_movie_night(uuid) from public, anon;
@@ -1921,6 +2110,10 @@ revoke execute on function public.movie_night_state(uuid, boolean) from public, 
 grant execute on function public.movie_night_state(uuid, boolean) to authenticated;
 revoke execute on function public.active_movie_nights() from public, anon;
 grant execute on function public.active_movie_nights() to authenticated;
+revoke execute on function public.add_movie_night_top_titles(uuid) from public, anon;
+grant execute on function public.add_movie_night_top_titles(uuid) to authenticated;
+revoke execute on function public.pick_movie_night_card(uuid, uuid, date, jsonb) from public, anon;
+grant execute on function public.pick_movie_night_card(uuid, uuid, date, jsonb) to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.
 notify pgrst, 'reload schema';
