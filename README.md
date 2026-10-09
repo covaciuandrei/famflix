@@ -28,8 +28,19 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   are split into To watch and Watched together, so a title one person marked
   Watched on their own stays on the family's To watch list, and a title everyone
   on the record says they weren't at goes back to To watch.
-- **Movie night**: shuffle what's left to watch, filter by category, or let
-  the app pick.
+- **Movie night**: can't decide? Pick a mood and swipe through a stack of
+  titles: ✕ nope, ♥ love (three per stack), ✓ yes or 👁 seen it, with buttons or
+  the arrow keys on a computer and swipes on a phone. On your own, what you swipe
+  right goes on My list. With a family, everyone swipes the same stack (the
+  family's To watch titles plus suggestions from TMDB), gets an invite when the
+  night starts, and sees the leaderboard once they have finished: points per
+  title, who voted what, "more suggestions" or "more like this" for another
+  stack. Any member can show the results early, cancel, or pick a title ("We
+  watched this"), which logs it as Watched together, ends the night and adds its
+  best 7 titles to the family list. A night closes by itself after 12 hours
+  without activity, and every night is kept in the family's history. The old
+  shuffle of what's left to watch is still there under "Browse your To watch
+  list".
 - **Activity feed**: see what happened in each family; removed titles can be
   restored for 30 days.
 - **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can
@@ -41,8 +52,9 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   families keep the titles you added, without your name.
 - **Limits against abuse**: names and notes are at most 250 characters. Each
   person can add 30 titles and search 60 times a minute, try 10 invite codes
-  per 10 minutes, and start 10 families an hour. Each family's activity feed
-  keeps its latest 500 events.
+  per 10 minutes, and start 10 families an hour, 6 family movie nights an hour
+  and 10 extra stacks an hour. Each family's activity feed keeps its latest 500
+  events.
 
 ## Tech stack
 
@@ -156,7 +168,8 @@ limits and troubleshooting.
 ## Project layout
 
 - `src/app`: pages and routes. Signed-in pages live under `src/app/app`;
-  server actions are in `src/app/app/actions.ts`.
+  server actions are in `src/app/app/actions.ts` (movie night's are in
+  `src/app/app/movie-night/actions.ts`).
 - `src/components`: UI components.
 - `src/lib`: data loading (`data.ts`), the TMDB client, Supabase clients and
   the theme helpers.

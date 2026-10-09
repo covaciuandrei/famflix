@@ -10,7 +10,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy policy"
-      updated="October 8, 2026"
+      updated="October 9, 2026"
       intro={
         <p>
           FamFlix is a small, private watchlist for families and friends, run
@@ -36,9 +36,16 @@ export default function PrivacyPage() {
             family keeps its latest 500 events).
           </li>
           <li>
+            <strong className="text-foreground">Movie nights:</strong> when a
+            family starts a movie night, the titles it shows, who took part,
+            how each person voted (nope, yes, love or seen it) and what was
+            picked. Every night stays in the family&apos;s history. Swiping on
+            your own stores nothing except the titles you put on My list.
+          </li>
+          <li>
             <strong className="text-foreground">Counters:</strong> how often
-            you add titles, search or try invite codes, kept for a day, to
-            stop abuse.
+            you add titles, search, try invite codes or start movie nights,
+            kept for a day, to stop abuse.
           </li>
         </ul>
         <p>
@@ -53,6 +60,11 @@ export default function PrivacyPage() {
           <li>
             Family lists, and your name, picture, scores, notes and reactions on
             them, are visible to the members of that family.
+          </li>
+          <li>
+            Your votes in a family movie night stay private while you swipe.
+            Once you finish a stack (or someone shows the results early), the
+            other members of the family see them next to your name.
           </li>
           <li>
             FamFlix doesn&apos;t sell your data, show ads, or use analytics or
@@ -104,7 +116,8 @@ export default function PrivacyPage() {
       <Section title="Deleting your data">
         <p>
           You can change your name in Settings, remove titles, delete your
-          scores and notes, and leave a family at any time.
+          scores and notes, and leave a family at any time (which also removes
+          your votes from a movie night that is still going).
         </p>
         <p>
           <strong className="text-foreground">
@@ -113,8 +126,10 @@ export default function PrivacyPage() {
           deletes your account right away, with your personal list and your
           scores, notes, likes and dislikes. Families you shared keep the
           titles you added to their lists, without your name, and your name is
-          removed from their activity history. If database backups are kept,
-          deleted data drops out of them within 7 days.
+          removed from their activity history. Your votes in movie nights go
+          too; the nights themselves stay in the family&apos;s history. If
+          database backups are kept, deleted data drops out of them within 7
+          days.
         </p>
       </Section>
 

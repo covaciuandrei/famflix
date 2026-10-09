@@ -132,7 +132,10 @@ export type ActivityKind =
   | "watched_together"
   | "rated"
   | "removed"
-  | "restored";
+  | "restored"
+  | "movie_night_started"
+  | "movie_night_cancelled"
+  | "movie_night_added";
 
 export interface ActivityEvent {
   id: string;

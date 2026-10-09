@@ -44,7 +44,7 @@ const STEPS: Step[] = [
   {
     icon: Popcorn,
     title: "Movie night",
-    text: "Can't decide? Shuffle your To watch list, filter by genre, or let FamFlix pick for you. The Activity tab shows what the family added and rated.",
+    text: "Can't decide? Swipe through titles that fit your mood, alone or with your family. Everyone votes, the leaderboard shows what you all like, and the pick is logged as watched together.",
   },
 ];
 

@@ -1171,6 +1171,15 @@ passwords, deployment tokens, OAuth secrets, or session cookies.
 Edit locally, test, review the diff, commit selected files, and push. GitHub
 deploys it automatically. Infrastructure and DNS normally do not need changing.
 
+### For a change that needs new SQL
+
+Some features (Movie night added tables, functions and changed a few existing
+ones) need database changes. Run the SQL in the Supabase SQL Editor **first**,
+then push: the push deploys the code within minutes, and code that calls
+something the database doesn't have yet fails until the SQL is there. Keep
+`supabase/db_init.sql` in step, and check the two match by building a fresh
+database from it and comparing its schema with the live one.
+
 ### For a new hostname
 
 Create its DNS record, check resolution, add its Azure binding, verify TLS, add

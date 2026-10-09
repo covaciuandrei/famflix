@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Avatar } from "@/components/avatar";
 import { formatScore, timeAgo } from "@/lib/format";
+import { findGenre } from "@/lib/genres";
 import type { ActivityEvent } from "@/lib/types";
 
 function describe(e: ActivityEvent, currentUserId: string): ReactNode {
@@ -86,6 +87,25 @@ function describe(e: ActivityEvent, currentUserId: string): ReactNode {
           {who} restored {title}
         </>
       );
+    case "movie_night_started": {
+      // The detail is the mood's category slugs ("comedy, family"), if it had one.
+      const mood = e.detail?.split(", ").map((slug) => findGenre(slug)?.label ?? slug).join(", ");
+      return (
+        <>
+          {who} started a movie night{mood ? ` (${mood})` : ""}
+        </>
+      );
+    }
+    case "movie_night_cancelled":
+      return <>{who} cancelled the movie night</>;
+    case "movie_night_added": {
+      const count = Number(e.detail);
+      return (
+        <>
+          {who} added {count === 1 ? "1 title" : `${count} titles`} from the movie night
+        </>
+      );
+    }
     default:
       return <>{who} made a change</>;
   }
