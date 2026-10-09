@@ -63,6 +63,17 @@ test("on your own: swipe a stack with the keyboard or the buttons, and what you 
 
   await page.goto("/app/movie-night");
   await expect(page.getByRole("heading", { name: "What are you in the mood for?" })).toBeVisible();
+
+  // Moods (ready-made mixes) and genres are separate, labelled groups, and picking a mood fills in its genres.
+  const moods = page.getByRole("group", { name: "Moods" });
+  const genres = page.getByRole("group", { name: "Genres" });
+  await expect(moods.getByRole("button")).toHaveCount(8);
+  await moods.getByRole("button", { name: "Laugh" }).click();
+  await expect(moods.getByRole("button", { name: "Laugh" })).toHaveAttribute("aria-pressed", "true");
+  await expect(genres.getByRole("button", { name: "Comedy" })).toHaveAttribute("aria-pressed", "true");
+  await moods.getByRole("button", { name: "Laugh" }).click();
+  await expect(genres.getByRole("button", { name: "Comedy" })).toHaveAttribute("aria-pressed", "false");
+
   await page.getByRole("button", { name: "Start swiping" }).click();
   await expect(topCard(page)).toBeVisible({ timeout: TMDB });
   await expect(counter(page)).toHaveText("1 / 25");

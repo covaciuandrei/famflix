@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Loader2, Play } from "lucide-react";
+import { BookOpen, Brain, ChevronDown, Ghost, Laugh, Loader2, Mountain, Play, Sofa, Users, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -27,6 +27,27 @@ const chip = (active: boolean) =>
     "rounded-full border border-border px-3 py-1 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
     active && "border-primary bg-primary/15 text-foreground",
   );
+
+// A mood is a ready-made mix of genres, so it is drawn as a tile with its own picture, not as another genre pill.
+const MOOD_ICONS: Record<(typeof MOODS)[number]["slug"], LucideIcon> = {
+  laugh: Laugh,
+  cozy: Sofa,
+  edge: Zap,
+  mind: Brain,
+  adventure: Mountain,
+  scare: Ghost,
+  family: Users,
+  true: BookOpen,
+};
+
+// Side by side on a phone (two to a row); on wider screens the picture is above the name so the names fit on a line.
+const moodTile = (active: boolean) =>
+  cn(
+    "flex items-center gap-2.5 rounded-xl border p-1.5 pr-2.5 text-left text-sm leading-tight font-medium text-foreground transition-colors sm:flex-col sm:justify-center sm:gap-1.5 sm:px-1.5 sm:py-2.5 sm:text-center sm:text-[13px]",
+    active ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/50",
+  );
+
+const groupLabel = "text-xs font-semibold tracking-wide text-muted-foreground uppercase";
 
 const segment = (active: boolean) =>
   cn(
@@ -174,57 +195,82 @@ export function Hub({
 
         {!(family && openNight) && (
           <>
-            <section aria-labelledby="mood-title" className="flex flex-col gap-3">
+            <section aria-labelledby="mood-title" className="flex flex-col gap-4">
               <div>
                 <h2 id="mood-title" className="text-lg font-semibold">
                   What are you in the mood for?
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Pick a mood or a few genres. No pick means a bit of everything.
+                  Pick a mood to start from, or mix your own from the genres. No pick means a bit of everything.
                 </p>
               </div>
-              <div role="group" aria-label="Moods" className="flex flex-wrap gap-1.5">
-                {MOODS.map((mood) => {
-                  const active = sameGenres(genres, mood.genres);
-                  return (
-                    <button
-                      key={mood.slug}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setGenres(active ? [] : [...mood.genres])}
-                      className={chip(active)}
-                    >
-                      {mood.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div role="group" aria-label="Genres" className="flex flex-wrap gap-1.5">
-                {BROWSE_GENRES.map((genre) => {
-                  const active = genres.includes(genre.slug);
-                  return (
-                    <button
-                      key={genre.slug}
-                      type="button"
-                      aria-pressed={active}
-                      disabled={!active && genres.length >= MAX_GENRES}
-                      title={!active && genres.length >= MAX_GENRES ? `Up to ${MAX_GENRES} genres` : undefined}
-                      onClick={() => toggleGenre(genre.slug)}
-                      className={chip(active)}
-                    >
-                      {genre.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {genres.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {genres.length} of {MAX_GENRES} genres.{" "}
-                  <button type="button" onClick={() => setGenres([])} className="underline underline-offset-2 hover:text-foreground">
-                    Clear
-                  </button>
+              <div className="flex flex-col gap-2">
+                <p className="flex items-baseline gap-2">
+                  <span id="moods-label" className={groupLabel}>
+                    Moods
+                  </span>
+                  <span className="text-xs text-muted-foreground">a ready-made mix of genres</span>
                 </p>
-              )}
+                <div role="group" aria-labelledby="moods-label" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {MOODS.map((mood) => {
+                    const active = sameGenres(genres, mood.genres);
+                    const Icon = MOOD_ICONS[mood.slug];
+                    return (
+                      <button
+                        key={mood.slug}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setGenres(active ? [] : [...mood.genres])}
+                        className={moodTile(active)}
+                      >
+                        <span
+                          className={cn(
+                            "flex size-7 shrink-0 items-center justify-center rounded-lg",
+                            active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
+                          )}
+                        >
+                          <Icon className="size-4" aria-hidden />
+                        </span>
+                        {mood.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="flex items-baseline gap-2">
+                  <span id="genres-label" className={groupLabel}>
+                    Genres
+                  </span>
+                  <span className="text-xs text-muted-foreground">up to {MAX_GENRES}</span>
+                </p>
+                <div role="group" aria-labelledby="genres-label" className="flex flex-wrap gap-1.5">
+                  {BROWSE_GENRES.map((genre) => {
+                    const active = genres.includes(genre.slug);
+                    return (
+                      <button
+                        key={genre.slug}
+                        type="button"
+                        aria-pressed={active}
+                        disabled={!active && genres.length >= MAX_GENRES}
+                        title={!active && genres.length >= MAX_GENRES ? `Up to ${MAX_GENRES} genres` : undefined}
+                        onClick={() => toggleGenre(genre.slug)}
+                        className={chip(active)}
+                      >
+                        {genre.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {genres.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {genres.length} of {MAX_GENRES} genres.{" "}
+                    <button type="button" onClick={() => setGenres([])} className="underline underline-offset-2 hover:text-foreground">
+                      Clear
+                    </button>
+                  </p>
+                )}
+              </div>
             </section>
 
             <details className="group rounded-xl border border-border bg-card">
