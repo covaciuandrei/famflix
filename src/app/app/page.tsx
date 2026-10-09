@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ActivityFeed } from "@/components/activity-feed";
+import { NightBanners } from "@/components/movie-night/night-banners";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,6 +32,8 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-bold">Hi, {name}</h1>
         <p className="text-muted-foreground">Here&apos;s what&apos;s on your lists.</p>
       </div>
+
+      <NightBanners />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">

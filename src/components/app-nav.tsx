@@ -15,6 +15,7 @@ import { useId, useRef } from "react";
 
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/avatar";
+import { useNightStatus, waitingOnMe } from "@/components/movie-night/night-status";
 import { RatingRequests } from "@/components/rating-requests";
 import { placePopover } from "@/lib/popover";
 import type { PendingRating } from "@/lib/types";
@@ -54,6 +55,16 @@ const LINKS = [
   },
 ];
 
+/** Says a movie night is waiting: a dot on the icon, and the same in words for screen readers. */
+function NightDot() {
+  return (
+    <>
+      <span aria-hidden className="absolute -top-0.5 -right-1 size-2 rounded-full bg-primary ring-2 ring-background" />
+      <span className="sr-only">(a movie night is waiting for you)</span>
+    </>
+  );
+}
+
 export function AppNav({
   name,
   avatarUrl,
@@ -66,6 +77,8 @@ export function AppNav({
   pending: PendingRating[];
 }) {
   const pathname = usePathname();
+  // A night that is waiting on me, unless I'm already in Movie night (where it is right there).
+  const nightWaiting = useNightStatus().some(waitingOnMe) && !pathname.startsWith("/app/movie-night");
   const menuId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -93,7 +106,10 @@ export function AppNav({
                     active && "bg-muted text-foreground",
                   )}
                 >
-                  <l.icon className="size-4" />
+                  <span className="relative">
+                    <l.icon className="size-4" />
+                    {l.href === "/app/movie-night" && nightWaiting && <NightDot />}
+                  </span>
                   {l.label}
                 </Link>
               );
@@ -166,7 +182,10 @@ export function AppNav({
                 active && "text-primary",
               )}
             >
-              <l.icon className="size-5" />
+              <span className="relative">
+                <l.icon className="size-5" />
+                {l.href === "/app/movie-night" && nightWaiting && <NightDot />}
+              </span>
               {l.label}
             </Link>
           );

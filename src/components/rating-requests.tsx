@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Star } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import {
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { formatDay, formatScore } from "@/lib/format";
+import { whenNoModalOpen } from "@/lib/popup";
 import type { PendingRating } from "@/lib/types";
 
 const DISMISSED_KEY = "famflix:dismissed-rating-requests";
@@ -43,6 +45,9 @@ export function RatingRequests({
   currentUserId: string;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const pathname = usePathname();
+  // Not in the middle of a movie night: it opens once they are somewhere else.
+  const inMovieNight = pathname.startsWith("/app/movie-night");
 
   // Opens by itself once per browser session for requests someone else logged.
   useEffect(() => {
@@ -56,8 +61,18 @@ export function RatingRequests({
     const hasNew = pending.some(
       (p) => p.logged_by !== currentUserId && !dismissed.has(p.list_item_id),
     );
-    if (hasNew && !dialog.open) openModal(dialog);
-  }, [pending, currentUserId]);
+    if (!hasNew || dialog.open || inMovieNight) return;
+    // One popup at a time: a movie night invite that opens with the page goes first (the check waits a moment for
+    // it), and anything else that is open finishes before this one.
+    let stopWaiting = () => {};
+    const timer = window.setTimeout(() => {
+      stopWaiting = whenNoModalOpen(() => openModal(dialog));
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      stopWaiting();
+    };
+  }, [pending, currentUserId, inMovieNight]);
 
   function rememberDismissed() {
     const dismissed = readDismissed();

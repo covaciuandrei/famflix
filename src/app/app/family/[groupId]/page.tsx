@@ -6,6 +6,7 @@ import { ActivityFeed } from "@/components/activity-feed";
 import { Avatar } from "@/components/avatar";
 import { InviteCode } from "@/components/invite-code";
 import { RemovedItems } from "@/components/removed-items";
+import { FamilyNightLink } from "@/components/movie-night/family-night-link";
 import { buttonVariants } from "@/components/ui/button";
 import { Watchlist } from "@/components/watchlist";
 import {
@@ -92,7 +93,7 @@ export default async function FamilyPage({
               changes in {timeUntil(group.invite_code_expires_at)}
             </span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href={`/app/family/${group.id}/settings`}
               className={buttonVariants({ size: "sm", variant: "outline" })}
@@ -104,6 +105,7 @@ export default async function FamilyPage({
               )}
               {isOwner ? "Manage" : "Settings"}
             </Link>
+            <FamilyNightLink groupId={group.id} />
             <Link href="/app/browse" className={buttonVariants({ size: "sm" })}>
               <Plus className="size-4" />
               Add titles
