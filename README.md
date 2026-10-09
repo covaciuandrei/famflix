@@ -134,8 +134,8 @@ create a family or join one with an invite code.
   database from `supabase/db_init.sql`; you need PostgreSQL 17 installed, or
   `PGHOST` pointing at a server where they may create a database.
 - `npm run test:e2e`: the browser tests in `e2e/` (signing in, adding titles,
-  watched together, deleting an account), on a computer-sized and a phone-sized
-  screen. You need Docker: they run against a local Supabase
+  watched together, movie nights from the invite to the pick, deleting an
+  account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
   (`supabase/config.toml`) built from `db_init.sql`, never the live one.
   `npx supabase stop` shuts it down afterwards.
 
