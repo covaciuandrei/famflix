@@ -1,9 +1,20 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
-import { cardKey, moodParams, parseMood } from "@/lib/movie-night";
+import { getMovieNightState } from "@/lib/data";
+import { buildFamilyCandidates } from "@/lib/deck";
+import {
+  cardKey,
+  MAX_STACKS,
+  MAX_VOTES_PER_SAVE,
+  moodParams,
+  nightMood,
+  parseMood,
+  type Vote,
+} from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
@@ -43,6 +54,38 @@ export async function startSoloStack(input: {
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+const VOTE_WORDS = new Set<string>(["nope", "yes", "love", "seen"]);
+
+function randomSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31);
+}
+
+/** The database's own message, except for the one case it can't word well (two people starting at once). */
+function friendly(error: { code?: string; message: string }): string {
+  return error.code === "23505" ? "This family already has a movie night open." : error.message;
+}
+
+/** Titles the family's last three movie nights already showed, so a new one doesn't repeat them. */
+async function recentTitles(supabase: Supabase, groupId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("movie_nights")
+    .select("movie_night_candidates(media(tmdb_id, media_type))")
+    .eq("group_id", groupId)
+    .eq("source", "swipe")
+    .order("created_at", { ascending: false })
+    .limit(3);
+  const keys = new Set<string>();
+  const nights = (data ?? []) as unknown as {
+    movie_night_candidates: { media: { tmdb_id: number; media_type: MediaType } | null }[];
+  }[];
+  for (const night of nights) {
+    for (const card of night.movie_night_candidates) {
+      if (card.media) keys.add(cardKey({ mediaType: card.media.media_type, tmdbId: card.media.tmdb_id }));
+    }
+  }
+  return keys;
+}
 
 /** The signed-in person's My list entry for a title, added (or brought back from removed) if it isn't there. */
 async function ensureOnMyList(supabase: Supabase, userId: string, mediaId: string): Promise<string | null> {
@@ -118,4 +161,165 @@ export async function removeSwipedFromMyList(itemIds: string[]): Promise<ActionR
     .eq("added_by", user.id)
     .is("deleted_at", null);
   return error ? { error: error.message } : {};
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+//  A family's movie night
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Starts a movie night for a family: builds its first stack (the family's To watch titles that fit the mood, then
+ * suggestions), creates the night and sends the starter to it. Only returns when something is wrong.
+ */
+export async function startMovieNight(input: {
+  groupId: string;
+  genres: string[];
+  series: boolean;
+  count: number;
+  max: number | null;
+}): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!UUID.test(String(input?.groupId))) return { error: "That isn't one of your families." };
+  const mood = parseMood({
+    genres: Array.isArray(input.genres) ? input.genres.map(String) : [],
+    series: input.series === true ? "1" : "0",
+    count: input.count,
+    max: input.max,
+  });
+
+  const { data: member } = await supabase
+    .from("group_members")
+    .select("user_id")
+    .eq("group_id", input.groupId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!member) return { error: "You're not in that family." };
+  const limited = await overRateLimit(user.id, LIMITS.deck);
+  if (limited) return { error: limited };
+
+  const built = await buildFamilyCandidates({
+    userId: user.id,
+    groupId: input.groupId,
+    mood,
+    seed: randomSeed(),
+    exclude: await recentTitles(supabase, input.groupId),
+  });
+  if ("error" in built) return { error: built.error };
+
+  const { data, error } = await supabase.rpc("start_movie_night", {
+    p_group: input.groupId,
+    p_genres: mood.genres,
+    p_options: { series: mood.series, count: mood.count, max: mood.maxRuntime },
+    p_candidates: built.candidates,
+  });
+  if (error) return { error: friendly(error) };
+  revalidatePath("/app", "layout");
+  redirect(`/app/movie-night/${data as string}`);
+}
+
+/** Takes part in a night without voting yet. */
+export async function joinNight(nightId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { error } = await supabase.rpc("join_movie_night", { p_night: nightId });
+  return error ? { error: error.message } : {};
+}
+
+/**
+ * Saves a batch of votes on one stack (a null vote takes one back) and returns the loves used in it. Like the other
+ * swipe actions it doesn't refresh the page: the stack on screen must not change under someone's thumb.
+ */
+export async function castVotes(
+  stackId: string,
+  votes: { candidateId: string; vote: Vote | null }[],
+): Promise<ActionResult & { loves?: number }> {
+  const { supabase } = await requireUser();
+  if (
+    !UUID.test(String(stackId)) ||
+    !Array.isArray(votes) ||
+    votes.length === 0 ||
+    votes.length > MAX_VOTES_PER_SAVE ||
+    !votes.every((v) => v && UUID.test(String(v.candidateId)) && (v.vote === null || VOTE_WORDS.has(String(v.vote))))
+  ) {
+    return { error: "Those votes aren't valid." };
+  }
+  const { data, error } = await supabase.rpc("cast_movie_night_votes", {
+    p_stack: stackId,
+    p_votes: votes.map((v) => ({ candidate_id: v.candidateId, vote: v.vote })),
+  });
+  return error ? { error: error.message } : { loves: Number(data) };
+}
+
+/** Marks the caller as done with a stack. */
+export async function finishStack(stackId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(stackId))) return { error: "That isn't a stack." };
+  const { error } = await supabase.rpc("finish_movie_night_stack", { p_stack: stackId });
+  return error ? { error: error.message } : {};
+}
+
+/** Shows the results now: voting on the stacks still open ends. Any member can. */
+export async function revealNight(nightId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { error } = await supabase.rpc("reveal_movie_night", { p_night: nightId });
+  return error ? { error: error.message } : {};
+}
+
+/** Cancels the night. Any member can. */
+export async function cancelNight(nightId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { error } = await supabase.rpc("cancel_movie_night", { p_night: nightId });
+  if (error) return { error: error.message };
+  revalidatePath("/app", "layout");
+  return {};
+}
+
+/**
+ * Asks for another stack of suggestions in the same spirit as the night (same genres and options, nothing it or its
+ * family's last nights already showed). `knownStacks` is how many stacks the caller can see: if someone added one in
+ * the meantime, the caller gets that one back instead of a second.
+ */
+export async function requestMoreStack(input: {
+  nightId: string;
+  knownStacks: number;
+}): Promise<ActionResult & { stackId?: string }> {
+  const { supabase, user } = await requireUser();
+  if (
+    !UUID.test(String(input?.nightId)) ||
+    !Number.isInteger(input.knownStacks) ||
+    input.knownStacks < 1 ||
+    input.knownStacks > MAX_STACKS
+  ) {
+    return { error: "That isn't a movie night." };
+  }
+  const state = await getMovieNightState(input.nightId, true).catch(() => null);
+  if (!state) return { error: "This movie night isn't available." };
+  if (state.night.status !== "open") return { error: "This movie night is over." };
+  if (input.knownStacks >= MAX_STACKS) return { error: `A movie night has at most ${MAX_STACKS} stacks.` };
+  const limited = await overRateLimit(user.id, LIMITS.deck);
+  if (limited) return { error: limited };
+
+  const mood = nightMood(state.night);
+  const exclude = await recentTitles(supabase, state.night.group_id);
+  for (const card of state.candidates) {
+    exclude.add(cardKey({ mediaType: card.media_type, tmdbId: card.tmdb_id }));
+  }
+  const built = await buildFamilyCandidates({
+    userId: user.id,
+    groupId: state.night.group_id,
+    mood,
+    seed: randomSeed(),
+    suggestionsOnly: true,
+    exclude,
+  });
+  if ("error" in built) return { error: built.error };
+
+  const { data, error } = await supabase.rpc("add_movie_night_stack", {
+    p_night: input.nightId,
+    p_known_stacks: input.knownStacks,
+    p_candidates: built.candidates,
+  });
+  return error ? { error: error.message } : { stackId: data as string };
 }

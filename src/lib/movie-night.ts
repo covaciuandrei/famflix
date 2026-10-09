@@ -156,3 +156,153 @@ export function moodParams(mood: MoodOptions): URLSearchParams {
   if (mood.maxRuntime !== null) params.set("max", String(mood.maxRuntime));
   return params;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+//  A family's night, as movie_night_state() and active_movie_nights() in db_init.sql describe it
+// ---------------------------------------------------------------------------------------------------------------
+
+export type NightStatus = "open" | "closed" | "cancelled" | "expired";
+
+export interface NightInfo {
+  id: string;
+  group_id: string;
+  group_name: string;
+  status: NightStatus;
+  /** "swipe" is a night started from the Movie night page; "logged" one made by logging Watched together. */
+  source: "swipe" | "logged";
+  started_by: string | null;
+  started_by_name: string | null;
+  genres: string[];
+  options: { series: boolean; count: number; max: number | null };
+  created_at: string;
+  last_activity_at: string;
+  ended_at: string | null;
+  /** Who picked or cancelled it. */
+  ended_by: string | null;
+  ended_by_name: string | null;
+  picked_media_id: string | null;
+  picked_title: string | null;
+  picked_list_item_id: string | null;
+  happened_on: string;
+}
+
+export interface StackInfo {
+  id: string;
+  position: number;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  /** Someone showed the results: voting on this stack is over. */
+  revealed: boolean;
+  total: number;
+  my_voted: number;
+  my_loves: number;
+  my_finished: boolean;
+  /** I may see this stack's results: I finished it, they were shown, or the night is over. */
+  can_see_results: boolean;
+}
+
+/** How far someone is, never what they voted. */
+export interface MemberProgress {
+  user_id: string;
+  name: string;
+  avatar_url: string | null;
+  joined: boolean;
+  /** Watched the picked title. */
+  watched: boolean;
+  stacks: { stack_id: string; voted: number; finished: boolean }[];
+}
+
+export interface NightCandidate {
+  id: string;
+  stack_id: string;
+  position: number;
+  origin: "list" | "suggested";
+  list_item_id: string | null;
+  media_id: string;
+  tmdb_id: number;
+  media_type: MediaType;
+  title: string;
+  year: number | null;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  overview: string | null;
+  rating: number | null;
+  runtime: number | null;
+  genres: string[];
+  trailer_key: string | null;
+}
+
+export interface ResultRow {
+  candidate_id: string;
+  rank: number;
+  points: number;
+  loves: number;
+  yes: number;
+  seen: number;
+  nopes: number;
+  votes: { user_id: string; name: string; vote: Vote }[];
+  on_family_list: boolean;
+  family_item_id: string | null;
+  on_my_list: boolean;
+}
+
+export interface NightState {
+  me: string;
+  night: NightInfo;
+  stacks: StackInfo[];
+  members: MemberProgress[];
+  /** Only in the full state. */
+  candidates: NightCandidate[];
+  /** My own votes, by candidate. */
+  my_votes: Record<string, Vote>;
+  /** Ranked, for the stacks I may see. */
+  results: ResultRow[];
+}
+
+/** An open night in one of my families (for the invite, the dot on the menu and the banners). */
+export interface ActiveNight {
+  night_id: string;
+  group_id: string;
+  group_name: string;
+  started_by: string | null;
+  started_by_name: string | null;
+  created_at: string;
+  genres: string[];
+  joined: boolean;
+  stacks: number;
+  /** Stacks still open for voting that I haven't finished. */
+  waiting_stacks: number;
+  members: number;
+  /** Members who have finished every stack that is still open. */
+  done_members: number;
+}
+
+/** A night's card as the swipe stack shows it. */
+export function candidateToCard(c: NightCandidate): DeckCard {
+  return {
+    id: c.id,
+    mediaType: c.media_type,
+    tmdbId: c.tmdb_id,
+    title: c.title,
+    year: c.year,
+    posterPath: c.poster_path,
+    backdropPath: c.backdrop_path,
+    overview: c.overview ?? "",
+    rating: c.rating && c.rating > 0 ? c.rating : null,
+    runtime: c.runtime,
+    genres: c.genres,
+    trailerKey: c.trailer_key,
+    origin: c.origin,
+  };
+}
+
+/** The mood a night was started with, for asking for more suggestions in the same spirit. */
+export function nightMood(night: NightInfo): MoodOptions {
+  return parseMood({
+    genres: night.genres,
+    series: night.options.series ? "1" : "0",
+    count: night.options.count,
+    max: night.options.max,
+  });
+}

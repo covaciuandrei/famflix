@@ -5,6 +5,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
+import type { ActiveNight, NightState } from "@/lib/movie-night";
 import type {
   ActivityEvent,
   Group,
@@ -421,4 +422,30 @@ export async function getSuggestionSeeds(limit: number): Promise<SuggestionSeed[
       title,
       fromFamily,
     }));
+}
+
+/** The movie nights going on in the signed-in user's families that they could join. Empty if the lookup fails. */
+export async function getActiveMovieNights(): Promise<ActiveNight[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("active_movie_nights");
+  if (error) {
+    // Logged, not thrown: a failure here shouldn't take down every page.
+    console.error("Could not load movie nights:", error.message);
+    return [];
+  }
+  return (data ?? []) as ActiveNight[];
+}
+
+/**
+ * Everything the room needs about one night, as the signed-in user may see it. Null when it isn't theirs or doesn't
+ * exist; `full` also sends the cards (the light version is for polling).
+ */
+export async function getMovieNightState(nightId: string, full: boolean): Promise<NightState | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("movie_night_state", { p_night: nightId, p_full: full });
+  if (error) {
+    if (/not available/i.test(error.message)) return null;
+    throw new Error(`Could not load the movie night: ${error.message}`);
+  }
+  return (data ?? null) as NightState | null;
 }
