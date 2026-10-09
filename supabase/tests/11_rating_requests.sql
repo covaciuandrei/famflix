@@ -39,7 +39,7 @@ select test.expect_eq((select count(*) from public.pending_rating_requests()), 0
 select test.expect_eq((select count(*) from public.pending_rating_requests()), 1::bigint, 'a member whose score was filled in is asked to confirm it');
 select test.expect_eq((select filled_in_score from public.pending_rating_requests()), 9.0::numeric, 'the request shows the filled-in score');
 select test.expect_eq((select filled_in_by_name from public.pending_rating_requests()), 'Ann'::text, 'and who filled it in');
-select test.expect_eq((select count(*) from public.reactions where user_id = '72727272-0000-0000-0000-000000000002'), 0::bigint, 'a filled-in score alone doesn''t like the title for him');
+select test.expect_eq((select count(*) from public.reactions where list_item_id = (select v::uuid from test.vals where k = 'w_item') and user_id = '72727272-0000-0000-0000-000000000002'), 0::bigint, 'a filled-in score alone doesn''t like the title for him');
 
 :as_cara
 select test.expect_eq((select count(*) from public.pending_rating_requests()), 1::bigint, 'a member without a score is asked as before');
@@ -51,22 +51,22 @@ insert into public.ratings (list_item_id, user_id, score, comment)
   values ((select v::uuid from test.vals where k = 'w_item'), '72727272-0000-0000-0000-000000000002', 9, 'loved it')
   on conflict (list_item_id, user_id) do update set score = excluded.score, comment = excluded.comment;
 select test.expect_eq((select count(*) from public.pending_rating_requests()), 0::bigint, 'after confirming, the request is gone');
-select test.expect_eq((select rated_by from public.ratings where user_id = '72727272-0000-0000-0000-000000000002'), '72727272-0000-0000-0000-000000000002'::uuid, 'the score is now his own');
-select test.expect_eq((select value from public.reactions where user_id = '72727272-0000-0000-0000-000000000002'), 'like'::text, 'taking over a 9 likes the title');
-select test.expect_eq((select comment from public.ratings where user_id = '72727272-0000-0000-0000-000000000002'), 'loved it'::text, 'his note is saved');
+select test.expect_eq((select rated_by from public.ratings where list_item_id = (select v::uuid from test.vals where k = 'w_item') and user_id = '72727272-0000-0000-0000-000000000002'), '72727272-0000-0000-0000-000000000002'::uuid, 'the score is now his own');
+select test.expect_eq((select value from public.reactions where list_item_id = (select v::uuid from test.vals where k = 'w_item') and user_id = '72727272-0000-0000-0000-000000000002'), 'like'::text, 'taking over a 9 likes the title');
+select test.expect_eq((select comment from public.ratings where list_item_id = (select v::uuid from test.vals where k = 'w_item') and user_id = '72727272-0000-0000-0000-000000000002'), 'loved it'::text, 'his note is saved');
 
 -- Editing only the note still keeps a reaction picked by hand.
 update public.reactions set value = 'dislike' where user_id = '72727272-0000-0000-0000-000000000002';
 insert into public.ratings (list_item_id, user_id, score, comment)
   values ((select v::uuid from test.vals where k = 'w_item'), '72727272-0000-0000-0000-000000000002', 9, 'loved it, mostly')
   on conflict (list_item_id, user_id) do update set score = excluded.score, comment = excluded.comment;
-select test.expect_eq((select value from public.reactions where user_id = '72727272-0000-0000-0000-000000000002'), 'dislike'::text, 'changing only the note keeps the hand-picked reaction');
+select test.expect_eq((select value from public.reactions where list_item_id = (select v::uuid from test.vals where k = 'w_item') and user_id = '72727272-0000-0000-0000-000000000002'), 'dislike'::text, 'changing only the note keeps the hand-picked reaction');
 
 -- Cara rates it herself.
 :as_cara
 insert into public.ratings (list_item_id, user_id, score) values ((select v::uuid from test.vals where k = 'w_item'), '73737373-0000-0000-0000-000000000003', 5);
 select test.expect_eq((select count(*) from public.pending_rating_requests()), 0::bigint, 'Cara''s request is gone once she rates');
-select test.expect_eq((select value from public.reactions where user_id = '73737373-0000-0000-0000-000000000003'), 'dislike'::text, 'her 5 dislikes it');
+select test.expect_eq((select value from public.reactions where list_item_id = (select v::uuid from test.vals where k = 'w_item') and user_id = '73737373-0000-0000-0000-000000000003'), 'dislike'::text, 'her 5 dislikes it');
 
 -- Skipping still works for a filled-in request, and "I wasn't there" can delete a filled-in score.
 :as_ann

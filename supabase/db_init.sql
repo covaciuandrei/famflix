@@ -74,7 +74,12 @@ create table public.list_items (
   -- Removing a title only hides it, so it can be restored.
   deleted_at timestamptz,
   -- No foreign key: a second list_items -> profiles link would make the app's profiles() embed ambiguous.
-  deleted_by uuid
+  deleted_by uuid,
+  -- On My list: the family title this one came from when a Watched together log put it there, and what the log did to
+  -- it ('created' it, or 'converted' it from To watch to Watched), so "I wasn't there" can undo exactly that.
+  -- Only the watch functions write these.
+  source_item_id uuid references public.list_items (id) on delete set null,
+  watch_origin   text check (watch_origin in ('created', 'converted'))
 );
 
 -- Prevent duplicates within a single list.
@@ -84,6 +89,7 @@ create unique index list_items_personal_uniq
 create unique index list_items_shared_uniq
   on public.list_items (group_id, media_id)
   where group_id is not null;
+create index list_items_source_item_idx on public.list_items (source_item_id);
 
 create index list_items_group_idx on public.list_items (group_id);
 -- added_by needs no index of its own: list_items_personal_uniq starts with it.
@@ -847,7 +853,10 @@ language plpgsql
 set search_path = public
 as $$
 begin
-  new.rated_by := auth.uid();
+  -- A score copied over by the database (ratings_follow_family) keeps who gave it; any other is the signed-in person's.
+  if current_setting('famflix.copying_rating', true) is distinct from 'on' then
+    new.rated_by := auth.uid();
+  end if;
   return new;
 end;
 $$;
@@ -872,6 +881,7 @@ declare
   v record;
   v_names text;
   v_users uuid[] := '{}';
+  v_on date;
 begin
   if auth.uid() is null then
     raise exception 'You must be signed in';
@@ -909,7 +919,12 @@ begin
     values (p_item, v.user_id, p_watched_on, auth.uid())
     on conflict (list_item_id, user_id) do update
       set watched_on = greatest(w.watched_on, excluded.watched_on),
-          logged_by = excluded.logged_by;
+          logged_by = excluded.logged_by
+    returning w.watched_on into v_on;
+
+    -- It goes on their My list as Watched too, with the others who were there. (Before the score below, which then
+    -- follows it there.)
+    perform public.add_to_my_list_watched(p_item, v.user_id, v_on);
 
     -- Only fills in a missing score; never overwrites one that already exists.
     if v.score is not null then
@@ -990,6 +1005,9 @@ security definer
 set search_path = public
 as $$
 begin
+  -- What the watch put on their My list goes off it again.
+  perform public.remove_from_my_list_watched(old.list_item_id, old.user_id);
+
   if not exists (select 1 from public.watches where list_item_id = old.list_item_id) then
     update public.list_items
     set status = 'want', watched_at = null
@@ -1012,6 +1030,180 @@ $$;
 create trigger watches_after_delete
   after delete on public.watches
   for each row execute function public.after_watch_delete();
+
+-- ---------------------------------------------------------------------------
+--  Watched together also lands on My list
+-- ---------------------------------------------------------------------------
+
+-- Puts a title the family watched together on one person's My list as Watched, with the family's score and note for
+-- them, so it is in their Watched tab. log_watch calls it for everyone on the log.
+--   - Not on their My list: a new entry (the watch 'created' it).
+--   - Removed from My list earlier: it comes back, as Watched.
+--   - On their To watch: marked Watched (the watch 'converted' it).
+--   - Already watched by them on their own: left as it is.
+-- The entry remembers the family title it came from, so its card can say who it was watched with, and so "I wasn't
+-- there" can take it off again.
+create function public.add_to_my_list_watched(p_family_item uuid, p_user uuid, p_date date)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_media   uuid;
+  v_group   uuid;
+  v_at      timestamptz;
+  v_rows    integer;
+  v_mine    public.list_items;
+  v_changed boolean;
+begin
+  select media_id, group_id into v_media, v_group from public.list_items where id = p_family_item;
+  if v_group is null then
+    return;
+  end if;
+  -- The day it was watched, at midday (never in the future), so "recently watched" sorts by it.
+  v_at := least(now(), p_date::timestamptz + interval '12 hours');
+
+  insert into public.list_items (group_id, added_by, media_id, status, watched_at, source_item_id, watch_origin)
+  values (null, p_user, v_media, 'watched', v_at, p_family_item, 'created')
+  on conflict (added_by, media_id) where group_id is null do nothing;
+  get diagnostics v_rows = row_count;
+  v_changed := v_rows > 0;
+
+  select * into v_mine from public.list_items
+  where group_id is null and added_by = p_user and media_id = v_media
+  for update;
+
+  if not v_changed then
+    if v_mine.deleted_at is not null then
+      update public.list_items
+      set deleted_at = null, status = 'watched', watched_at = v_at, source_item_id = p_family_item, watch_origin = 'created'
+      where id = v_mine.id;
+      v_changed := true;
+    elsif v_mine.source_item_id is not distinct from p_family_item then
+      -- Logged again (a later day, or someone else added to the log): the date follows.
+      update public.list_items set watched_at = v_at
+      where id = v_mine.id and status = 'watched' and watch_origin is not null;
+    elsif v_mine.status = 'want' then
+      update public.list_items
+      set status = 'watched', watched_at = v_at, source_item_id = p_family_item, watch_origin = 'converted'
+      where id = v_mine.id;
+      v_changed := true;
+    end if;
+  end if;
+
+  if v_changed then
+    -- Their score and note on the family title come with it, unless they have ones of their own here already.
+    perform set_config('famflix.copying_rating', 'on', true);
+    insert into public.ratings (list_item_id, user_id, score, comment, rated_by)
+    select v_mine.id, r.user_id, r.score, r.comment, r.rated_by
+    from public.ratings r
+    where r.list_item_id = p_family_item and r.user_id = p_user
+    on conflict (list_item_id, user_id) do nothing;
+    perform set_config('famflix.copying_rating', 'off', true);
+  end if;
+end;
+$$;
+
+-- Takes a title off someone's My list when they leave its Watched together record ("I wasn't there", or deleting their
+-- account), if the watch is what put it there: an entry it created is removed; one it moved from To watch to Watched
+-- goes back to To watch, without the score and note that came along; one the person has made their own since (they
+-- unmarked it) just stops following the family title.
+create function public.remove_from_my_list_watched(p_family_item uuid, p_user uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_mine public.list_items;
+begin
+  -- A family title that is going away (its family was deleted) takes its watches with it: the entries stay as they are.
+  if not exists (select 1 from public.list_items where id = p_family_item) then
+    return;
+  end if;
+  select * into v_mine from public.list_items
+  where group_id is null and added_by = p_user and source_item_id = p_family_item;
+  if not found then
+    return;
+  end if;
+
+  if v_mine.status = 'watched' and v_mine.watch_origin = 'created' then
+    delete from public.list_items where id = v_mine.id;
+  elsif v_mine.status = 'watched' and v_mine.watch_origin = 'converted' then
+    update public.list_items
+    set status = 'want', watched_at = null, source_item_id = null, watch_origin = null
+    where id = v_mine.id;
+    -- What came with the watch goes (a score filled in by someone else, or a copy of the family's); what they wrote on
+    -- My list themselves stays.
+    delete from public.ratings m
+    where m.list_item_id = v_mine.id and m.user_id = p_user
+      and (m.rated_by is distinct from m.user_id
+           or exists (select 1 from public.ratings f
+                      where f.list_item_id = p_family_item and f.user_id = p_user
+                        and f.score is not distinct from m.score and f.comment is not distinct from m.comment));
+  else
+    update public.list_items set source_item_id = null, watch_origin = null where id = v_mine.id;
+  end if;
+end;
+$$;
+
+-- A score or note someone gives a family title also goes to their entry on My list (the one a Watched together log put
+-- there), for as long as the entry still has what the family's had: what they change on My list is theirs and stays.
+-- It never goes the other way, so notes written on My list stay private.
+create function public.ratings_follow_family()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_item uuid;
+  v_user uuid;
+  v_copy uuid;
+  v_mine public.ratings;
+  v_has  boolean;
+begin
+  if current_setting('famflix.copying_rating', true) = 'on' then
+    return null;
+  end if;
+  if tg_op = 'DELETE' then
+    v_item := old.list_item_id;
+    v_user := old.user_id;
+  else
+    v_item := new.list_item_id;
+    v_user := new.user_id;
+  end if;
+  select li.id into v_copy
+  from public.list_items li
+  where li.group_id is null and li.added_by = v_user and li.source_item_id = v_item and li.deleted_at is null;
+  if v_copy is null then
+    return null;
+  end if;
+  select * into v_mine from public.ratings where list_item_id = v_copy and user_id = v_user;
+  v_has := found;
+
+  perform set_config('famflix.copying_rating', 'on', true);
+  if tg_op = 'DELETE' then
+    if v_has and v_mine.score is not distinct from old.score and v_mine.comment is not distinct from old.comment then
+      delete from public.ratings where id = v_mine.id;
+    end if;
+  elsif not v_has then
+    insert into public.ratings (list_item_id, user_id, score, comment, rated_by)
+    values (v_copy, v_user, new.score, new.comment, new.rated_by);
+  elsif tg_op = 'UPDATE' and v_mine.score is not distinct from old.score and v_mine.comment is not distinct from old.comment then
+    update public.ratings
+    set score = new.score, comment = new.comment, rated_by = new.rated_by, updated_at = now()
+    where id = v_mine.id;
+  end if;
+  perform set_config('famflix.copying_rating', 'off', true);
+  return null;
+end;
+$$;
+
+create trigger ratings_follow_family
+  after insert or update or delete on public.ratings
+  for each row execute function public.ratings_follow_family();
 
 -- ---------------------------------------------------------------------------
 --  Movie nights: stacks of titles to swipe, votes, and the results
@@ -2063,6 +2255,9 @@ revoke execute on function public.groups_activity() from public, anon, authentic
 revoke execute on function public.react_to_score() from public, anon, authenticated;
 revoke execute on function public.before_profile_delete() from public, anon, authenticated;
 revoke execute on function public.after_watch_delete() from public, anon, authenticated;
+revoke execute on function public.add_to_my_list_watched(uuid, uuid, date) from public, anon, authenticated;
+revoke execute on function public.remove_from_my_list_watched(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.ratings_follow_family() from public, anon, authenticated;
 
 -- Signed-in users only.
 revoke execute on function public.refresh_invite_codes() from public, anon;
