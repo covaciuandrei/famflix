@@ -41,12 +41,12 @@ const POLL_MS = 6000;
 const ROOM_STACK_HEIGHT =
   "h-[clamp(20rem,calc(100dvh-23rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-20.5rem),36rem)]";
 
-/** Done with every stack that is still open for voting. */
+/** Done with every stack that is still open for voting (once the results are shown, nobody has anything left). */
 function isDone(member: MemberProgress, state: NightState): boolean {
+  const open = state.stacks.filter((s) => !s.revealed);
+  if (open.length === 0) return true;
   if (!member.joined) return false;
-  return state.stacks
-    .filter((s) => !s.revealed)
-    .every((s) => member.stacks.find((m) => m.stack_id === s.id)?.finished);
+  return open.every((s) => member.stacks.find((m) => m.stack_id === s.id)?.finished);
 }
 
 /** One night, for one person: swipe a stack, then see how the family is voting. */
