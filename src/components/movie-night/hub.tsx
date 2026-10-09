@@ -126,7 +126,7 @@ export function Hub({
                 href={`/app/movie-night?who=${f.id}`}
                 scroll={false}
                 aria-current={family?.id === f.id ? "page" : undefined}
-                className={chip(family?.id === f.id)}
+                className={cn(chip(family?.id === f.id), "max-w-full truncate")}
               >
                 {f.name} <span className="text-xs opacity-70">{f.members}</span>
               </Link>
@@ -299,7 +299,7 @@ export function Hub({
           )}
 
           <div className="flex flex-col items-start gap-2">
-            <Button size="lg" onClick={go} disabled={pending || seriesOnly}>
+            <Button size="lg" onClick={go} disabled={pending || seriesOnly} className="h-auto min-h-11 max-w-full py-2 whitespace-normal">
               {pending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4 fill-current" />}
               {family ? `Start movie night for ${family.name}` : "Start swiping"}
             </Button>

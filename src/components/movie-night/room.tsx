@@ -39,7 +39,7 @@ const POLL_MS = 6000;
 
 // The swipe stack's height, a little shorter than a solo stack's: the room has a title above it.
 const ROOM_STACK_HEIGHT =
-  "h-[clamp(20rem,calc(100dvh-23rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-20.5rem),36rem)]";
+  "h-[clamp(11rem,calc(100dvh-23rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-20.5rem),36rem)]";
 
 /** Done with every stack that is still open for voting (once the results are shown, nobody has anything left). */
 function isDone(member: MemberProgress, state: NightState): boolean {
@@ -277,7 +277,7 @@ export function Room({ initial }: { initial: NightState }) {
           <div className="flex flex-wrap items-center gap-2">
             {night.status === "closed" && night.picked_title && <SharePick title={night.picked_title} />}
             {canAddTop && (
-              <Button size="sm" onClick={addTop} disabled={busy !== null}>
+              <Button size="sm" onClick={addTop} disabled={busy !== null} className="h-auto min-h-8 max-w-full py-1.5 text-left whitespace-normal">
                 {busy === "top" && <Loader2 className="size-3.5 animate-spin" />}
                 Add the top {TOP_TITLES} to {night.group_name}&apos;s list
               </Button>

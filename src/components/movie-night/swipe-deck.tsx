@@ -37,7 +37,7 @@ const BEHIND_CARDS = 2;
 // Each card behind is a little smaller and lower, so its edge peeks out under the one on top.
 const BEHIND_TRANSFORMS = ["none", "scale(0.94) translateY(26px)", "scale(0.88) translateY(50px)"];
 // Fits between the app's header and bottom bar on a phone (and under the header on a computer), up to a sensible size.
-const STACK_HEIGHT = "h-[clamp(20rem,calc(100dvh-21.5rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-19rem),36rem)]";
+const STACK_HEIGHT = "h-[clamp(11rem,calc(100dvh-21.5rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-19rem),36rem)]";
 
 function subscribeReducedMotion(onChange: () => void) {
   const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -364,7 +364,7 @@ export function SwipeDeck({
                 onPointerUp={top ? onPointerUp : undefined}
                 onPointerCancel={top ? onPointerCancel : undefined}
                 className={cn(
-                  "absolute inset-0 overflow-hidden rounded-2xl border border-border bg-card shadow-xl select-none",
+                  "group absolute inset-0 overflow-hidden rounded-2xl border border-border bg-card shadow-xl select-none",
                   top && "cursor-grab active:cursor-grabbing",
                   top && restored && "fade-in",
                 )}

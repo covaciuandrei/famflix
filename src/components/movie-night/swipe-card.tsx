@@ -45,9 +45,10 @@ export function SwipeCardFace({
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-gradient-to-t from-black/95 via-black/75 to-transparent p-4 pt-24 text-white">
-        <h2 className="line-clamp-2 text-2xl leading-tight font-bold">{card.title}</h2>
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-white/80">
+      {/* On a very short screen the card is small, so everything in it is: no genre chips or blurb (the info sheet has them). */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-gradient-to-t from-black/95 via-black/75 to-transparent p-4 pt-24 text-white [@media(max-height:620px)]:gap-1 [@media(max-height:620px)]:p-2.5 [@media(max-height:620px)]:pt-14 group-aria-hidden:[@media(max-height:620px)]:invisible">
+        <h2 className="line-clamp-2 text-2xl leading-tight font-bold [@media(max-height:620px)]:text-base">{card.title}</h2>
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-white/80 [@media(max-height:620px)]:text-xs">
           {facts.join(" · ")}
           {card.rating ? (
             <span className="inline-flex items-center gap-1 text-amber-300">
@@ -57,7 +58,7 @@ export function SwipeCardFace({
           ) : null}
         </p>
         {card.genres.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5">
+          <ul className="flex flex-wrap gap-1.5 [@media(max-height:620px)]:hidden">
             {card.genres.slice(0, 3).map((genre) => (
               <li key={genre} className="rounded-full bg-white/15 px-2 py-0.5 text-xs">
                 {genre}
@@ -65,7 +66,9 @@ export function SwipeCardFace({
             ))}
           </ul>
         )}
-        {card.overview && <p className="line-clamp-3 text-sm text-white/85">{card.overview}</p>}
+        {card.overview && (
+          <p className="line-clamp-3 text-sm text-white/85 [@media(max-height:620px)]:hidden">{card.overview}</p>
+        )}
       </div>
 
       <span className="absolute top-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white">

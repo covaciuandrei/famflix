@@ -77,19 +77,26 @@ function Row({
   return (
     <li className="rounded-xl border border-border bg-card">
       {/* The title button stretches over the whole header, so a tap anywhere on it opens the row. */}
-      <div className="relative flex items-center gap-3 rounded-xl p-2.5 hover:bg-muted/40">
-        <span className="w-7 shrink-0 text-center text-sm font-semibold text-muted-foreground">{row.rank}</span>
+      <div className="relative flex items-start gap-3 rounded-xl p-2.5 hover:bg-muted/40">
+        <span className="mt-1 w-5 shrink-0 text-center text-sm font-semibold text-muted-foreground sm:w-7">
+          {row.rank}
+        </span>
         <MediaPoster path={card.poster_path} alt="" size="w92" sizes="48px" className="w-12 shrink-0" />
         <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={panelId}
-            onClick={onToggle}
-            className="line-clamp-1 w-full text-left font-medium after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
-          >
-            {card.title}
-          </button>
+          <div className="flex items-start justify-between gap-2">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={onToggle}
+              className="line-clamp-2 min-w-0 flex-1 text-left font-medium after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+            >
+              {card.title}
+            </button>
+            <span className="pointer-events-none shrink-0 rounded-full bg-primary/15 px-2.5 py-0.5 text-sm font-semibold text-primary">
+              {row.points} {Math.abs(row.points) === 1 ? "pt" : "pts"}
+            </span>
+          </div>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
             {card.year ? <span>{card.year}</span> : null}
             {card.rating ? (
@@ -99,7 +106,7 @@ function Row({
               </span>
             ) : null}
           </p>
-          <p className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
             <Stat vote="love" count={row.loves} />
             <Stat vote="yes" count={row.yes} />
             <Stat vote="seen" count={row.seen} />
@@ -112,12 +119,9 @@ function Row({
             </p>
           )}
         </div>
-        <span className="pointer-events-none shrink-0 rounded-full bg-primary/15 px-2.5 py-1 text-sm font-semibold text-primary">
-          {row.points} {Math.abs(row.points) === 1 ? "pt" : "pts"}
-        </span>
         <ChevronDown
           aria-hidden
-          className={cn("pointer-events-none size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+          className={cn("pointer-events-none mt-1 size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
         />
       </div>
 
@@ -150,6 +154,7 @@ function Row({
                 variant="outline"
                 onClick={() => onAdd(row.candidate_id, "family")}
                 disabled={busy !== null}
+                className="h-auto min-h-8 max-w-full py-1.5 text-left whitespace-normal"
               >
                 {working(`add:${row.candidate_id}:family`) ? (
                   <Loader2 className="size-3.5 animate-spin" />

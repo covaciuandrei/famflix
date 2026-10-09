@@ -9,7 +9,8 @@ const round =
 
 function Control({ caption, children }: { caption: string; children: ReactNode }) {
   return (
-    <div className="flex w-16 flex-col items-center gap-1">
+    // Fixed widths keep the five evenly spaced; on the narrowest phones they shrink to fit what is in them.
+    <div className="flex w-16 flex-col items-center gap-1 max-[24rem]:w-auto">
       {children}
       <span className="text-[11px] text-muted-foreground">{caption}</span>
     </div>
