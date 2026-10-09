@@ -162,6 +162,95 @@ create table public.rate_limits (
   primary key (user_id, action, window_start)
 );
 
+-- Movie nights. A family swipes through stacks of titles, votes, and picks one to watch together; every night is kept
+-- in the family's history. source 'swipe' is a night started from the Movie night page; 'logged' is one made when
+-- someone logs Watched together with no night going on.
+create table public.movie_nights (
+  id                  uuid primary key default gen_random_uuid(),
+  group_id            uuid not null references public.groups (id) on delete cascade,
+  source              text not null default 'swipe' check (source in ('swipe', 'logged')),
+  status              text not null default 'open' check (status in ('open', 'closed', 'cancelled', 'expired')),
+  started_by          uuid references public.profiles (id) on delete set null,
+  -- Browse category slugs the night was started with (at most 5; start_movie_night checks each one).
+  genres              text[] not null default '{}' check (cardinality(genres) <= 5),
+  options             jsonb not null default '{}'::jsonb,
+  created_at          timestamptz not null default now(),
+  -- Votes, finished or new stacks, shown results and people joining move this forward; a night that goes 12 hours
+  -- without any of that expires.
+  last_activity_at    timestamptz not null default now(),
+  ended_at            timestamptz,
+  -- Who picked or cancelled. No foreign key (like rated_by): it is cleared when that person deletes their account.
+  ended_by            uuid,
+  picked_media_id     uuid references public.media (id) on delete set null,
+  picked_list_item_id uuid references public.list_items (id) on delete set null,
+  -- When it started; once a title is picked, the day it was watched.
+  happened_on         date not null default current_date,
+  check (source = 'swipe' or status = 'closed')
+);
+-- One night at a time per family.
+create unique index movie_nights_one_open_idx on public.movie_nights (group_id) where status = 'open';
+create index movie_nights_history_idx on public.movie_nights (group_id, happened_on desc, created_at desc);
+create index movie_nights_started_by_idx on public.movie_nights (started_by);
+create index movie_nights_picked_media_idx on public.movie_nights (picked_media_id);
+create index movie_nights_picked_item_idx on public.movie_nights (picked_list_item_id);
+
+-- A deck of cards inside a night: the first one when it starts, then one for each "more suggestions" (up to 5).
+create table public.movie_night_stacks (
+  id          uuid primary key default gen_random_uuid(),
+  night_id    uuid not null references public.movie_nights (id) on delete cascade,
+  position    smallint not null check (position between 1 and 5),
+  created_by  uuid references public.profiles (id) on delete set null,
+  created_at  timestamptz not null default now(),
+  -- Set when someone shows the results early: voting on this stack is over and everyone may see its results.
+  revealed_at timestamptz,
+  unique (night_id, position)
+);
+create index movie_night_stacks_created_by_idx on public.movie_night_stacks (created_by);
+
+-- One card: a title in a stack. A title is in a night at most once.
+create table public.movie_night_candidates (
+  id           uuid primary key default gen_random_uuid(),
+  night_id     uuid not null references public.movie_nights (id) on delete cascade,
+  stack_id     uuid not null references public.movie_night_stacks (id) on delete cascade,
+  media_id     uuid not null references public.media (id) on delete cascade,
+  -- The family list entry it came from; empty for suggestions.
+  list_item_id uuid references public.list_items (id) on delete set null,
+  origin       text not null check (origin in ('list', 'suggested')),
+  position     smallint not null,
+  unique (night_id, media_id),
+  unique (stack_id, position)
+);
+create index movie_night_candidates_media_idx on public.movie_night_candidates (media_id);
+create index movie_night_candidates_item_idx on public.movie_night_candidates (list_item_id);
+
+create table public.movie_night_votes (
+  candidate_id uuid not null references public.movie_night_candidates (id) on delete cascade,
+  user_id      uuid not null references public.profiles (id) on delete cascade,
+  vote         text not null check (vote in ('nope', 'yes', 'love', 'seen')),
+  voted_at     timestamptz not null default now(),
+  primary key (candidate_id, user_id)
+);
+create index movie_night_votes_user_idx on public.movie_night_votes (user_id);
+
+-- Who has swiped through a whole stack.
+create table public.movie_night_finishes (
+  stack_id    uuid not null references public.movie_night_stacks (id) on delete cascade,
+  user_id     uuid not null references public.profiles (id) on delete cascade,
+  finished_at timestamptz not null default now(),
+  primary key (stack_id, user_id)
+);
+create index movie_night_finishes_user_idx on public.movie_night_finishes (user_id);
+
+-- Who took part in a night, and (once a title is picked) who watched it.
+create table public.movie_night_members (
+  night_id  uuid not null references public.movie_nights (id) on delete cascade,
+  user_id   uuid not null references public.profiles (id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  watched   boolean not null default false,
+  primary key (night_id, user_id)
+);
+create index movie_night_members_user_idx on public.movie_night_members (user_id);
+
 -- ---------------------------------------------------------------------------
 --  Helper functions
 -- ---------------------------------------------------------------------------
@@ -236,6 +325,20 @@ as $$
   );
 $$;
 
+-- True if the signed-in user belongs to the family this movie night is for.
+create function public.can_see_night(night uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.movie_nights n
+    where n.id = night and public.is_group_member(n.group_id, auth.uid())
+  );
+$$;
+
 -- Counts one go at p_action for p_user in the current p_seconds-long window, and refuses once there have
 -- been more than p_max. Called by the functions below and, through the service-role key, by the app's server.
 create function public.hit_rate_limit(p_user uuid, p_action text, p_max integer, p_seconds integer)
@@ -303,6 +406,12 @@ alter table public.reactions     enable row level security;
 alter table public.watches       enable row level security;
 alter table public.activity      enable row level security;
 alter table public.rate_limits   enable row level security;
+alter table public.movie_nights           enable row level security;
+alter table public.movie_night_stacks     enable row level security;
+alter table public.movie_night_candidates enable row level security;
+alter table public.movie_night_votes      enable row level security;
+alter table public.movie_night_finishes   enable row level security;
+alter table public.movie_night_members    enable row level security;
 
 -- profiles ------------------------------------------------------------------
 create policy profiles_select on public.profiles for select
@@ -397,6 +506,24 @@ create policy watches_delete_own on public.watches for delete
 create policy activity_select on public.activity for select
   using (public.is_group_member(group_id, (select auth.uid())));
 
+-- movie nights: the family reads everything about its nights except other people's votes, which only come out
+-- of movie_night_state() once the viewer may see them. All changes go through the movie night functions.
+create policy movie_nights_select on public.movie_nights for select
+  using (public.is_group_member(group_id, (select auth.uid())));
+create policy movie_night_stacks_select on public.movie_night_stacks for select
+  using (public.can_see_night(night_id));
+create policy movie_night_candidates_select on public.movie_night_candidates for select
+  using (public.can_see_night(night_id));
+create policy movie_night_members_select on public.movie_night_members for select
+  using (public.can_see_night(night_id));
+create policy movie_night_finishes_select on public.movie_night_finishes for select
+  using (exists (
+    select 1 from public.movie_night_stacks s
+    where s.id = stack_id and public.can_see_night(s.night_id)
+  ));
+create policy movie_night_votes_select on public.movie_night_votes for select
+  using (user_id = (select auth.uid()));
+
 -- ---------------------------------------------------------------------------
 --  New users
 -- ---------------------------------------------------------------------------
@@ -466,6 +593,9 @@ begin
   -- Family titles they added stay on the family lists (personal ones go with the account).
   update public.list_items set added_by = null
   where added_by = old.id and group_id is not null;
+
+  -- Movie nights they picked or cancelled stay in the history without their name (their votes go with the account).
+  update public.movie_nights set ended_by = null where ended_by = old.id;
 
   -- Their name and notes leave the family histories.
   update public.activity
@@ -1062,6 +1192,9 @@ grant update (skipped_at) on public.watches to authenticated;
 -- Only the database's own triggers and functions write the feed, so events can't be faked.
 revoke insert, update, delete on public.activity from anon, authenticated;
 revoke all on public.rate_limits from anon, authenticated;
+-- Movie nights change only through the movie night functions.
+revoke insert, update, delete on public.movie_nights, public.movie_night_stacks, public.movie_night_candidates,
+  public.movie_night_votes, public.movie_night_finishes, public.movie_night_members from anon, authenticated;
 -- Everyone shares the movie info, so nobody can rewrite titles and posters for the rest; only the server saves it.
 revoke insert, update, delete on public.media from anon, authenticated;
 -- A list item's list, movie and author are fixed once it's added; afterwards people only mark it watched or
@@ -1111,6 +1244,8 @@ revoke execute on function public.pending_rating_requests() from public, anon;
 grant execute on function public.pending_rating_requests() to authenticated;
 revoke execute on function public.can_see_item(uuid) from public, anon;
 grant execute on function public.can_see_item(uuid) to authenticated;
+revoke execute on function public.can_see_night(uuid) from public, anon;
+grant execute on function public.can_see_night(uuid) to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.
 notify pgrst, 'reload schema';
