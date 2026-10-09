@@ -293,9 +293,25 @@ export function groupVotes(votes: ResultRow["votes"], meId: string): { vote: Vot
     .filter((group) => group.names.length > 0);
 }
 
+/** What someone can do next with a night that is going: join it, carry on swiping, or look at how it is going. */
+export function nightAction(night: Pick<ActiveNight, "joined" | "waiting_stacks">): string {
+  if (!night.joined) return "Join in";
+  return night.waiting_stacks > 0 ? "Keep swiping" : "See the leaderboard";
+}
+
+/** How a night's status is called in lists. */
+export const NIGHT_STATUS_LABEL: Record<NightStatus, string> = {
+  open: "In progress",
+  closed: "Finished",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
+
 /** One finished night in a family's history: a pick, a night nobody picked from, or a Watched together log. */
 export interface HistoryEntry {
   id: string;
+  groupId: string;
+  groupName: string;
   /** "logged" is a Watched together log with no swiping behind it. */
   source: "swipe" | "logged";
   status: Exclude<NightStatus, "open">;

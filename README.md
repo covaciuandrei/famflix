@@ -38,7 +38,9 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   stack. Any member can show the results early, cancel, or pick a title ("We
   watched this"), which logs it as Watched together, ends the night and adds its
   best 7 titles to the family list. A night closes by itself after 12 hours
-  without activity, and every night is kept in the family's history. The old
+  without activity. The page lists every night with its status (in progress,
+  finished, cancelled or expired), the ones in progress first, for the family
+  you chose or for all of yours; nothing is ever deleted from it. The old
   shuffle of what's left to watch is still there under "Browse your To watch
   list".
 - **Activity feed**: see what happened in each family; removed titles can be

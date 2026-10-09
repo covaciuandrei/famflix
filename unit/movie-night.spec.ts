@@ -10,6 +10,8 @@ import {
   MAX_GENRES,
   moodParams,
   MOODS,
+  NIGHT_STATUS_LABEL,
+  nightAction,
   parseMood,
   POINTS,
 } from "../src/lib/movie-night";
@@ -183,5 +185,23 @@ test.describe("groupVotes", () => {
 
   test("a night nobody voted on has nothing to show", () => {
     expect(groupVotes([], "u-ana")).toEqual([]);
+  });
+});
+
+test.describe("what a night in progress offers", () => {
+  test("joining comes first, then the stacks left to swipe, then the leaderboard", () => {
+    expect(nightAction({ joined: false, waiting_stacks: 1 })).toBe("Join in");
+    expect(nightAction({ joined: false, waiting_stacks: 0 })).toBe("Join in");
+    expect(nightAction({ joined: true, waiting_stacks: 2 })).toBe("Keep swiping");
+    expect(nightAction({ joined: true, waiting_stacks: 0 })).toBe("See the leaderboard");
+  });
+
+  test("every status has a name people can read", () => {
+    expect(NIGHT_STATUS_LABEL).toEqual({
+      open: "In progress",
+      closed: "Finished",
+      cancelled: "Cancelled",
+      expired: "Expired",
+    });
   });
 });

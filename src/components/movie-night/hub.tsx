@@ -6,15 +6,16 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { cancelNight, startMovieNight, startSoloStack } from "@/app/app/movie-night/actions";
-import { History } from "@/components/movie-night/history";
+import { useNightStatus } from "@/components/movie-night/night-status";
+import { NightList, PendingNights } from "@/components/movie-night/night-list";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { BROWSE_GENRES, findGenre } from "@/lib/genres";
 import {
-  type ActiveNight,
   DEFAULT_STACK_SIZE,
   type HistoryEntry,
   MAX_GENRES,
   MOODS,
+  nightAction,
   RUNTIME_LIMITS,
   STACK_SIZES,
   type StackSize,
@@ -39,24 +40,24 @@ function sameGenres(a: readonly string[], b: readonly string[]) {
 
 /**
  * Picks who is watching (just you, or one of your families), the mood, and starts the night. A family with a night
- * already going gets that night instead of a new one.
+ * already going gets that night instead of a new one. Beside it (below it on a phone) is the list of movie nights
+ * with their status: the chosen family's, or all of mine when it is Just me.
  */
 export function Hub({
   families,
   who,
-  openNight,
   history,
 }: {
   families: { id: string; name: string; members: number }[];
   /** The family chosen in the address, if any. */
   who: string | null;
-  /** The chosen family's open night, if it has one. */
-  openNight: ActiveNight | null;
-  /** The chosen family's first page of past nights. */
+  /** The first page of nights that are over, for the chosen family or all of mine; null without a family. */
   history: { entries: HistoryEntry[]; hasMore: boolean } | null;
 }) {
   const router = useRouter();
   const family = families.find((f) => f.id === who) ?? null;
+  // The chosen family's night that is going, kept up to date like the dot on the menu.
+  const openNight = useNightStatus().find((n) => n.group_id === family?.id) ?? null;
   const [genres, setGenres] = useState<string[]>([]);
   const [series, setSeries] = useState(false);
   const [count, setCount] = useState<StackSize>(DEFAULT_STACK_SIZE);
@@ -96,17 +97,11 @@ export function Hub({
     });
   }
 
-  const inProgress = openNight
-    ? !openNight.joined
-      ? "Join in"
-      : openNight.waiting_stacks > 0
-        ? "Keep swiping"
-        : "See the leaderboard"
-    : null;
+  const inProgress = openNight ? nightAction(openNight) : null;
 
   return (
-    // On a computer a family's past nights sit beside the form; everywhere else it is one column.
-    <div className={cn("grid items-start gap-x-10 gap-y-8", family && history && "lg:grid-cols-[minmax(0,1fr)_24rem]")}>
+    // On a computer the list of movie nights sits beside the form; everywhere else it is one column.
+    <div className={cn("grid items-start gap-x-10 gap-y-8", history && "lg:grid-cols-[minmax(0,1fr)_24rem]")}>
       <div className="flex min-w-0 flex-col gap-6">
         {families.length > 0 && (
           <section aria-labelledby="who-title" className="flex flex-col gap-3">
@@ -136,6 +131,8 @@ export function Hub({
             </nav>
           </section>
         )}
+
+        {!family && <PendingNights />}
 
         {family && openNight && inProgress && (
           <section
@@ -323,11 +320,13 @@ export function Hub({
         </p>
       </div>
 
-      {family && history && (
-        <History
-          key={family.id}
-          groupId={family.id}
-          familyName={family.name}
+      {history && (
+        <NightList
+          // Starts over when the first page changes (a night ended, or another family was chosen).
+          key={`${family?.id ?? "all"}:${history.entries.map((e) => e.id).join(",")}`}
+          scope={family ? { groupId: family.id, familyName: family.name } : null}
+          showFamily={!family && families.length > 1}
+          pendingOnTopBelowLg={!family}
           initial={history.entries}
           initialHasMore={history.hasMore}
         />

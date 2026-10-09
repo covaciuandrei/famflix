@@ -437,30 +437,34 @@ export async function getActiveMovieNights(): Promise<ActiveNight[]> {
 }
 
 /**
- * A family's finished movie nights, newest first (the open one isn't history yet), `limit` at a time from `offset`.
- * Anyone outside the family gets nothing. `hasMore` says whether there is another page.
+ * The movie nights that are over (finished, cancelled or expired), newest first, `limit` at a time from `offset`: one
+ * family's, or with a null `groupId` those of every family the user is in (row level security keeps everyone else's
+ * out). Nights still going aren't here: they come from active_movie_nights(). `hasMore` says whether there is
+ * another page.
  */
 export async function getNightHistory(
-  groupId: string,
+  groupId: string | null,
   offset: number,
   limit: number,
 ): Promise<{ entries: HistoryEntry[]; hasMore: boolean }> {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("movie_nights")
     .select(
-      `id, source, status, genres, happened_on, ended_by,
+      `id, group_id, source, status, genres, happened_on, ended_by,
+       family:groups(name),
        picked:media!picked_media_id(title, poster_path, tmdb_id, media_type, release_year),
        members:movie_night_members(watched, profile:profiles(display_name, avatar_url)),
        stacks:movie_night_stacks(count),
        cards:movie_night_candidates(count)`,
     )
-    .eq("group_id", groupId)
     .neq("status", "open")
     .order("happened_on", { ascending: false })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range(offset, offset + limit);
+  if (groupId) query = query.eq("group_id", groupId);
+  const { data, error } = await query;
   if (error) {
     console.error("Could not load movie night history:", error.message);
     return { entries: [], hasMore: false };
@@ -468,6 +472,8 @@ export async function getNightHistory(
 
   type Row = {
     id: string;
+    group_id: string;
+    family: { name: string } | null;
     source: "swipe" | "logged";
     status: HistoryEntry["status"];
     genres: string[];
@@ -492,6 +498,8 @@ export async function getNightHistory(
     const picked = r.status === "closed";
     return {
       id: r.id,
+      groupId: r.group_id,
+      groupName: r.family?.name ?? "",
       source: r.source,
       status: r.status,
       happenedOn: r.happened_on,

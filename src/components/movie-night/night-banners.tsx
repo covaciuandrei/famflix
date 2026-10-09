@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useNightStatus } from "@/components/movie-night/night-status";
 import { buttonVariants } from "@/components/ui/button";
 import { findGenre } from "@/lib/genres";
+import { nightAction } from "@/lib/movie-night";
 
 /** One line per movie night going on in my families, with the way into it (on Home). */
 export function NightBanners() {
@@ -15,7 +16,7 @@ export function NightBanners() {
     <section aria-label="Movie nights in progress" className="flex flex-col gap-2">
       {nights.map((night) => {
         const genres = night.genres.map((slug) => findGenre(slug)?.label ?? slug);
-        const action = !night.joined ? "Join in" : night.waiting_stacks > 0 ? "Keep swiping" : "See the leaderboard";
+        const action = nightAction(night);
         return (
           <div
             key={night.night_id}

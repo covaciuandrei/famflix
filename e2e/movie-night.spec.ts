@@ -157,12 +157,12 @@ test("a family night: the invite, swiping, a leaderboard without popups, and a p
   const { data: watches } = await admin.from("watches").select("user_id").eq("list_item_id", night!.picked_list_item_id!);
   expect((watches ?? []).map((w) => w.user_id).sort()).toEqual([ana.id, ben.id].sort());
 
-  // It is kept in the family's history, and Ben is asked how he liked it once he leaves the night.
+  // It is kept in the family's list of movie nights as finished, and Ben is asked how he liked it once he leaves the night.
   await anaPage.goto("/app/movie-night");
   await anaPage.getByRole("link", { name: /^Movie Crew/ }).click();
-  const history = anaPage.locator("#history");
+  const history = anaPage.locator("#movie-nights");
   await expect(history.getByText(title)).toBeVisible();
-  await expect(history.getByText("Picked", { exact: true })).toBeVisible();
+  await expect(history.getByText("Finished", { exact: true })).toBeVisible();
   await benPage.goto("/app");
   await expect(benPage.getByRole("dialog", { name: "How did you like it?" })).toBeVisible();
 
@@ -198,13 +198,15 @@ test("cancelling ends a night for everybody, and one that goes quiet closes by i
   await anaPage.reload();
   await expect(anaPage.getByText(/ended after 12 hours/)).toBeVisible();
 
-  // Both are in the history, newest first.
+  // Both are in the list, newest first, with their status.
   await anaPage.goto("/app/movie-night");
   await anaPage.getByRole("link", { name: /^Quiet Crew/ }).click();
-  const history = anaPage.locator("#history ul > li");
+  const history = anaPage.locator("#movie-nights ul > li");
   await expect(history).toHaveCount(2);
   await expect(history.nth(0)).toContainText("Nobody picked");
+  await expect(history.nth(0)).toContainText("Expired");
   await expect(history.nth(1)).toContainText("Cancelled by Ana");
+  await expect(history.nth(1)).toContainText("Cancelled");
 
   await closeAll(pages);
 });
@@ -276,7 +278,7 @@ test("the history keeps every night and shows 20 at a time", async ({ browser },
   ]);
 
   await page.goto(`/app/movie-night?who=${group!.id}`);
-  const entries = page.locator("#history ul > li");
+  const entries = page.locator("#movie-nights ul > li");
   await expect(entries).toHaveCount(20);
   await expect(entries.first()).toContainText("Cancelled by Ana");
   await page.getByRole("button", { name: "Load more" }).click();
@@ -285,6 +287,92 @@ test("the history keeps every night and shows 20 at a time", async ({ browser },
   // A Watched together log is told apart, and opens its title.
   await expect(entries.nth(1)).toContainText("Archive Film 0");
   await expect(entries.nth(1)).toContainText("Watched together");
+  await expect(entries.nth(1)).toContainText("Finished");
 
   await page.context().close();
+});
+
+test("the list shows every night with its status, the one in progress first, across families", async ({ browser }, testInfo) => {
+  const ana = await createUser("Ana");
+  const ben = await createUser("Ben");
+  const anaPage = await openAs(browser, testInfo.project, ana);
+  const benPage = await openAs(browser, testInfo.project, ben);
+  acceptConfirms(anaPage);
+  await startFamily(anaPage, [benPage], "Alpha Crew");
+  await startFamily(anaPage, [], "Beta Crew");
+  const { data: groups } = await admin.from("groups").select("id, name").eq("created_by", ana.id);
+  const alpha = groups!.find((g) => g.name === "Alpha Crew")!.id;
+  const beta = groups!.find((g) => g.name === "Beta Crew")!.id;
+
+  const media: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const { data } = await admin
+      .from("media")
+      .upsert({ tmdb_id: 870100 + i, media_type: "movie", title: `List Film ${i}`, release_year: 2001, genres: [] }, { onConflict: "tmdb_id,media_type" })
+      .select("id")
+      .single();
+    media.push(data!.id);
+  }
+  const day = (back: number) => new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+  const night = async (row: Record<string, unknown>) =>
+    (await admin.from("movie_nights").insert({ genres: [], ...row }).select("id").single()).data!.id as string;
+
+  // Alpha has one going (started by Ben, with a stack to swipe) and one of each way a night can end; Beta one log.
+  const going = await night({ group_id: alpha, source: "swipe", status: "open", started_by: ben.id, genres: ["comedy"], happened_on: day(0) });
+  await admin.from("movie_night_members").insert({ night_id: going, user_id: ben.id });
+  const { data: stack } = await admin.from("movie_night_stacks").insert({ night_id: going, position: 1, created_by: ben.id }).select("id").single();
+  await admin.from("movie_night_candidates").insert(
+    media.slice(0, 8).map((id, i) => ({ night_id: going, stack_id: stack!.id, media_id: id, origin: "suggested", position: i + 1 })),
+  );
+  await night({ group_id: alpha, source: "swipe", status: "closed", started_by: ana.id, ended_by: ana.id, picked_media_id: media[8], happened_on: day(1) });
+  await night({ group_id: alpha, source: "swipe", status: "cancelled", started_by: ben.id, ended_by: ben.id, happened_on: day(2) });
+  await night({ group_id: alpha, source: "swipe", status: "expired", started_by: ana.id, happened_on: day(3) });
+  await night({ group_id: alpha, source: "logged", status: "closed", started_by: ana.id, ended_by: ana.id, picked_media_id: media[9], happened_on: day(4) });
+  await night({ group_id: beta, source: "logged", status: "closed", started_by: ana.id, ended_by: ana.id, picked_media_id: media[10], happened_on: day(5) });
+
+  // Just me: every family's nights, each saying which family it is for, with their status in words.
+  await anaPage.goto("/app/movie-night");
+  const list = anaPage.locator("#movie-nights");
+  await expect(list.getByRole("heading", { name: "Movie nights", exact: true })).toBeVisible();
+  await expect(list).toContainText("Alpha Crew");
+  await expect(list).toContainText("Beta Crew");
+  for (const status of ["Finished", "Cancelled", "Expired"]) {
+    await expect(list.getByText(status, { exact: true }).first()).toBeVisible();
+  }
+  // The night in progress: its row heads the list on a computer, and is at the top of the page on a phone (the list
+  // is far below the form there). Either way it says it is in progress and what you can do next.
+  const row = anaPage.getByRole("link", { name: /Started by Ben/ });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("In progress");
+  await expect(row).toContainText("Join in");
+  if (testInfo.project.name === "desktop") {
+    await expect(list.locator("ul > li").first()).toContainText("In progress");
+  } else {
+    const rowBox = (await row.boundingBox())!;
+    const startBox = (await anaPage.getByRole("button", { name: "Start swiping" }).boundingBox())!;
+    expect(rowBox.y).toBeLessThan(startBox.y);
+  }
+
+  // One family: just its nights, with the card for the one going in place of the form, and the same night in the list.
+  await anaPage.goto(`/app/movie-night?who=${alpha}`);
+  await expect(list.getByRole("heading", { name: "Movie nights in Alpha Crew" })).toBeVisible();
+  await expect(list).not.toContainText("Beta Crew");
+  await expect(anaPage.getByRole("region", { name: "Movie night in progress" })).toBeVisible();
+  await expect(list.getByRole("link", { name: /Started by Ben/ })).toContainText("In progress");
+
+  // Cancelling it from the card puts it in the list as cancelled, straight away.
+  await anaPage.getByRole("button", { name: "Cancel it" }).click();
+  await expect(list.getByRole("link", { name: /Started by Ben/ })).toHaveCount(0);
+  await expect(list.locator("ul > li").first()).toContainText("Cancelled by Ana");
+  await expect(anaPage.getByRole("button", { name: "Start movie night for Alpha Crew" })).toBeVisible();
+
+  // The next page of the list is for every family when none is named, and answers for what it is asked.
+  const all = await (await anaPage.request.get("/api/movie-night/history?offset=0")).json();
+  expect(all.entries).toHaveLength(6);
+  expect(new Set(all.entries.map((e: { groupName: string }) => e.groupName))).toEqual(new Set(["Alpha Crew", "Beta Crew"]));
+  const onlyBeta = await (await anaPage.request.get(`/api/movie-night/history?group=${beta}&offset=0`)).json();
+  expect(onlyBeta.entries).toHaveLength(1);
+  expect((await anaPage.request.get("/api/movie-night/history?group=nope")).status()).toBe(400);
+
+  await closeAll([anaPage, benPage]);
 });
