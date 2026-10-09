@@ -8,6 +8,8 @@ export const LIMITS = {
   addTitle: { action: "add_title", max: 30, seconds: 60 },
   /** Searching for titles. */
   search: { action: "search", max: 60, seconds: 60 },
+  /** Building a movie night stack (solo, a new night, or more suggestions): each one asks TMDB for dozens of titles. */
+  deck: { action: "deck", max: 12, seconds: 3600 },
 } as const;
 
 /**

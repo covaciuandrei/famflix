@@ -28,3 +28,28 @@ export async function saveMedia(
   }
   return { id: (data as { id: string }).id };
 }
+
+/** Saves several titles in one go (a movie night's suggestions); returns each one's id by "movie:123" / "tv:456". */
+export async function saveMediaMany(
+  rows: ReturnType<typeof detailsToMediaRow>[],
+): Promise<Map<string, string> | { error: string }> {
+  if (rows.length === 0) return new Map();
+  const admin = createAdminClient();
+  if (!admin) {
+    return { error: "Couldn't save these titles. Please try again later." };
+  }
+  const { data, error } = await admin
+    .from("media")
+    .upsert(rows, { onConflict: "tmdb_id,media_type" })
+    .select("id, tmdb_id, media_type");
+  if (error || !data) {
+    console.error("Saving movie info failed:", error?.message);
+    return { error: "Couldn't save these titles. Please try again later." };
+  }
+  return new Map(
+    (data as { id: string; tmdb_id: number; media_type: string }[]).map((r) => [
+      `${r.media_type}:${r.tmdb_id}`,
+      r.id,
+    ]),
+  );
+}

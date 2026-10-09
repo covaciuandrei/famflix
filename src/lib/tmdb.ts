@@ -1,7 +1,8 @@
 import "server-only";
 
 import type { Decade } from "@/lib/decades";
-import type { BrowseGenre } from "@/lib/genres";
+import { findGenre, type BrowseGenre } from "@/lib/genres";
+import { interleave } from "@/lib/deck-compose";
 import type { MediaType } from "@/lib/types";
 
 /**
@@ -264,6 +265,101 @@ export async function getDiscoverRows({
   return Promise.all(
     rows.map(async (r) => ({ title: r.title, items: await r.items })),
   );
+}
+
+/** Spreads a stack's seed over TMDB's first few pages, so asking again for the same mood gives other titles. */
+function pageFor(seed: number, salt: number, pages: number): number {
+  let h = (seed | 0) ^ Math.imul(salt + 1, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h ^= h >>> 13;
+  return 1 + ((h >>> 0) % pages);
+}
+
+/**
+ * Titles to suggest for a movie night, popular and well-rated ones for each chosen category (movies, and series if
+ * asked), already released and with a poster, mixed so the first ones aren't all one category. Which TMDB pages
+ * they come from depends on `seed`. Throws if TMDB can't be reached.
+ */
+export async function getDeckSuggestions({
+  genres,
+  series,
+  maxRuntime,
+  seed,
+}: {
+  /** Category slugs; none means anything popular. */
+  genres: readonly string[];
+  series: boolean;
+  /** Movies up to this many minutes. */
+  maxRuntime: number | null;
+  seed: number;
+}): Promise<TmdbItem[]> {
+  const chosen = genres.map(findGenre).filter((g): g is BrowseGenre => g !== null);
+  const types: MediaType[] = series ? ["movie", "tv"] : ["movie"];
+  const wanted: { type: MediaType; genreId: number | null }[] = [];
+  const seen = new Set<string>();
+  const add = (type: MediaType, genreId: number | null) => {
+    const key = `${type}:${genreId}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      wanted.push({ type, genreId });
+    }
+  };
+  if (chosen.length === 0) {
+    types.forEach((type) => add(type, null));
+  } else {
+    for (const genre of chosen) {
+      for (const type of types) {
+        if (genre[type] !== null) add(type, genre[type]);
+      }
+    }
+  }
+
+  // Nothing to search: every chosen category only exists for a type that is left out (Kids has no movies).
+  if (wanted.length === 0) return [];
+
+  const today = new Date().toISOString().slice(0, 10);
+  const pagesEach = wanted.length >= 4 ? 1 : 2;
+  const lists = await Promise.allSettled(
+    wanted.map(async ({ type, genreId }, i) => {
+      // Alternate between what's popular and what's best rated.
+      const popular = i % 2 === 0;
+      const dateField = type === "movie" ? "primary_release_date" : "first_air_date";
+      const pages = await Promise.all(
+        Array.from({ length: pagesEach }, (_, n) =>
+          tmdbFetch<{ results: RawResult[] }>(
+            `/discover/${type}`,
+            {
+              ...(genreId !== null && { with_genres: String(genreId) }),
+              // Talk, news, reality and soap shows would otherwise fill the Comedy and Drama series.
+              ...(type === "tv" && { without_genres: "10763,10764,10766,10767" }),
+              ...(type === "movie" && maxRuntime !== null && { "with_runtime.lte": String(maxRuntime) }),
+              [`${dateField}.lte`]: today,
+              include_adult: "false",
+              sort_by: popular ? "popularity.desc" : "vote_average.desc",
+              "vote_count.gte": popular ? "100" : type === "movie" ? "400" : "150",
+              page: String(1 + ((pageFor(seed, i, 4) - 1 + n) % 4)),
+            },
+            3600,
+          ).then((data) => normalizeMany(data.results, type)),
+        ),
+      );
+      return pages.flat();
+    }),
+  );
+
+  const fulfilled = lists.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  if (fulfilled.length === 0) {
+    const failed = lists.find((r) => r.status === "rejected");
+    throw failed?.status === "rejected" ? failed.reason : new Error("No suggestions");
+  }
+  const posters = fulfilled.map((list) => list.filter((item) => item.posterPath));
+  const seenTitles = new Set<string>();
+  return interleave(posters).filter((item) => {
+    const key = `${item.mediaType}:${item.tmdbId}`;
+    if (seenTitles.has(key)) return false;
+    seenTitles.add(key);
+    return true;
+  });
 }
 
 /** TMDB's "if you liked this" titles for one movie or series. */
