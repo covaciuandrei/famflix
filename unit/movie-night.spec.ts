@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { composeDeck, interleave } from "../src/lib/deck-compose";
+import { formatRuntime } from "../src/lib/format";
 import { BROWSE_GENRES, matchesAnyGenre, matchesGenreSlug } from "../src/lib/genres";
 import {
   deckOrder,
@@ -153,4 +154,10 @@ test.describe("moods", () => {
 
 test("points: love 2, yes 1, seen it 1, nope -1", () => {
   expect(POINTS).toEqual({ love: 2, yes: 1, seen: 1, nope: -1 });
+});
+
+test("formatRuntime reads like a film listing", () => {
+  expect(formatRuntime(45)).toBe("45 min");
+  expect(formatRuntime(95)).toBe("1 h 35 min");
+  expect(formatRuntime(120)).toBe("2 h");
 });
