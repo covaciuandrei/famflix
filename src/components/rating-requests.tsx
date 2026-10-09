@@ -107,7 +107,8 @@ export function RatingRequests({
           How did you like it?
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          You were marked as having watched these with your family.
+          You were marked as having watched these with your family, so they are on your My list as watched. If you
+          weren&apos;t there, say so and they come off it.
         </p>
 
         <ul className="mt-4 flex flex-col gap-3">

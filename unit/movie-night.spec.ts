@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { composeDeck, interleave } from "../src/lib/deck-compose";
-import { formatRuntime } from "../src/lib/format";
+import { formatDayNumeric, formatRuntime } from "../src/lib/format";
 import { BROWSE_GENRES, matchesAnyGenre, matchesGenreSlug } from "../src/lib/genres";
 import {
   deckOrder,
@@ -157,6 +157,12 @@ test.describe("moods", () => {
 
 test("points: love 2, yes 1, seen it 1, nope -1", () => {
   expect(POINTS).toEqual({ love: 2, yes: 1, seen: 1, nope: -1 });
+});
+
+test("formatDayNumeric writes a day as dd.mm.yyyy, from a date or a full timestamp", () => {
+  expect(formatDayNumeric("2026-10-09")).toBe("09.10.2026");
+  expect(formatDayNumeric("2026-01-31")).toBe("31.01.2026");
+  expect(formatDayNumeric("2026-12-05T20:00:00+00:00")).toBe("05.12.2026");
 });
 
 test("formatRuntime reads like a film listing", () => {

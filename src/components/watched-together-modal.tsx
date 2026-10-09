@@ -111,8 +111,9 @@ export function WatchedTogetherModal({
         Who watched {title}?
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Tick everyone who was there. You can fill in a score for anyone who hasn&apos;t rated it yet, and add your own
-        note. The others are asked to confirm their score and add their note.
+        Tick everyone who was there: it goes on each of their My lists as watched. You can fill in a score for anyone
+        who hasn&apos;t rated it yet, and add your own note. The others are asked to confirm their score and add their
+        note.
       </p>
       {intro && <div className="mt-2 text-sm text-muted-foreground">{intro}</div>}
 

@@ -30,8 +30,10 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong className="text-foreground">What you add:</strong> the
-            titles on your lists, your scores, notes, likes and dislikes, who
-            watched what and when, the families you belong to, and a history of
+            titles on your lists (a title your family logs as watched together
+            with you is also added to your personal list, which only you can
+            see), your scores, notes, likes and dislikes, who watched what and
+            when, the families you belong to, and a history of
             family activity (for example &ldquo;Ana added Dune&rdquo;; each
             family keeps its latest 500 events).
           </li>

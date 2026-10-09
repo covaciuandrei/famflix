@@ -167,6 +167,14 @@ test("a family night: the invite, swiping, a leaderboard without popups, and a p
   expect(onList.count).toBeGreaterThanOrEqual(2);
   const { data: watches } = await admin.from("watches").select("user_id").eq("list_item_id", night!.picked_list_item_id!);
   expect((watches ?? []).map((w) => w.user_id).sort()).toEqual([ana.id, ben.id].sort());
+  // The pick went on those two people's My lists as watched, and not on Cara's, who wasn't there.
+  const { data: onMyLists } = await admin
+    .from("list_items")
+    .select("added_by, status")
+    .is("group_id", null)
+    .eq("source_item_id", night!.picked_list_item_id!);
+  expect((onMyLists ?? []).map((m) => m.added_by).sort()).toEqual([ana.id, ben.id].sort());
+  expect((onMyLists ?? []).every((m) => m.status === "watched")).toBe(true);
 
   // It is kept in the family's list of movie nights as finished, and Ben is asked how he liked it once he leaves the night.
   await anaPage.goto("/app/movie-night");

@@ -14,6 +14,38 @@ import {
   startFamily,
 } from "./helpers";
 
+/** Today as the app writes it on a My list card: dd.mm.yyyy. */
+function today(): string {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+/**
+ * My list, on its Watched tab. A person with a rating waiting has the "How did you like it?" popup open by itself over
+ * any page, so for them (`popup`) it is closed with "Later" first.
+ */
+async function openMyWatched(page: Page, { popup = false } = {}) {
+  await page.goto("/app/mine");
+  if (popup) {
+    const ask = page.getByRole("dialog", { name: "How did you like it?" });
+    await expect(ask).toBeVisible();
+    await ask.getByRole("button", { name: "Later" }).click();
+    await expect(ask).toBeHidden();
+  }
+  await page.getByRole("button", { name: /^Watched \d+$/ }).click();
+}
+
+/** The rating popup: it opens by itself once a session, and after "Later" the star in the header brings it back. */
+async function openRatingRequests(page: Page) {
+  await page.goto("/app");
+  const ask = page.getByRole("dialog", { name: "How did you like it?" });
+  const star = page.getByRole("button", { name: /waiting for your rating/ });
+  await expect(ask.or(star)).toBeVisible();
+  if (!(await ask.isVisible())) await star.click();
+  await expect(ask).toBeVisible();
+  return ask;
+}
+
 test("the login page only offers Google", async ({ page }) => {
   await page.goto("/login");
   await expect(
@@ -101,24 +133,47 @@ test("watched together: the others confirm their score and add a note", async ({
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
 
+  // It is on Ana's My list as watched, with Bogdan and today's date, and her note.
+  await openMyWatched(anaPage);
+  const anaCard = listCard(anaPage, "Dune");
+  await expect(anaCard.getByText(`Watched with Bogdan on ${today()}`)).toBeVisible();
+  await expect(anaCard.getByRole("button", { name: /Your note/ })).toBeVisible();
+
+  // Bogdan's too, with the 8.5 Ana filled in for him, before he has even been asked.
+  await openMyWatched(bogdanPage, { popup: true });
+  const bogdanCard = listCard(bogdanPage, "Dune");
+  await expect(bogdanCard.getByText(`Watched with Ana on ${today()}`)).toBeVisible();
+  await expect(bogdanCard.getByRole("button", { name: /Your rating 8\.5/ })).toBeVisible();
+
   // Bogdan is asked to confirm the 8.5 Ana filled in, and adds his note.
-  await bogdanPage.goto("/app");
-  const ask = bogdanPage.getByRole("dialog", { name: "How did you like it?" });
-  await expect(ask).toBeVisible();
+  const ask = await openRatingRequests(bogdanPage);
   await expect(ask.getByText(/filled in 8\.5\/10 for you/)).toBeVisible();
   await ask.getByPlaceholder("Add a note (optional)").fill("Bogdan's note");
   await ask.getByRole("button", { name: "Save" }).click();
   await expect(ask).toBeHidden();
 
+  // The family's ratings are the two above (My list has its own copies, checked below).
   const { data } = await admin
     .from("ratings")
-    .select("user_id, score, comment, rated_by")
+    .select("user_id, score, comment, rated_by, list_items!inner(group_id)")
     .in("user_id", [ana.id, bogdan.id])
+    .not("list_items.group_id", "is", null)
     .order("comment");
-  expect(data).toEqual([
+  expect(data?.map((r) => ({ user_id: r.user_id, score: r.score, comment: r.comment, rated_by: r.rated_by }))).toEqual([
     { user_id: ana.id, score: null, comment: "Ana's note", rated_by: ana.id },
     { user_id: bogdan.id, score: 8.5, comment: "Bogdan's note", rated_by: bogdan.id },
   ]);
+
+  // His note follows to his My list, where the score is now his own.
+  const { data: mine } = await admin
+    .from("ratings")
+    .select("score, comment, rated_by, list_items!inner(group_id)")
+    .eq("user_id", bogdan.id)
+    .is("list_items.group_id", null);
+  expect(mine).toEqual([{ score: 8.5, comment: "Bogdan's note", rated_by: bogdan.id, list_items: { group_id: null } }]);
+  await openMyWatched(bogdanPage);
+  await listCard(bogdanPage, "Dune").getByRole("button", { name: /Your rating 8\.5/ }).click();
+  await expect(listCard(bogdanPage, "Dune").getByPlaceholder("Add a note (optional)")).toHaveValue("Bogdan's note");
   await Promise.all([anaPage, bogdanPage].map((page) => page.context().close()));
 });
 
@@ -157,9 +212,17 @@ test("I wasn't there, or deleting an account: the title goes back to To watch on
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog).toBeHidden();
   }
+  // What is on someone's My list (the entries a Watched together log put there say so).
+  const mine = async (userId: string) => {
+    const { data } = await admin
+      .from("list_items")
+      .select("status, watch_origin, source_item_id")
+      .eq("added_by", userId)
+      .is("group_id", null);
+    return data;
+  };
   async function bogdanSaysHeWasntThere() {
-    await bogdanPage.goto("/app");
-    const ask = bogdanPage.getByRole("dialog", { name: "How did you like it?" });
+    const ask = await openRatingRequests(bogdanPage);
     await ask.getByRole("button", { name: "I wasn't there" }).click();
     await expect(ask).toBeHidden();
   }
@@ -167,7 +230,16 @@ test("I wasn't there, or deleting an account: the title goes back to To watch on
   // Ana logs only Bogdan; he says he wasn't there. Nobody watched it, so it is back on To watch, unticked.
   await logWatchedTogether(anaPage, { ana: false, bogdan: true });
   expect(await dune()).toEqual({ status: "watched", viewers: [bogdan.id] });
+  // It is on Bogdan's My list as watched (alone, so no "with"), and not on Ana's, who isn't on the log.
+  expect(await mine(bogdan.id)).toEqual([{ status: "watched", watch_origin: "created", source_item_id: (item as { id: string }).id }]);
+  expect(await mine(ana.id)).toEqual([]);
+  await openMyWatched(bogdanPage, { popup: true });
+  await expect(listCard(bogdanPage, "Dune").getByText(`Watched on ${today()}`)).toBeVisible();
   await bogdanSaysHeWasntThere();
+  // ... and he says he wasn't there, so it is off his list again.
+  expect(await mine(bogdan.id)).toEqual([]);
+  await bogdanPage.goto("/app/mine");
+  await expect(bogdanPage.getByRole("button", { name: "Watched 0" })).toBeVisible();
   await openFamily(bogdanPage, "Test family");
   const card = listCard(bogdanPage, "Dune");
   await expect(card.getByRole("button", { name: "Mark watched" })).toBeVisible();
@@ -176,7 +248,12 @@ test("I wasn't there, or deleting an account: the title goes back to To watch on
 
   // Ana logs both and Bogdan says it again. Ana was there, so it stays watched together, with only her on it.
   await logWatchedTogether(anaPage, { ana: true, bogdan: true });
+  expect(await mine(ana.id)).toHaveLength(1);
+  expect(await mine(bogdan.id)).toHaveLength(1);
   await bogdanSaysHeWasntThere();
+  // Ana stays on the record, and on hers; Bogdan's is gone.
+  expect(await mine(bogdan.id)).toEqual([]);
+  expect(await mine(ana.id)).toEqual([{ status: "watched", watch_origin: "created", source_item_id: (item as { id: string }).id }]);
   await openFamily(bogdanPage, "Test family");
   await bogdanPage.getByRole("button", { name: /^Watched together \d+$/ }).click();
   await expect(

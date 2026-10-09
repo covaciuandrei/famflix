@@ -17,6 +17,7 @@ import type {
   PendingRating,
   Profile,
   RemovedItem,
+  WatchedWith,
 } from "@/lib/types";
 
 const LIST_SELECT =
@@ -136,12 +137,57 @@ export async function getListCards(opts: {
   const { data, error } = await query;
   if (error || !data) return [];
 
-  return (data as unknown as ListItemWithDetails[])
-    .map((row) => toCard(row, opts.userId))
+  const rows = data as unknown as ListItemWithDetails[];
+  const watchedWith = opts.groupId ? new Map<string, WatchedWith>() : await loadWatchedWith(supabase, opts.userId, rows);
+  return rows
+    .map((row) => toCard(row, opts.userId, watchedWith.get(row.id) ?? null))
     .filter((c): c is ListItemCard => c !== null);
 }
 
-function toCard(row: ListItemWithDetails, userId: string): ListItemCard | null {
+/**
+ * For the titles on My list that a Watched together log put there: who else was on that log, and the day this person
+ * watched it. They are read from the family title's watch records, which a person who has since left the family can't
+ * see: for them there are no names, only the day.
+ */
+async function loadWatchedWith(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  rows: ListItemWithDetails[],
+): Promise<Map<string, WatchedWith>> {
+  const result = new Map<string, WatchedWith>();
+  const linked = rows.filter((r) => r.group_id === null && r.status === "watched" && r.source_item_id);
+  if (linked.length === 0) return result;
+
+  const { data } = await supabase
+    .from("watches")
+    .select("list_item_id, user_id, watched_on")
+    .in("list_item_id", [...new Set(linked.map((r) => r.source_item_id as string))]);
+  const watches = (data ?? []) as { list_item_id: string; user_id: string; watched_on: string }[];
+
+  const others = [...new Set(watches.filter((w) => w.user_id !== userId).map((w) => w.user_id))];
+  const names = new Map<string, string>();
+  if (others.length > 0) {
+    const { data: people } = await supabase.from("profiles").select("id, display_name").in("id", others);
+    for (const person of (people ?? []) as { id: string; display_name: string }[]) {
+      names.set(person.id, person.display_name);
+    }
+  }
+
+  for (const row of linked) {
+    const onTheLog = watches.filter((w) => w.list_item_id === row.source_item_id);
+    const mine = onTheLog.find((w) => w.user_id === userId);
+    result.set(row.id, {
+      names: onTheLog
+        .filter((w) => w.user_id !== userId)
+        .map((w) => names.get(w.user_id) ?? "someone")
+        .sort((a, b) => a.localeCompare(b)),
+      on: mine?.watched_on ?? (row.watched_at ?? row.created_at).slice(0, 10),
+    });
+  }
+  return result;
+}
+
+function toCard(row: ListItemWithDetails, userId: string, watchedWith: WatchedWith | null): ListItemCard | null {
   if (!row.media) return null;
 
   const likeCount = row.reactions.filter((r) => r.value === "like").length;
@@ -169,6 +215,7 @@ function toCard(row: ListItemWithDetails, userId: string): ListItemCard | null {
       status: row.status,
       created_at: row.created_at,
       watched_at: row.watched_at,
+      source_item_id: row.source_item_id ?? null,
     },
     media: row.media,
     addedBy: row.profiles,
@@ -181,6 +228,7 @@ function toCard(row: ListItemWithDetails, userId: string): ListItemCard | null {
     myComment: mine?.comment ?? null,
     myReaction,
     viewers: row.watches,
+    watchedWith,
   };
 }
 

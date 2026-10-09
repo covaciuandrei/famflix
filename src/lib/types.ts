@@ -57,6 +57,16 @@ export interface ListItem {
   status: ListStatus;
   created_at: string;
   watched_at: string | null;
+  /** On My list: the family title a Watched together log put this here from, if one did. */
+  source_item_id: string | null;
+}
+
+/** A title on My list that a Watched together log put there: who else was on the log, and the day. */
+export interface WatchedWith {
+  /** The others on the log (not the signed-in person), by name. */
+  names: string[];
+  /** The day, as YYYY-MM-DD. */
+  on: string;
 }
 
 export interface Rating {
@@ -187,6 +197,8 @@ export interface ListItemCard {
   myComment: string | null;
   myReaction: ReactionValue | null;
   viewers: Watch[];
+  /** Only on My list, for a title a Watched together log put there. */
+  watchedWith: WatchedWith | null;
 }
 
 export type SortKey =

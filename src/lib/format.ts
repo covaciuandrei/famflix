@@ -27,6 +27,12 @@ export function formatDay(isoDate: string): string {
   return `${MONTHS[month - 1]} ${day}, ${year}`;
 }
 
+/** "2026-10-09" -> "09.10.2026". */
+export function formatDayNumeric(isoDate: string): string {
+  const [year, month, day] = isoDate.slice(0, 10).split("-");
+  return `${day}.${month}.${year}`;
+}
+
 /** "just now", "5 min ago", "3 h ago", "2 days ago", then a date. Render on the server only. */
 export function timeAgo(iso: string): string {
   const minutes = Math.floor((Date.now() - Date.parse(iso)) / 60_000);

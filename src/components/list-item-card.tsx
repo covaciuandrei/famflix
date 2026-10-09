@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Star, Trash2 } from "lucide-react";
+import { MessageSquare, Star, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { WatchedToggle } from "@/components/watched-toggle";
 import { WatchedTogetherDialog } from "@/components/watched-together-dialog";
 import { mediaTypeLabel } from "@/lib/constants";
-import { formatDay, formatScore } from "@/lib/format";
+import { formatDay, formatDayNumeric, formatScore } from "@/lib/format";
 import { isWatchedTogether } from "@/lib/list-status";
 import type { ListItemCard as Card, MemberSummary } from "@/lib/types";
 
@@ -85,6 +85,19 @@ export function ListItemCard({
                   </span>
                 )}
               </div>
+              {/* A title the family watched together, on a viewer's My list: with whom, and when. */}
+              {card.watchedWith && item.status === "watched" && (
+                <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <Users className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>
+                    Watched
+                    {card.watchedWith.names.length > 0
+                      ? ` with ${card.watchedWith.names.join(", ")}`
+                      : ""}{" "}
+                    on {formatDayNumeric(card.watchedWith.on)}
+                  </span>
+                </p>
+              )}
             </div>
             <button
               type="button"

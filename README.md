@@ -27,7 +27,12 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   takes them off the record and drops the score filled in for them. Family lists
   are split into To watch and Watched together, so a title one person marked
   Watched on their own stays on the family's To watch list, and a title everyone
-  on the record says they weren't at goes back to To watch.
+  on the record says they weren't at goes back to To watch. Everyone you tick
+  also gets the title on their **My list** as watched (moved over from To
+  watch if it was there), with their score and note, and a line on the card:
+  "Watched with Ben, Cara on 09.10.2026". Their score there follows the
+  family's until they change it on My list, and "I wasn't there" takes the title
+  off their My list again.
 - **Movie night**: can't decide? Pick a mood and swipe through a stack of
   titles: ✕ nope, ♥ love (three per stack), ✓ yes or 👁 seen it, with buttons or
   the arrow keys on a computer and swipes on a phone. On your own, what you swipe
