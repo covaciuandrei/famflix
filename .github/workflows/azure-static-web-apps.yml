@@ -48,6 +48,9 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Database tests
         run: npm run test:db
         env:

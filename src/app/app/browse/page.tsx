@@ -10,8 +10,8 @@ import {
   getSuggestionSeeds,
 } from "@/lib/data";
 import { DECADES, findDecade } from "@/lib/decades";
+import { BROWSE_GENRES } from "@/lib/genres";
 import {
-  BROWSE_GENRES,
   getBrowseRows,
   getDiscoverRows,
   getRecommendations,

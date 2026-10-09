@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { requireUser } from "@/lib/auth";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { saveMedia } from "@/lib/save-media";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,15 +36,6 @@ function cleanScore(score: number | null): number | null | undefined {
   if (score === null) return null;
   if (!Number.isFinite(score) || score < 1 || score > 10) return undefined;
   return Math.round(score * 10) / 10;
-}
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("You must be signed in.");
-  return { supabase, user };
 }
 
 /** Checks a title id sent by the browser, fetches the title from TMDB and saves its movie info; returns its media id. */

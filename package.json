@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:unit": "playwright test -c playwright.unit.config.ts",
     "test:db": "supabase/tests/run.sh",
     "test:e2e": "scripts/e2e.sh"
   },

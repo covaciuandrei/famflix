@@ -54,7 +54,7 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
 | Styling              | [Tailwind CSS v4](https://tailwindcss.com), [Lucide](https://lucide.dev) icons |
 | Database and sign-in | [Supabase](https://supabase.com): Postgres with row-level security, Auth (Google) |
 | Movie data           | [TMDB API](https://developer.themoviedb.org)                              |
-| Tests                | SQL test files for the database, [Playwright](https://playwright.dev) for the browser |
+| Tests                | Unit tests of the logic, SQL test files for the database, [Playwright](https://playwright.dev) for the browser |
 | Hosting              | Azure Static Web Apps, deployed by GitHub Actions                         |
 
 ## 1. Prerequisites
@@ -115,6 +115,8 @@ create a family or join one with an invite code.
 
 ## Tests
 
+- `npm run test:unit`: tests of pure logic in `unit/` (building movie night stacks,
+  moods, genres). No browser, server or database needed.
 - `npm run test:db`: the database tests in `supabase/tests/` (security rules,
   families, scores, limits, deleting an account). They build a throwaway
   database from `supabase/db_init.sql`; you need PostgreSQL 17 installed, or
@@ -125,7 +127,7 @@ create a family or join one with an invite code.
   (`supabase/config.toml`) built from `db_init.sql`, never the live one.
   `npx supabase stop` shuts it down afterwards.
 
-GitHub runs lint, the type check and both test suites on every push and pull
+GitHub runs lint, the type check and all three test suites on every push and pull
 request, and only deploys when they pass.
 
 ## Deploy
@@ -162,7 +164,7 @@ limits and troubleshooting.
   Next.js 16 replacement for middleware).
 - `supabase/db_init.sql`: the whole database (tables, security policies and
   functions) in one file.
-- `supabase/tests/`: database tests; `e2e/` and `scripts/e2e.sh`: browser tests;
+- `unit/`: tests of pure logic; `supabase/tests/`: database tests; `e2e/` and `scripts/e2e.sh`: browser tests;
   `supabase/config.toml`: the local Supabase the browser tests use.
 
 ## Notes

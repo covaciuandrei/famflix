@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Decade } from "@/lib/decades";
+import type { BrowseGenre } from "@/lib/genres";
 import type { MediaType } from "@/lib/types";
 
 /**
@@ -191,39 +192,6 @@ export async function getBrowseRows(): Promise<TmdbRow[]> {
     { title: "Top rated series", items: normalizeMany(topTv.results, "tv") },
   ];
 }
-
-/**
- * Browse categories with TMDB's genre ids (from /genre/movie/list and /genre/tv/list).
- * Series genres are broader ("Action & Adventure"), and some genres only exist for one type.
- */
-export const BROWSE_GENRES = [
-  { slug: "action", label: "Action", movie: 28, tv: 10759 },
-  { slug: "adventure", label: "Adventure", movie: 12, tv: 10759 },
-  { slug: "animation", label: "Animation", movie: 16, tv: 16 },
-  { slug: "comedy", label: "Comedy", movie: 35, tv: 35 },
-  { slug: "crime", label: "Crime", movie: 80, tv: 80 },
-  { slug: "documentary", label: "Documentary", movie: 99, tv: 99 },
-  { slug: "drama", label: "Drama", movie: 18, tv: 18 },
-  { slug: "family", label: "Family", movie: 10751, tv: 10751 },
-  { slug: "fantasy", label: "Fantasy", movie: 14, tv: 10765 },
-  { slug: "history", label: "History", movie: 36, tv: null },
-  { slug: "horror", label: "Horror", movie: 27, tv: null },
-  { slug: "kids", label: "Kids", movie: null, tv: 10762 },
-  { slug: "music", label: "Music", movie: 10402, tv: null },
-  { slug: "mystery", label: "Mystery", movie: 9648, tv: 9648 },
-  { slug: "romance", label: "Romance", movie: 10749, tv: null },
-  { slug: "science-fiction", label: "Science Fiction", movie: 878, tv: 10765 },
-  { slug: "thriller", label: "Thriller", movie: 53, tv: null },
-  { slug: "war", label: "War", movie: 10752, tv: 10768 },
-  { slug: "western", label: "Western", movie: 37, tv: 37 },
-] as const satisfies readonly {
-  slug: string;
-  label: string;
-  movie: number | null;
-  tv: number | null;
-}[];
-
-export type BrowseGenre = (typeof BROWSE_GENRES)[number];
 
 /** Popular and top rated movies and series in a Browse category, release decade, or both. */
 export async function getDiscoverRows({
