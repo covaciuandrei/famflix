@@ -38,7 +38,7 @@ select test.expect_eq((select count(*) from public.group_members where group_id 
 :as_elena
 select test.expect_error($$insert into public.group_members (group_id, user_id, role)
   values ((select v::uuid from test.vals where k = 'fam1'), 'eeeeeeee-0000-0000-0000-000000000005', 'owner')$$,
-  'row-level security');
+  'permission denied');
 
 -- Ana adds Dune to the family list, plus one title to her own list.
 :as_ana
@@ -139,9 +139,8 @@ select test.expect_error($$select public.log_watch((select v::uuid from test.val
   '[{"user_id":"aaaaaaaa-0000-0000-0000-000000000001","score":null}]'::jsonb)$$, 'permission denied');
 select test.expect_error($$select * from public.pending_rating_requests()$$, 'permission denied');
 
--- Since 0003, titles are only hidden on removal (undo), never hard-deleted.
+-- Titles are only hidden on removal (undo), never hard-deleted.
 :as_ana
-with d as (delete from public.list_items where id = (select v::uuid from test.vals where k = 'item') returning 1)
-  select test.expect_eq(count(*), 0::bigint, 'titles can no longer be hard-deleted') from d;
+select test.expect_error($$delete from public.list_items where id = (select v::uuid from test.vals where k = 'item')$$, 'permission denied');
 
 select 'WATCHED TOGETHER: ALL PASSED' as result;

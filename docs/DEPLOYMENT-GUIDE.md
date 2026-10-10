@@ -1012,7 +1012,17 @@ For the existing production project:
 
 Do not run `db_init.sql` on a live database: it is only for an empty one, and
 it stops at the first table that already exists. Our Actions workflow does not
-track or apply SQL.
+track or apply SQL. To start over on a project that has FamFlix in it (before
+release, when there is nothing to keep), the README has the three statements
+that empty the schema and the users; then run `db_init.sql`.
+
+Supabase changed what a new table or function gets by default: no access for
+the API roles unless granted (new projects since 30 May 2026, every project from
+30 October 2026; tables that already exist keep their grants). `db_init.sql`
+therefore grants everything explicitly at its end and doesn't depend on those
+defaults, and the database tests run it both ways. A change that adds a table or
+function has to add its `grant` statements as well, in the SQL you run and in
+`db_init.sql`.
 
 RLS is what enforces database access boundaries even when a browser has the
 Supabase public key. Hiding a button in React is not a substitute for database
@@ -1176,8 +1186,9 @@ deploys it automatically. Infrastructure and DNS normally do not need changing.
 Some features (Movie night added tables, functions and changed a few existing
 ones) need database changes. Run the SQL in the Supabase SQL Editor **first**,
 then push: the push deploys the code within minutes, and code that calls
-something the database doesn't have yet fails until the SQL is there. Keep
-`supabase/db_init.sql` in step, and check the two match by building a fresh
+something the database doesn't have yet fails until the SQL is there. A new table
+or function needs its `grant` statements in that SQL as well (see section 20).
+Keep `supabase/db_init.sql` in step, and check the two match by building a fresh
 database from it and comparing its schema with the live one.
 
 ### For a new hostname

@@ -32,8 +32,8 @@ reset role;
 select test.expect_eq(:code, (select v from test.vals where k = 'expiry_code'), 'someone outside the family can''t change its code');
 
 :as_ana
-with u as (update public.groups set invite_code_expires_at = now() + interval '10 days' where id = (select v::uuid from test.vals where k = 'expiry') returning 1)
-  select test.expect_eq(count(*), 0::bigint, 'members can''t extend a code by hand') from u;
+select test.expect_error($$update public.groups set invite_code_expires_at = now() + interval '10 days'
+  where id = (select v::uuid from test.vals where k = 'expiry')$$, 'permission denied');
 
 :as_elena
 select public.refresh_invite_codes();

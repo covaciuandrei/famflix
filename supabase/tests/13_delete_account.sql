@@ -112,8 +112,7 @@ select test.expect_eq((select count(*) from public.activity where group_id = (se
 -- Nobody can delete a profile through the API (only the auth server, via Settings -> Delete account).
 insert into auth.users (id, email, raw_user_meta_data) values ('94949494-0000-0000-0000-000000000004', 'sam@x.test', '{"full_name":"Sam"}');
 reset role; select set_config('request.jwt.claim.sub', '94949494-0000-0000-0000-000000000004', false); set role authenticated;
-with d as (delete from public.profiles where id = '94949494-0000-0000-0000-000000000004' returning 1)
-  select test.expect_eq((select count(*) from d), 0::bigint, 'a user can''t delete their profile directly');
+select test.expect_error($$delete from public.profiles where id = '94949494-0000-0000-0000-000000000004'$$, 'permission denied');
 
 reset role;
 do $$ begin raise notice 'ALL DELETE ACCOUNT TESTS PASSED'; end $$;

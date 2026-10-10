@@ -74,8 +74,7 @@ select test.expect_error($$select public.rename_group((select v::uuid from test.
 select public.rename_group((select v::uuid from test.vals where k = 'fam1'), 'Movie Club');
 select test.expect_eq((select name from public.groups where id = (select v::uuid from test.vals where k = 'fam1')), 'Movie Club'::text, 'owner renamed the family');
 select test.expect_eq((select detail from public.activity where kind = 'renamed'), 'Movie Club'::text, 'feed: renamed');
-with u as (update public.groups set name = 'Sneaky' where id = (select v::uuid from test.vals where k = 'fam1') returning 1)
-  select test.expect_eq(count(*), 0::bigint, 'families can''t be edited directly, only through the checked functions') from u;
+select test.expect_error($$update public.groups set name = 'Sneaky' where id = (select v::uuid from test.vals where k = 'fam1')$$, 'permission denied');
 select public.regenerate_invite_code((select v::uuid from test.vals where k = 'fam1'));
 select test.expect_eq((select invite_code ~ '^[A-HJ-NP-Z2-9]{8}$' and invite_code <> (select v from test.vals where k = 'fam1_code')
                        from public.groups where id = (select v::uuid from test.vals where k = 'fam1')), true, 'owner made a new 8-character code');
@@ -87,8 +86,7 @@ select test.expect_eq(public.join_group((select v from test.vals where k = 'fam1
 select test.expect_error($$select public.remove_member((select v::uuid from test.vals where k = 'fam1'), 'aaaaaaaa-0000-0000-0000-000000000001')$$, 'Use Leave family');
 select test.expect_error($$select public.remove_member((select v::uuid from test.vals where k = 'fam1'), 'dddddddd-0000-0000-0000-000000000004')$$, 'not in this family');
 :as_cristi
-with d as (delete from public.group_members where user_id = 'cccccccc-0000-0000-0000-000000000003' returning 1)
-  select test.expect_eq(count(*), 0::bigint, 'memberships can''t be deleted directly') from d;
+select test.expect_error($$delete from public.group_members where user_id = 'cccccccc-0000-0000-0000-000000000003'$$, 'permission denied');
 :as_ana
 select public.remove_member((select v::uuid from test.vals where k = 'fam1'), 'cccccccc-0000-0000-0000-000000000003');
 select test.expect_eq((select subject_name from public.activity where kind = 'removed_member'), 'Cristi'::text, 'feed: Ana removed Cristi');
@@ -106,8 +104,7 @@ select test.expect_eq((select subject_name from public.activity where kind = 'ne
 :as_ana
 select test.expect_error($$select public.rename_group((select v::uuid from test.vals where k = 'fam1'), 'Back door')$$, 'Only the family owner');
 select test.expect_error($$select public.leave_group((select v::uuid from test.vals where k = 'fam1'))$$, 'You are not in this family');
-with d as (delete from public.groups where id = (select v::uuid from test.vals where k = 'fam1') returning 1)
-  select test.expect_eq(count(*), 0::bigint, 'the original creator can''t delete the family after leaving') from d;
+select test.expect_error($$delete from public.groups where id = (select v::uuid from test.vals where k = 'fam1')$$, 'permission denied');
 :as_bogdan
 select public.leave_group((select v::uuid from test.vals where k = 'fam1'));
 reset role;
@@ -119,6 +116,6 @@ select test.expect_eq((select count(*) from public.activity where group_id = (se
 :as_anon
 select test.expect_error($$select public.leave_group('00000000-0000-0000-0000-000000000000')$$, 'permission denied');
 select test.expect_error($$select public.rename_group('00000000-0000-0000-0000-000000000000', 'x')$$, 'permission denied');
-select test.expect_eq((select count(*) from public.activity), 0::bigint, 'signed-out visitors see no activity');
+select test.expect_error($$select count(*) from public.activity$$, 'permission denied');
 
 select 'FAMILY TOOLS: ALL PASSED' as result;

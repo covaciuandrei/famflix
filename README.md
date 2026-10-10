@@ -106,7 +106,25 @@ database: never put it in a `NEXT_PUBLIC_` variable, never commit it.
 
 In the Supabase dashboard open **SQL Editor**, paste the contents of
 [`supabase/db_init.sql`](supabase/db_init.sql) and click Run, once, on an
-empty database. It creates all tables, security policies and functions.
+empty database. It creates all tables, security policies and functions, and
+grants each Supabase role exactly the access it needs. That last part matters:
+since 30 May 2026 new Supabase projects (and from 30 October 2026 every project)
+no longer hand new tables and functions to the API automatically, and the script
+doesn't count on it.
+
+To start over on a project that already has FamFlix in it, run this first, then
+`db_init.sql`. **It deletes every family, title and user: only do it before you
+have real data.**
+
+```sql
+drop schema public cascade;
+create schema public;
+delete from auth.users;
+```
+
+Whatever you add to the database later, with a new table or function, needs its
+own `grant` statements too (see the end of `db_init.sql`), or the API answers
+"permission denied".
 
 ## 4. Enable authentication
 
@@ -138,13 +156,17 @@ create a family or join one with an invite code.
 - `npm run test:unit`: tests of pure logic in `unit/` (building movie night stacks,
   moods, genres). No browser, server or database needed.
 - `npm run test:db`: the database tests in `supabase/tests/` (security rules,
-  families, scores, limits, deleting an account). They build a throwaway
-  database from `supabase/db_init.sql`; you need PostgreSQL 17 installed, or
-  `PGHOST` pointing at a server where they may create a database.
+  who may use which table and function, families, scores, limits, deleting an
+  account). They build a throwaway database from `supabase/db_init.sql`, twice:
+  with Supabase's older defaults (new tables and functions are handed to the API
+  roles) and its newer ones (nothing is), and both must pass. You need
+  PostgreSQL 17 installed, or `PGHOST` pointing at a server where they may
+  create a database.
 - `npm run test:e2e`: the browser tests in `e2e/` (signing in, adding titles,
   watched together, movie nights from the invite to the pick, deleting an
   account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
-  (`supabase/config.toml`) built from `db_init.sql`, never the live one.
+  (`supabase/config.toml`) built from `db_init.sql` the way a new project is (nothing granted by default),
+  never the live one.
   `npx supabase stop` shuts it down afterwards.
 
 GitHub runs lint, the type check and all three test suites on every push and pull

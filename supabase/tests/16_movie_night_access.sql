@@ -71,7 +71,7 @@ select test.expect_eq((select count(*) from public.movie_night_finishes), 0::big
 select test.expect_eq((select count(*) from public.movie_night_votes), 0::bigint, 'nor any votes');
 select test.expect_eq(public.can_see_night(:night), false, 'and can_see_night says no');
 :as_anon
-select test.expect_eq((select count(*) from public.movie_nights), 0::bigint, 'visitors see no nights');
+select test.expect_error($$select count(*) from public.movie_nights$$, 'permission denied');
 select test.expect_error($$select public.can_see_night((select v::uuid from test.vals where k = 'mn_night'))$$, 'permission denied');
 
 -- Nobody writes the tables directly, not even a member.

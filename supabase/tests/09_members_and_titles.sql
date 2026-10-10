@@ -36,8 +36,8 @@ insert into test.vals select 'mem_item', li.id::text from public.list_items li j
 select test.expect_eq(public.is_group_member((select v::uuid from test.vals where k = 'mem_fam'), '62626262-0000-0000-0000-000000000002'), false, 'a stranger can''t check who is in a family');
 select test.expect_eq(public.shares_group('61616161-0000-0000-0000-000000000001', '62626262-0000-0000-0000-000000000002'), false, 'a stranger can''t check who shares a family');
 :as_anon
-select test.expect_eq(public.is_group_member((select v::uuid from test.vals where k = 'mem_fam'), '62626262-0000-0000-0000-000000000002'), false, 'a visitor can''t check who is in a family');
-select test.expect_eq(public.shares_group('61616161-0000-0000-0000-000000000001', '62626262-0000-0000-0000-000000000002'), false, 'a visitor can''t check who shares a family');
+select test.expect_error($$select public.is_group_member((select v::uuid from test.vals where k = 'mem_fam'), '62626262-0000-0000-0000-000000000002')$$, 'permission denied');
+select test.expect_error($$select public.shares_group('61616161-0000-0000-0000-000000000001', '62626262-0000-0000-0000-000000000002')$$, 'permission denied');
 :as_ben
 select test.expect_eq(public.is_group_member((select v::uuid from test.vals where k = 'mem_fam'), '63636363-0000-0000-0000-000000000003'), true, 'a member can still check the members of their own family');
 select test.expect_eq(public.shares_group('62626262-0000-0000-0000-000000000002', '61616161-0000-0000-0000-000000000001'), true, 'you can still check whether you share a family with someone');

@@ -1,5 +1,6 @@
--- A small stand-in for the parts of Supabase that db_init.sql relies on (the anon and authenticated roles,
--- auth.users and auth.uid()), plus the two helpers the tests use. Run before db_init.sql in an empty database.
+-- A small stand-in for the parts of Supabase that db_init.sql relies on (the anon, authenticated and service_role
+-- roles, auth.users and auth.uid()), plus the two helpers the tests use. Run first in an empty database, then one of
+-- the defaults_*.sql files (what Supabase hands out by default), then db_init.sql.
 
 -- Roles belong to the whole server, so a second run on the same server reuses them.
 do $$
@@ -9,6 +10,9 @@ begin
   end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated nologin;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then
+    create role service_role nologin bypassrls;
   end if;
 end $$;
 
@@ -25,14 +29,8 @@ create function auth.uid() returns uuid language sql stable as $$
 $$;
 grant execute on function auth.uid() to anon, authenticated;
 
--- Like Supabase: anon and authenticated may use everything in public unless db_init.sql says otherwise.
-grant usage on schema public to anon, authenticated;
-alter default privileges in schema public grant all on tables to anon, authenticated;
-alter default privileges in schema public grant all on functions to anon, authenticated;
-alter default privileges in schema public grant all on sequences to anon, authenticated;
-
 create schema test;
-grant usage on schema test to anon, authenticated;
+grant usage on schema test to anon, authenticated, service_role;
 
 -- Passes if p_sql fails with an error message containing p_fragment.
 create function test.expect_error(p_sql text, p_fragment text) returns void
@@ -61,4 +59,4 @@ begin
   raise notice 'ok: %', p_label;
 end $$;
 
-grant execute on all functions in schema test to anon, authenticated;
+grant execute on all functions in schema test to anon, authenticated, service_role;

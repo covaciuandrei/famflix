@@ -1,11 +1,11 @@
 \set ON_ERROR_STOP 1
 \set as_anon 'reset role; select set_config(''request.jwt.claim.sub'', '''', false); set role anon;'
 
--- Visitors can't call any of these.
+-- Visitors can't call any of these, and can't read any table either.
 :as_anon
 select test.expect_error($$select public.create_group('x')$$, 'permission denied');
 select test.expect_error($$select public.join_group('ZZZZZZZZ')$$, 'permission denied');
-select test.expect_eq((select count(*) from public.activity), 0::bigint, 'visitors still simply see nothing (no errors)');
+select test.expect_error($$select count(*) from public.activity$$, 'permission denied');
 
 -- Sign-up still creates a profile when Supabase Auth (a non-superuser role) adds the user.
 reset role;

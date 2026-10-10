@@ -1,8 +1,13 @@
 -- ============================================================================
 --  FamFlix — the whole database in one script: tables, row-level security,
---  functions and triggers. Same result as the old migrations 0001–0006.
+--  functions and triggers (families and lists, ratings, watched together, the
+--  activity feed, rate limits and movie nights) and, at the end, exactly what
+--  each Supabase role may do with them.
 --  For an EMPTY Supabase database only: SQL Editor → paste → Run, once.
 --  All or nothing: if anything fails (say, the tables already exist), nothing changes.
+--  It doesn't count on Supabase's default privileges, so it also works where new
+--  tables and functions aren't handed to the API automatically (every new project
+--  since 30 May 2026, every project from 30 October 2026). See "Grants" at the end.
 -- ============================================================================
 
 begin;
@@ -2212,103 +2217,72 @@ create trigger ratings_react_to_score
   for each row execute function public.react_to_score();
 
 -- ---------------------------------------------------------------------------
---  Grants: narrow Supabase's defaults (anon and authenticated may use every table and function)
+--  Grants: what each Supabase role may do, stated outright
 -- ---------------------------------------------------------------------------
 
--- People may only skip their own request; all other writes go through log_watch().
-revoke insert, update on public.watches from anon, authenticated;
-grant update (skipped_at) on public.watches to authenticated;
--- Only the database's own triggers and functions write the feed, so events can't be faked.
-revoke insert, update, delete on public.activity from anon, authenticated;
-revoke all on public.rate_limits from anon, authenticated;
--- Movie nights change only through the movie night functions.
-revoke insert, update, delete on public.movie_nights, public.movie_night_stacks, public.movie_night_candidates,
-  public.movie_night_votes, public.movie_night_finishes, public.movie_night_members from anon, authenticated;
--- Everyone shares the movie info, so nobody can rewrite titles and posters for the rest; only the server saves it.
-revoke insert, update, delete on public.media from anon, authenticated;
+-- A grant decides whether a role can reach a table or function through the API at all; the row-level security rules
+-- above then decide which rows. Supabase used to hand every new table and function to anon, authenticated and
+-- service_role by itself. New projects no longer do (since 30 May 2026) and neither will any project from
+-- 30 October 2026, so nothing here counts on it: everything is taken back first, then each role gets exactly what it
+-- needs, and the result is the same on a project with either default. Whatever is added to this schema later needs
+-- its own grants too.
+grant usage on schema public to anon, authenticated, service_role;
+revoke all on all tables in schema public from anon, authenticated, service_role;
+revoke all on all functions in schema public from public, anon, authenticated, service_role;
+
+-- Visitors who aren't signed in (anon) get nothing: no table and no function.
+
+-- Signed-in people read what the security rules let them see.
+grant select on
+  public.profiles, public.groups, public.group_members, public.media, public.list_items, public.ratings,
+  public.reactions, public.watches, public.activity, public.movie_nights, public.movie_night_stacks,
+  public.movie_night_candidates, public.movie_night_votes, public.movie_night_finishes, public.movie_night_members
+  to authenticated;
+-- They write straight to a table only where the security rules allow it (their own rows); everything else goes
+-- through the functions below, so the feed, the movie nights and the rate limits can't be faked.
+grant insert, update on public.profiles to authenticated;
+grant insert, update, delete on public.ratings, public.reactions to authenticated;
 -- A list item's list, movie and author are fixed once it's added; afterwards people only mark it watched or
 -- remove/restore it (the database fills in who removed it and when).
-revoke insert, update on public.list_items from anon, authenticated;
 grant insert (group_id, added_by, media_id, status) on public.list_items to authenticated;
 grant update (status, watched_at, deleted_at) on public.list_items to authenticated;
+-- People may only skip their own request or take themselves off a watch; all other writes go through log_watch().
+grant update (skipped_at) on public.watches to authenticated;
+grant delete on public.watches to authenticated;
+-- Everyone shares the movie info, so nobody can rewrite titles and posters for the rest; only the server saves it.
 
--- Internal helpers, used only inside the functions above (hit_rate_limit also by the server's service-role key).
-revoke execute on function public.add_activity(uuid, text, uuid, uuid, numeric, text) from public, anon, authenticated;
-revoke execute on function public.hit_rate_limit(uuid, text, integer, integer) from public, anon, authenticated;
-revoke execute on function public.new_invite_code() from public, anon, authenticated;
-revoke execute on function public.is_group_owner(uuid, uuid) from public, anon, authenticated;
+-- The server, with the service-role key, saves the movie info and counts the rate limits.
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant execute on function public.hit_rate_limit(uuid, text, integer, integer) to service_role;
 
-revoke execute on function public.create_group(text) from public, anon;
-grant execute on function public.create_group(text) to authenticated;
-revoke execute on function public.join_group(text) from public, anon;
-grant execute on function public.join_group(text) to authenticated;
--- is_group_member() and shares_group() stay executable for everyone: the security rules call them for visitors too
--- (who then simply see nothing), and they only ever answer about the caller's own families.
--- Trigger functions only ever run as triggers (which doesn't need EXECUTE), never through the API.
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
-revoke execute on function public.set_deleted_by() from public, anon, authenticated;
-revoke execute on function public.set_rated_by() from public, anon, authenticated;
-revoke execute on function public.list_items_activity() from public, anon, authenticated;
-revoke execute on function public.ratings_activity() from public, anon, authenticated;
-revoke execute on function public.group_members_activity() from public, anon, authenticated;
-revoke execute on function public.groups_activity() from public, anon, authenticated;
-revoke execute on function public.react_to_score() from public, anon, authenticated;
-revoke execute on function public.before_profile_delete() from public, anon, authenticated;
-revoke execute on function public.after_watch_delete() from public, anon, authenticated;
-revoke execute on function public.add_to_my_list_watched(uuid, uuid, date) from public, anon, authenticated;
-revoke execute on function public.remove_from_my_list_watched(uuid, uuid) from public, anon, authenticated;
-revoke execute on function public.ratings_follow_family() from public, anon, authenticated;
-
--- Signed-in users only.
-revoke execute on function public.refresh_invite_codes() from public, anon;
-grant execute on function public.refresh_invite_codes() to authenticated;
-revoke execute on function public.rename_group(uuid, text) from public, anon;
-grant execute on function public.rename_group(uuid, text) to authenticated;
-revoke execute on function public.regenerate_invite_code(uuid) from public, anon;
-grant execute on function public.regenerate_invite_code(uuid) to authenticated;
-revoke execute on function public.remove_member(uuid, uuid) from public, anon;
-grant execute on function public.remove_member(uuid, uuid) to authenticated;
-revoke execute on function public.leave_group(uuid) from public, anon;
-grant execute on function public.leave_group(uuid) to authenticated;
-revoke execute on function public.log_watch(uuid, date, jsonb) from public, anon;
-grant execute on function public.log_watch(uuid, date, jsonb) to authenticated;
-revoke execute on function public.pending_rating_requests() from public, anon;
-grant execute on function public.pending_rating_requests() to authenticated;
-revoke execute on function public.can_see_item(uuid) from public, anon;
-grant execute on function public.can_see_item(uuid) to authenticated;
-revoke execute on function public.can_see_night(uuid) from public, anon;
-grant execute on function public.can_see_night(uuid) to authenticated;
-
--- Movie nights: the helpers are internal; the rest is for signed-in users.
-revoke execute on function public.settle_movie_night(uuid) from public, anon, authenticated;
-revoke execute on function public.movie_night_for_member(uuid) from public, anon, authenticated;
-revoke execute on function public.movie_night_require_open(public.movie_nights) from public, anon, authenticated;
-revoke execute on function public.movie_night_check_candidates(uuid, jsonb, boolean) from public, anon, authenticated;
-revoke execute on function public.movie_night_member_left() from public, anon, authenticated;
-revoke execute on function public.movie_night_add_top_titles(uuid) from public, anon, authenticated;
-revoke execute on function public.record_movie_night_watch(uuid, date, uuid[]) from public, anon, authenticated;
-revoke execute on function public.start_movie_night(uuid, text[], jsonb, jsonb) from public, anon;
-grant execute on function public.start_movie_night(uuid, text[], jsonb, jsonb) to authenticated;
-revoke execute on function public.join_movie_night(uuid) from public, anon;
-grant execute on function public.join_movie_night(uuid) to authenticated;
-revoke execute on function public.cast_movie_night_votes(uuid, jsonb) from public, anon;
-grant execute on function public.cast_movie_night_votes(uuid, jsonb) to authenticated;
-revoke execute on function public.finish_movie_night_stack(uuid) from public, anon;
-grant execute on function public.finish_movie_night_stack(uuid) to authenticated;
-revoke execute on function public.add_movie_night_stack(uuid, integer, jsonb) from public, anon;
-grant execute on function public.add_movie_night_stack(uuid, integer, jsonb) to authenticated;
-revoke execute on function public.reveal_movie_night(uuid) from public, anon;
-grant execute on function public.reveal_movie_night(uuid) to authenticated;
-revoke execute on function public.cancel_movie_night(uuid) from public, anon;
-grant execute on function public.cancel_movie_night(uuid) to authenticated;
-revoke execute on function public.movie_night_state(uuid, boolean) from public, anon;
-grant execute on function public.movie_night_state(uuid, boolean) to authenticated;
-revoke execute on function public.active_movie_nights() from public, anon;
-grant execute on function public.active_movie_nights() to authenticated;
-revoke execute on function public.add_movie_night_top_titles(uuid) from public, anon;
-grant execute on function public.add_movie_night_top_titles(uuid) to authenticated;
-revoke execute on function public.pick_movie_night_card(uuid, uuid, date, jsonb) from public, anon;
-grant execute on function public.pick_movie_night_card(uuid, uuid, date, jsonb) to authenticated;
+-- Signed-in people call these. The first four are also the ones the security rules call. Every other function is for
+-- the database itself (helpers, and what triggers run, which doesn't need EXECUTE).
+grant execute on function
+  public.is_group_member(uuid, uuid),
+  public.shares_group(uuid, uuid),
+  public.can_see_item(uuid),
+  public.can_see_night(uuid),
+  public.create_group(text),
+  public.join_group(text),
+  public.refresh_invite_codes(),
+  public.rename_group(uuid, text),
+  public.regenerate_invite_code(uuid),
+  public.remove_member(uuid, uuid),
+  public.leave_group(uuid),
+  public.log_watch(uuid, date, jsonb),
+  public.pending_rating_requests(),
+  public.start_movie_night(uuid, text[], jsonb, jsonb),
+  public.join_movie_night(uuid),
+  public.cast_movie_night_votes(uuid, jsonb),
+  public.finish_movie_night_stack(uuid),
+  public.add_movie_night_stack(uuid, integer, jsonb),
+  public.reveal_movie_night(uuid),
+  public.cancel_movie_night(uuid),
+  public.movie_night_state(uuid, boolean),
+  public.active_movie_nights(),
+  public.add_movie_night_top_titles(uuid),
+  public.pick_movie_night_card(uuid, uuid, date, jsonb)
+  to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.
 notify pgrst, 'reload schema';

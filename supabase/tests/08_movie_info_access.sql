@@ -29,7 +29,7 @@ select test.expect_eq((select count(*) from public.media where tmdb_id = 9102), 
 
 -- Signed-out visitors see and write nothing
 :as_anon
-select test.expect_eq((select count(*) from public.media), 0::bigint, 'visitors who are not signed in see no movie info');
+select test.expect_error($$select count(*) from public.media$$, 'permission denied');
 select test.expect_error($$insert into public.media (tmdb_id, media_type, title) values (9103, 'movie', 'Planted')$$, 'permission denied');
 
 reset role;
