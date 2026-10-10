@@ -155,8 +155,8 @@ test.describe("moods", () => {
   });
 });
 
-test("points: love 2, yes 1, seen it 1, nope -1", () => {
-  expect(POINTS).toEqual({ love: 2, yes: 1, seen: 1, nope: -1 });
+test("points: love 2, yes 1, nope -1, and seen it adds nothing", () => {
+  expect(POINTS).toEqual({ love: 2, yes: 1, seen: 0, nope: -1 });
 });
 
 test("formatDayNumeric writes a day as dd.mm.yyyy, from a date or a full timestamp", () => {

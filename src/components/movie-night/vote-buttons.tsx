@@ -93,8 +93,8 @@ export function VoteButtons({
           type="button"
           onClick={() => onVote("seen")}
           disabled={disabled}
-          aria-label="Seen it, but I'd watch it again"
-          title="Seen it, but I'd watch it again (S)"
+          aria-label="Seen it already, worth no points"
+          title="Seen it already, worth no points (S)"
           className={cn(round, "mt-2 size-10 border border-border text-muted-foreground hover:bg-muted hover:text-foreground")}
         >
           <Eye className="size-5" />

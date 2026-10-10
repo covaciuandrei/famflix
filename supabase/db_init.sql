@@ -1725,7 +1725,7 @@ begin
            or exists (select 1 from public.movie_night_finishes f where f.stack_id = s.id and f.user_id = v_me))
   ), tally as (
     select c.id as candidate_id, c.media_id, c.position, m.tmdb_rating,
-           sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 1 else -1 end)::integer as points,
+           sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 0 else -1 end)::integer as points,
            count(*) filter (where v.vote = 'love')::integer as loves,
            count(*) filter (where v.vote = 'yes')::integer as yes,
            count(*) filter (where v.vote = 'seen')::integer as seen,
@@ -1880,8 +1880,8 @@ begin
     join public.media m on m.id = c.media_id
     where c.night_id = p_night
     group by c.id, c.media_id, c.position, m.tmdb_rating
-    having sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 1 else -1 end) > 0
-    order by sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 1 else -1 end) desc,
+    having sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 0 else -1 end) > 0
+    order by sum(case v.vote when 'love' then 2 when 'yes' then 1 when 'seen' then 0 else -1 end) desc,
              count(*) filter (where v.vote = 'nope') asc,
              count(*) filter (where v.vote = 'love') desc,
              m.tmdb_rating desc nulls last, c.position asc, c.id

@@ -94,10 +94,11 @@ select public.cast_movie_night_votes(test.v('pk_a_stack'), jsonb_build_array(
   test.pvote('pk_a', 9801, 'yes'), test.pvote('pk_a', 9802, 'yes'), test.pvote('pk_a', 9803, 'yes'), test.pvote('pk_a', 9804, 'seen'),
   test.pvote('pk_a', 9805, 'nope'), test.pvote('pk_a', 9808, 'yes'), test.pvote('pk_a', 9811, 'nope')));
 select public.finish_movie_night_stack(test.v('pk_a_stack'));
--- Points: 9802 and 9801 four each (the better TMDB score first), 9804 three, 9810 and 9808 two, 9809 / 9806 / 9803 one, 9811 and 9807
--- minus one, 9805 minus three. Seven titles get above the cut: 9803 is the eighth positive one.
+-- Points: 9802 and 9801 four each (the better TMDB score first), 9810 and 9808 two, then one each for 9809, 9806, 9804 (a yes and two
+-- "seen it", which are worth nothing: the better TMDB score first) and 9803 (it has a nope), 9811 and 9807 minus one, 9805 minus three.
+-- Seven titles get above the cut: 9803 is the eighth positive one.
 select test.expect_eq(test.order(public.movie_night_state(test.v('pk_a'))),
-  'P9802,P9801,P9804,P9810,P9808,P9809,P9806,P9803,P9811,P9807,P9805', 'the leaderboard before the pick');
+  'P9802,P9801,P9810,P9808,P9809,P9806,P9804,P9803,P9811,P9807,P9805', 'the leaderboard before the pick');
 
 -- Picking needs a night you can see, a card of it, and a valid watch; nothing is changed if any of it is refused.
 :as_hal
@@ -271,11 +272,12 @@ select test.expect_error($$select public.add_movie_night_top_titles(test.v('pk_e
 select public.cancel_movie_night(test.v('pk_e'));
 select test.expect_error($$select public.add_movie_night_top_titles(test.v('pk_a'))$$, 'when someone picks one');
 select test.expect_error($$select public.add_movie_night_top_titles((select id from public.movie_nights where group_id = test.v('pk_fam') and source = 'logged' limit 1))$$, 'when someone picks one');
-select test.expect_eq(public.add_movie_night_top_titles(test.v('pk_e')), 3, 'after cancelling, the three titles people liked can be added');
-select test.expect_eq(test.family_list() @> array[9841, 9842, 9844], true, 'and are on the list');
+select test.expect_eq(public.add_movie_night_top_titles(test.v('pk_e')), 2, 'after cancelling, the two titles people liked can be added');
+select test.expect_eq(test.family_list() @> array[9841, 9842], true, 'and are on the list');
 select test.expect_eq(test.family_list() @> array[9843], false, 'but not the one that got a nope');
+select test.expect_eq(test.family_list() @> array[9844], false, 'nor the one that was only "seen it", which is worth nothing');
 select test.expect_eq(test.events('movie_night_added'), 3::bigint, 'with a line in the feed');
-select test.expect_eq((select detail from public.activity where kind = 'movie_night_added' and group_id = :fam order by created_at desc limit 1), '3'::text, 'for three titles');
+select test.expect_eq((select detail from public.activity where kind = 'movie_night_added' and group_id = :fam order by created_at desc limit 1), '2'::text, 'for two titles');
 select test.expect_eq(public.add_movie_night_top_titles(test.v('pk_e')), 0, 'doing it again adds nothing');
 select test.expect_eq(test.events('movie_night_added'), 3::bigint, 'and says nothing');
 -- A night that expired is the same.
@@ -293,6 +295,27 @@ select test.expect_eq(public.add_movie_night_top_titles(test.v('pk_e2')), 1, 'a 
 reset role;
 select test.expect_eq((select status from public.movie_nights where id = test.v('pk_e2')), 'expired'::text, 'and is marked expired');
 
+-- The cut to the best seven is made on the same points: a "seen it" adds nothing there either. Seven titles get two yes votes (two points
+-- each); one gets a yes and two "seen it" (one point). The seven go on the list, and the one with the "seen it" votes doesn't push any out.
+:as_gus
+select public.start_movie_night(:fam, '{}', '{}', test.cands(9823, 9829) || test.cands(9832, 9833)) as night_s \gset
+reset role;
+insert into test.vals values ('pk_s', :'night_s');
+insert into test.vals select 'pk_s_stack', id::text from public.movie_night_stacks where night_id = test.v('pk_s');
+:as_eli
+select public.cast_movie_night_votes(test.v('pk_s_stack'),
+  (select jsonb_agg(test.pvote('pk_s', g, 'yes')) from generate_series(9823, 9829) g) || jsonb_build_array(test.pvote('pk_s', 9832, 'yes')));
+:as_fay
+select public.cast_movie_night_votes(test.v('pk_s_stack'),
+  (select jsonb_agg(test.pvote('pk_s', g, 'yes')) from generate_series(9823, 9829) g) || jsonb_build_array(test.pvote('pk_s', 9832, 'seen')));
+:as_gus
+select public.cast_movie_night_votes(test.v('pk_s_stack'), jsonb_build_array(test.pvote('pk_s', 9832, 'seen')));
+select public.cancel_movie_night(test.v('pk_s'));
+select test.expect_eq(public.add_movie_night_top_titles(test.v('pk_s')), 7, 'seven titles are added');
+select test.expect_eq(test.family_list() @> array[9823, 9824, 9825, 9826, 9827, 9828, 9829], true, 'the seven with two points each');
+select test.expect_eq(test.family_list() @> array[9832], false, 'and not the one with a yes and two "seen it" votes, which has one point');
+reset role;
+
 -- ---- Deleting an account --------------------------------------------------------------------------------------------------------------
 -- Fay picked night A, started night B and voted in A. Her name leaves the history and her votes go; the family keeps its nights.
 select test.expect_eq((select ended_by from public.movie_nights where id = test.v('pk_a')), :fay::uuid, 'Fay picked night A');
@@ -306,7 +329,7 @@ select test.expect_eq((select started_by from public.movie_nights where id = tes
 select test.expect_eq((select count(*) from public.movie_night_votes where user_id = :fay), 0::bigint, 'her votes are gone');
 select test.expect_eq((select count(*) from public.movie_night_members where user_id = :fay), 0::bigint, 'and her place in every night');
 select test.expect_eq((select count(*) from public.movie_night_finishes where user_id = :fay), 0::bigint, 'and her finished stacks');
-select test.expect_eq((select count(*) from public.movie_nights where group_id = :fam), 6::bigint, 'the family keeps its six nights');
+select test.expect_eq((select count(*) from public.movie_nights where group_id = :fam), 7::bigint, 'the family keeps its seven nights');
 :as_eli
 select test.expect_eq((select count(*) from jsonb_array_elements(public.movie_night_state(test.v('pk_a')) -> 'members') m where m ->> 'name' = 'Fay'), 0::bigint, 'and the night no longer lists her');
 select test.expect_eq(public.movie_night_state(test.v('pk_a')) -> 'night' ->> 'status', 'closed', 'night A still reads as picked');

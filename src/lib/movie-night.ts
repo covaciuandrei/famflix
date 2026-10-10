@@ -10,11 +10,11 @@ import type { MediaType } from "@/lib/types";
 //  Votes
 // ---------------------------------------------------------------------------------------------------------------
 
-/** nope (✕, swipe left), yes (✓, swipe right), love (♥, button only), seen it (a button: seen it, would watch again). */
+/** nope (✕, swipe left), yes (✓, swipe right), love (♥, button only), seen it (a button: already seen, worth nothing). */
 export type Vote = "nope" | "yes" | "love" | "seen";
 
 /** What each vote adds to a title's score on the leaderboard. */
-export const POINTS: Record<Vote, number> = { love: 2, yes: 1, seen: 1, nope: -1 };
+export const POINTS: Record<Vote, number> = { love: 2, yes: 1, seen: 0, nope: -1 };
 
 export const LOVES_PER_STACK = 3;
 

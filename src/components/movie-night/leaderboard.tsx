@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 const VOTES: Record<Vote, { label: string; hint: string; Icon: typeof Heart; tone: string }> = {
   love: { label: "Love", hint: "Loved it", Icon: Heart, tone: "text-pink-500" },
   yes: { label: "Yes", hint: "Yes", Icon: ThumbsUp, tone: "text-like" },
-  seen: { label: "Seen it", hint: "Seen it, and would watch it again", Icon: Eye, tone: "text-muted-foreground" },
+  seen: { label: "Seen it", hint: "Seen it already (no points)", Icon: Eye, tone: "text-muted-foreground" },
   nope: { label: "Nope", hint: "Nope", Icon: ThumbsDown, tone: "text-dislike" },
 };
 

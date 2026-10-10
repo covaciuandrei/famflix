@@ -200,13 +200,15 @@ select public.finish_movie_night_stack(test.v('fl_stack1'));
 select public.finish_movie_night_stack(test.v('fl_stack1'));
 
 -- ---- Ranking -----------------------------------------------------------------------------------------------------------
--- F9711 4 pts; F9714 3 (one is a "seen it", worth 1); then 2 pts each: F9717 (no nopes, a love), F9718 (no nopes, no loves,
--- though its TMDB score is higher), F9710 (a nope); F9715 1; F9713 and F9712 0 each with a nope, the better TMDB score first; F9716 -1.
-select test.expect_eq(test.order(test.state()), 'F9711,F9714,F9717,F9718,F9710,F9715,F9713,F9712,F9716', 'the ranking and every tie-break');
+-- F9711 4 pts; then 2 pts each: F9717 (no nopes, a love), F9718 and F9714 (no nopes, no loves: the better TMDB score first; F9714's
+-- "seen it" is worth nothing), F9710 (a nope); F9715 1; F9712 0; F9716 and F9713 -1 each with a nope, the better TMDB score first
+-- (F9713's other vote is a "seen it", worth nothing).
+select test.expect_eq(test.order(test.state()), 'F9711,F9717,F9718,F9714,F9710,F9715,F9712,F9716,F9713', 'the ranking and every tie-break');
 select test.expect_eq((test.state() -> 'results' -> 0 ->> 'points')::integer, 4, 'the leader has four points');
-select test.expect_eq((test.state() -> 'results' -> 1 ->> 'seen')::integer, 1, 'one "seen it" counted on F9714');
-select test.expect_eq((test.state() -> 'results' -> 1 ->> 'points')::integer, 3, 'and it is worth a point');
-select test.expect_eq((test.state() -> 'results' -> 8 ->> 'points')::integer, -1, 'a lone nope is minus one');
+select test.expect_eq((test.state() -> 'results' -> 3 ->> 'seen')::integer, 1, 'one "seen it" counted on F9714');
+select test.expect_eq((test.state() -> 'results' -> 3 ->> 'points')::integer, 2, 'and it adds no points: two yes votes make two');
+select test.expect_eq((test.state() -> 'results' -> 7 ->> 'points')::integer, -1, 'a lone nope is minus one');
+select test.expect_eq((test.state() -> 'results' -> 8 ->> 'points')::integer, -1, 'and a "seen it" with a nope is still minus one');
 select test.expect_eq((test.state() -> 'results' -> 4 ->> 'nopes')::integer, 1, 'F9710 has a nope');
 select test.expect_eq((test.state() -> 'results' -> 0 ->> 'rank')::integer, 1, 'ranks start at one');
 -- Everything about the family list is there too: F9729 got no votes so isn't listed.
