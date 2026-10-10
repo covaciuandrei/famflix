@@ -9,8 +9,8 @@ reset role;
 -- Only tables (and their indexes) in public: a view or a sequence would need grants of its own.
 select test.expect_eq((select count(*) from pg_class where relnamespace = 'public'::regnamespace and relkind not in ('r', 'i')),
   0::bigint, 'public holds only tables and indexes');
-select test.expect_eq((select array_agg(relname::text order by relname) from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'),
-  (select array_agg(x order by x) from unnest(array['activity', 'group_members', 'groups', 'list_items', 'media',
+select test.expect_eq((select array_agg(relname::text order by relname::text collate "C") from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'),
+  (select array_agg(x order by x collate "C") from unnest(array['activity', 'group_members', 'groups', 'list_items', 'media',
     'movie_night_candidates', 'movie_night_finishes', 'movie_night_members', 'movie_night_stacks', 'movie_night_votes',
     'movie_nights', 'profiles', 'rate_limits', 'ratings', 'reactions', 'watches']) x),
   'the tables are the ones whose grants are pinned here');
@@ -28,10 +28,10 @@ select test.expect_eq((select count(*) from pg_proc p where p.pronamespace = 'pu
 select test.expect_eq(has_schema_privilege('anon', 'public', 'usage'), true, 'the API can still reach the schema as a visitor');
 
 -- Signed-in people: read what the security rules show them, write only where those rules allow it.
-select test.expect_eq((select array_agg(c.relname || ':' || p order by c.relname || ':' || p)
+select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relname || ':' || p) collate "C")
   from pg_class c, unnest(array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']) p
   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and has_table_privilege('authenticated', c.oid, p)),
-  (select array_agg(x order by x) from unnest(array[
+  (select array_agg(x order by x collate "C") from unnest(array[
     'activity:select', 'group_members:select', 'groups:select', 'list_items:select', 'media:select',
     'movie_night_candidates:select', 'movie_night_finishes:select', 'movie_night_members:select',
     'movie_night_stacks:select', 'movie_night_votes:select', 'movie_nights:select',
@@ -40,20 +40,20 @@ select test.expect_eq((select array_agg(c.relname || ':' || p order by c.relname
     'reactions:select', 'reactions:insert', 'reactions:update', 'reactions:delete',
     'watches:select', 'watches:delete']) x),
   'signed-in people have exactly these table privileges');
-select test.expect_eq((select array_agg(c.relname || '.' || a.attname || ':' || p order by c.relname || '.' || a.attname || ':' || p)
+select test.expect_eq((select array_agg(c.relname || '.' || a.attname || ':' || p order by (c.relname || '.' || a.attname || ':' || p) collate "C")
   from pg_class c
   join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped,
   unnest(array['insert', 'update']) p
   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
     and has_column_privilege('authenticated', c.oid, a.attnum, p) and not has_table_privilege('authenticated', c.oid, p)),
-  (select array_agg(x order by x) from unnest(array[
+  (select array_agg(x order by x collate "C") from unnest(array[
     'list_items.group_id:insert', 'list_items.added_by:insert', 'list_items.media_id:insert', 'list_items.status:insert',
     'list_items.status:update', 'list_items.watched_at:update', 'list_items.deleted_at:update',
     'watches.skipped_at:update']) x),
   'and only these columns where a table is not open to writes');
-select test.expect_eq((select array_agg(p.proname::text order by p.proname) from pg_proc p
+select test.expect_eq((select array_agg(p.proname::text order by p.proname::text collate "C") from pg_proc p
   where p.pronamespace = 'public'::regnamespace and has_function_privilege('authenticated', p.oid, 'execute')),
-  (select array_agg(x order by x) from unnest(array[
+  (select array_agg(x order by x collate "C") from unnest(array[
     'is_group_member', 'shares_group', 'can_see_item', 'can_see_night',
     'create_group', 'join_group', 'refresh_invite_codes', 'rename_group', 'regenerate_invite_code', 'remove_member',
     'leave_group', 'log_watch', 'pending_rating_requests',
@@ -63,14 +63,14 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname) from
   'signed-in people can run exactly these functions');
 
 -- The server (service-role key): reads and writes every table, and runs the one function it calls.
-select test.expect_eq((select array_agg(c.relname || ':' || p order by c.relname || ':' || p)
+select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relname || ':' || p) collate "C")
   from pg_class c, unnest(array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']) p
   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and has_table_privilege('service_role', c.oid, p)),
-  (select array_agg(c.relname || ':' || p order by c.relname || ':' || p)
+  (select array_agg(c.relname || ':' || p order by (c.relname || ':' || p) collate "C")
     from pg_class c, unnest(array['select', 'insert', 'update', 'delete']) p
     where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'),
   'the server has read and write access to every table, and nothing beyond');
-select test.expect_eq((select array_agg(p.proname::text order by p.proname) from pg_proc p
+select test.expect_eq((select array_agg(p.proname::text order by p.proname::text collate "C") from pg_proc p
   where p.pronamespace = 'public'::regnamespace and has_function_privilege('service_role', p.oid, 'execute')),
   array['hit_rate_limit']::text[], 'the server can run hit_rate_limit and nothing else');
 
