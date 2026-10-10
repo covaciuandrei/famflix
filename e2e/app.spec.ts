@@ -98,6 +98,30 @@ test("add a title from Browse and find it on My list", async ({ page, context })
   await expect(page.getByText(title, { exact: true })).toBeVisible();
 });
 
+test("a series is saved with its seasons, a movie without", async ({ page, context }) => {
+  const ana = await createUser("Ana");
+  await signIn(context, ana);
+
+  // Chernobyl: one season of five episodes, ended.
+  await page.goto("/app/media/tv/87108");
+  await expect(page.getByRole("heading", { name: "Chernobyl" })).toBeVisible();
+  await addTo(page, page, "My list");
+  await expect(page.getByRole("img", { name: /On My list/ })).toBeVisible();
+  const series = await admin.from("media").select("series").eq("tmdb_id", 87108).eq("media_type", "tv").single();
+  expect(series.data!.series).toEqual({
+    status: "Ended",
+    seasons: [{ n: 1, episodes: 5 }],
+    last_aired: { s: 1, e: 5 },
+    next_air: null,
+  });
+
+  await page.goto("/app/media/movie/438631");
+  await addTo(page, page, "My list");
+  await expect(page.getByRole("img", { name: /On My list/ })).toBeVisible();
+  const movie = await admin.from("media").select("series").eq("tmdb_id", 438631).eq("media_type", "movie").single();
+  expect(movie.data!.series).toBeNull();
+});
+
 test("mark a title watched from its page, with a score and a note", async ({ page, context }) => {
   const ana = await createUser("Ana");
   await signIn(context, ana);

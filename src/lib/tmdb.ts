@@ -3,6 +3,7 @@ import "server-only";
 import type { Decade } from "@/lib/decades";
 import { findGenre, type BrowseGenre } from "@/lib/genres";
 import { interleave } from "@/lib/deck-compose";
+import { seriesFromTmdb, seriesToJson, type RawSeries, type SeriesInfo } from "@/lib/series";
 import type { MediaType } from "@/lib/types";
 
 /**
@@ -29,6 +30,8 @@ export interface TmdbDetails extends TmdbItem {
   genres: string[];
   runtime: number | null;
   trailerKey: string | null;
+  /** A series' seasons and how far it has aired; null for a movie. */
+  series: SeriesInfo | null;
 }
 
 export interface TmdbRow {
@@ -49,7 +52,7 @@ interface RawResult {
   vote_average?: number;
 }
 
-interface RawDetails extends RawResult {
+interface RawDetails extends RawResult, RawSeries {
   genres?: { id: number; name: string }[];
   runtime?: number;
   episode_run_time?: number[];
@@ -425,6 +428,7 @@ export async function getMediaDetails(
     genres: raw.genres?.map((g) => g.name) ?? [],
     runtime,
     trailerKey: trailer?.key ?? null,
+    series: mediaType === "tv" ? seriesFromTmdb(raw) : null,
   };
 }
 
@@ -442,6 +446,7 @@ export function detailsToMediaRow(details: TmdbDetails) {
     runtime: details.runtime,
     genres: details.genres,
     trailer_key: details.trailerKey,
+    series: details.series ? seriesToJson(details.series) : null,
     updated_at: new Date().toISOString(),
   };
 }

@@ -62,7 +62,15 @@ create table public.media (
   genres        jsonb not null default '[]'::jsonb,
   trailer_key   text,
   updated_at    timestamptz not null default now(),
-  unique (tmdb_id, media_type)
+  -- A series' seasons and how far it has aired, from TMDB: {"status": "Ended", "seasons": [{"n": 1, "episodes": 10}],
+  -- "last_aired": {"s": 1, "e": 10} or null, "next_air": "2026-10-18" or null}. Regular seasons only (no specials).
+  -- Written only by the server, like the rest of this table; null for a movie, or a series not saved with it yet.
+  series        jsonb,
+  unique (tmdb_id, media_type),
+  constraint media_series_shape check (
+    series is null
+    or (media_type = 'tv' and jsonb_typeof(series) = 'object' and coalesce(jsonb_typeof(series -> 'seasons') = 'array', false))
+  )
 );
 
 -- An entry in a watchlist. group_id NULL => personal list owned by added_by.

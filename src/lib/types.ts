@@ -46,6 +46,8 @@ export interface Media {
   runtime: number | null;
   genres: string[];
   trailer_key: string | null;
+  /** A series' seasons and how far it has aired (see parseSeriesInfo in lib/series.ts); null for a movie. */
+  series: unknown;
   updated_at: string;
 }
 
