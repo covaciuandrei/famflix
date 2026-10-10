@@ -1,8 +1,8 @@
 -- ============================================================================
 --  FamFlix — the whole database in one script: tables, row-level security,
---  functions and triggers (families and lists, ratings, watched together, the
---  activity feed, rate limits and movie nights) and, at the end, exactly what
---  each Supabase role may do with them.
+--  functions and triggers (families and lists, ratings, watched together, series
+--  episodes, the activity feed, rate limits and movie nights) and, at the end,
+--  exactly what each Supabase role may do with them.
 --  For an EMPTY Supabase database only: SQL Editor → paste → Run, once.
 --  All or nothing: if anything fails (say, the tables already exist), nothing changes.
 --  It doesn't count on Supabase's default privileges, so it also works where new
@@ -152,6 +152,20 @@ create table public.watches (
 );
 create index watches_user_idx on public.watches (user_id);
 create index watches_logged_by_idx on public.watches (logged_by);
+
+-- The episodes someone has ticked on a series on their My list, with their own score and note for each. One row per
+-- ticked episode, so Not started is no rows. Only mark_episodes(), mark_next_episode() and rate_episode() write it.
+create table public.episode_logs (
+  list_item_id   uuid not null references public.list_items (id) on delete cascade,
+  season_number  smallint not null check (season_number between 1 and 200),
+  episode_number smallint not null check (episode_number between 1 and 20000),
+  watched_on     date not null default current_date,
+  score          numeric(3,1) check (score between 1 and 10),
+  comment        text check (char_length(comment) <= 250),
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  primary key (list_item_id, season_number, episode_number)
+);
 
 -- Family activity feed. Names and titles are copied in, so history stays readable after people leave.
 create table public.activity (
@@ -423,6 +437,7 @@ alter table public.list_items    enable row level security;
 alter table public.ratings       enable row level security;
 alter table public.reactions     enable row level security;
 alter table public.watches       enable row level security;
+alter table public.episode_logs  enable row level security;
 alter table public.activity      enable row level security;
 alter table public.rate_limits   enable row level security;
 alter table public.movie_nights           enable row level security;
@@ -514,6 +529,14 @@ create policy watches_select on public.watches for select using (
     where li.id = list_item_id
       and li.group_id is not null
       and public.is_group_member(li.group_id, (select auth.uid()))
+  )
+);
+-- episode_logs: your own episodes on your My list only (nobody else's, and not a family's); no write policies, the
+-- functions below write them.
+create policy episode_logs_select on public.episode_logs for select using (
+  exists (
+    select 1 from public.list_items li
+    where li.id = list_item_id and li.group_id is null and li.added_by = (select auth.uid())
   )
 );
 create policy watches_update_own on public.watches for update
@@ -1217,6 +1240,301 @@ $$;
 create trigger ratings_follow_family
   after insert or update or delete on public.ratings
   for each row execute function public.ratings_follow_family();
+
+-- ---------------------------------------------------------------------------
+--  Series: ticking episodes on My list
+-- ---------------------------------------------------------------------------
+
+-- How many episodes of a season have aired, from a series' info (media.series): 0 for a season it doesn't list.
+create function public.series_aired(p_series jsonb, p_season integer)
+returns integer
+language sql
+immutable
+set search_path = public
+as $$
+  select coalesce((
+    select case
+             when la.s is null then 0
+             when p_season < la.s then x.episodes
+             when p_season = la.s then least(la.e, x.episodes)
+             else 0
+           end
+    from jsonb_to_recordset(p_series -> 'seasons') as x(n integer, episodes integer)
+    cross join (select (p_series -> 'last_aired' ->> 's')::integer as s,
+                       (p_series -> 'last_aired' ->> 'e')::integer as e) la
+    where x.n = p_season
+  ), 0);
+$$;
+
+create function public.series_aired_total(p_series jsonb)
+returns integer
+language sql
+immutable
+set search_path = public
+as $$
+  select coalesce(sum(public.series_aired(p_series, x.n)), 0)::integer
+  from jsonb_to_recordset(p_series -> 'seasons') as x(n integer, episodes integer);
+$$;
+
+-- The caller's own My list entry for a series (locked while they change its episodes): whether it is watched and when,
+-- and its series info. Anything else is refused: someone else's entry, a family's, one that was removed, a movie, or a
+-- series with no info saved yet.
+create function public.episodes_my_item(p_item uuid, out status text, out watched_at timestamptz, out series jsonb)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_media uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in';
+  end if;
+  perform public.hit_rate_limit(auth.uid(), 'episodes', 180, 60);
+  select li.status, li.watched_at, li.media_id into status, watched_at, v_media
+  from public.list_items li
+  where li.id = p_item and li.group_id is null and li.added_by = auth.uid() and li.deleted_at is null
+  for update;
+  if not found then
+    raise exception 'This title is not on your My list';
+  end if;
+  select m.series into series from public.media m where m.id = v_media;
+  if series is null then
+    raise exception 'This series has no episode list yet';
+  end if;
+end;
+$$;
+
+-- A series that has ended and has every aired episode ticked is Watched. Returns whether it just became so.
+create function public.episodes_complete_if_done(p_item uuid, p_series jsonb)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_aired  integer := public.series_aired_total(p_series);
+  v_ticked integer;
+begin
+  if v_aired = 0 or coalesce(p_series ->> 'status', '') not in ('Ended', 'Canceled') then
+    return false;
+  end if;
+  select count(*) into v_ticked
+  from public.episode_logs e
+  where e.list_item_id = p_item
+    and e.episode_number <= public.series_aired(p_series, e.season_number);
+  if v_ticked < v_aired then
+    return false;
+  end if;
+  update public.list_items set status = 'watched', watched_at = now()
+  where id = p_item and status = 'want';
+  return found;
+end;
+$$;
+
+-- Ticks (p_watched) or unticks the episodes from (p_from_season, p_from_episode) to (p_to_season, p_to_episode), both
+-- included, on a series on the caller's My list: one episode, a season (to episode 20000: it stops at the last one), or
+-- everything up to an episode (from 1, 1). Only aired episodes can be ticked. Ticking the last aired episode of a series
+-- that has ended makes it Watched. Unticking on a series that is Watched first ticks every aired episode for real (a
+-- Watched series shows all of them as watched), then takes these off and puts the series back to To watch. Unticking
+-- also takes off the episodes' scores and notes. Returns {"changed": episodes ticked or unticked, "completed": it
+-- became Watched, "reopened": it stopped being Watched}.
+create function public.mark_episodes(
+  p_item         uuid,
+  p_watched      boolean,
+  p_from_season  integer,
+  p_from_episode integer,
+  p_to_season    integer,
+  p_to_episode   integer,
+  p_on           date default current_date
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status    text;
+  v_watched   timestamptz;
+  v_series    jsonb;
+  v_listed    integer;
+  v_aired     integer;
+  v_changed   integer := 0;
+  v_completed boolean := false;
+  v_reopened  boolean := false;
+begin
+  select m.status, m.watched_at, m.series into v_status, v_watched, v_series from public.episodes_my_item(p_item) as m;
+
+  if p_watched is null or p_from_season is null or p_from_episode is null
+     or p_to_season is null or p_to_episode is null then
+    raise exception 'Pick the episodes';
+  end if;
+  if p_on is null or p_on > current_date + 1 then
+    raise exception 'Pick a date that is not in the future';
+  end if;
+  if (select count(*) from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+      where x.n in (p_from_season, p_to_season)) < (case when p_from_season = p_to_season then 1 else 2 end) then
+    raise exception 'That season is not listed for this series';
+  end if;
+  if p_from_episode < 1 or p_from_season > p_to_season
+     or (p_from_season = p_to_season and p_from_episode > p_to_episode) then
+    raise exception 'Pick the episodes in order';
+  end if;
+  if p_from_episode > (select x.episodes from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+                       where x.n = p_from_season) then
+    raise exception 'That episode is not listed for this series';
+  end if;
+
+  -- The listed episodes asked for, and how many of them have aired.
+  select count(*), count(*) filter (where g.e <= public.series_aired(v_series, x.n))
+  into v_listed, v_aired
+  from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+  cross join lateral generate_series(
+    case when x.n = p_from_season then p_from_episode else 1 end,
+    least(case when x.n = p_to_season then p_to_episode else x.episodes end, x.episodes)
+  ) as g(e)
+  where x.n between p_from_season and p_to_season;
+  if v_listed > 5000 then
+    raise exception 'That is too many episodes at once';
+  end if;
+
+  if p_watched then
+    if v_aired = 0 then
+      raise exception 'Those episodes have not aired yet';
+    end if;
+    insert into public.episode_logs (list_item_id, season_number, episode_number, watched_on)
+    select p_item, x.n, g.e, p_on
+    from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+    cross join lateral generate_series(
+      case when x.n = p_from_season then p_from_episode else 1 end,
+      least(case when x.n = p_to_season then p_to_episode else x.episodes end, x.episodes)
+    ) as g(e)
+    where x.n between p_from_season and p_to_season and g.e <= public.series_aired(v_series, x.n)
+    on conflict do nothing;
+    get diagnostics v_changed = row_count;
+    v_completed := public.episodes_complete_if_done(p_item, v_series);
+  else
+    if v_status = 'watched' and v_aired > 0 then
+      insert into public.episode_logs (list_item_id, season_number, episode_number, watched_on)
+      select p_item, x.n, g.e, coalesce(v_watched::date, current_date)
+      from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+      cross join lateral generate_series(1, public.series_aired(v_series, x.n)) as g(e)
+      on conflict do nothing;
+      update public.list_items set status = 'want', watched_at = null where id = p_item;
+      v_reopened := true;
+    end if;
+    with r as (
+      select x.n, g.e
+      from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+      cross join lateral generate_series(
+        case when x.n = p_from_season then p_from_episode else 1 end,
+        least(case when x.n = p_to_season then p_to_episode else x.episodes end, x.episodes)
+      ) as g(e)
+      where x.n between p_from_season and p_to_season
+    )
+    delete from public.episode_logs l
+    using r
+    where l.list_item_id = p_item and l.season_number = r.n and l.episode_number = r.e;
+    get diagnostics v_changed = row_count;
+  end if;
+
+  return jsonb_build_object('changed', v_changed, 'completed', v_completed, 'reopened', v_reopened);
+end;
+$$;
+
+-- Ticks the first aired episode that isn't ticked yet. Returns {"season", "episode", "completed"}.
+create function public.mark_next_episode(p_item uuid, p_on date default current_date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status    text;
+  v_series    jsonb;
+  v_season    integer;
+  v_episode   integer;
+  v_completed boolean;
+begin
+  select m.status, m.series into v_status, v_series from public.episodes_my_item(p_item) as m;
+  if p_on is null or p_on > current_date + 1 then
+    raise exception 'Pick a date that is not in the future';
+  end if;
+  if v_status = 'watched' then
+    raise exception 'This series is already marked as watched';
+  end if;
+
+  select x.n, g.e into v_season, v_episode
+  from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+  cross join lateral generate_series(1, public.series_aired(v_series, x.n)) as g(e)
+  where not exists (
+    select 1 from public.episode_logs l
+    where l.list_item_id = p_item and l.season_number = x.n and l.episode_number = g.e
+  )
+  order by x.n, g.e
+  limit 1;
+  if v_season is null then
+    raise exception 'There is no new episode to tick';
+  end if;
+
+  insert into public.episode_logs (list_item_id, season_number, episode_number, watched_on)
+  values (p_item, v_season, v_episode, p_on)
+  on conflict do nothing;
+  v_completed := public.episodes_complete_if_done(p_item, v_series);
+  return jsonb_build_object('season', v_season, 'episode', v_episode, 'completed', v_completed);
+end;
+$$;
+
+-- The caller's own score (1 to 10, one decimal) and/or note (up to 250 characters) for an aired episode of a series on
+-- their My list. Rating an episode ticks it; with neither a score nor a note it only takes the old ones off (the tick
+-- stays). Like the last tick of a series that has ended, rating its last aired episode can make it Watched. Returns
+-- {"completed": it became Watched}.
+create function public.rate_episode(p_item uuid, p_season integer, p_episode integer, p_score numeric, p_comment text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_series  jsonb;
+  v_rounded numeric;
+  v_score   numeric(3,1);
+  v_comment text := nullif(trim(coalesce(p_comment, '')), '');
+begin
+  select m.series into v_series from public.episodes_my_item(p_item) as m;
+
+  if p_season is null or p_episode is null or p_season < 1 or p_episode < 1 or not exists (
+       select 1 from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+       where x.n = p_season and p_episode <= x.episodes) then
+    raise exception 'That episode is not listed for this series';
+  end if;
+  if p_episode > public.series_aired(v_series, p_season) then
+    raise exception 'That episode has not aired yet';
+  end if;
+  if char_length(v_comment) > 250 then
+    raise exception 'Notes can be at most 250 characters';
+  end if;
+  if p_score is not null then
+    v_rounded := round(p_score, 1);
+    if v_rounded < 1 or v_rounded > 10 then
+      raise exception 'Scores must be between 1 and 10';
+    end if;
+    v_score := v_rounded;
+  end if;
+
+  if v_score is null and v_comment is null then
+    update public.episode_logs
+    set score = null, comment = null, updated_at = now()
+    where list_item_id = p_item and season_number = p_season and episode_number = p_episode;
+  else
+    insert into public.episode_logs (list_item_id, season_number, episode_number, score, comment)
+    values (p_item, p_season, p_episode, v_score, v_comment)
+    on conflict (list_item_id, season_number, episode_number)
+    do update set score = excluded.score, comment = excluded.comment, updated_at = now();
+  end if;
+  return jsonb_build_object('completed', public.episodes_complete_if_done(p_item, v_series));
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 --  Movie nights: stacks of titles to swipe, votes, and the results
@@ -2330,8 +2648,9 @@ revoke all on all functions in schema public from public, anon, authenticated, s
 -- Signed-in people read what the security rules let them see.
 grant select on
   public.profiles, public.groups, public.group_members, public.media, public.list_items, public.ratings,
-  public.reactions, public.watches, public.activity, public.movie_nights, public.movie_night_stacks,
-  public.movie_night_candidates, public.movie_night_votes, public.movie_night_finishes, public.movie_night_members
+  public.reactions, public.watches, public.episode_logs, public.activity, public.movie_nights,
+  public.movie_night_stacks, public.movie_night_candidates, public.movie_night_votes, public.movie_night_finishes,
+  public.movie_night_members
   to authenticated;
 -- They write straight to a table only where the security rules allow it (their own rows); everything else goes
 -- through the functions below, so the feed, the movie nights and the rate limits can't be faked.
@@ -2377,7 +2696,10 @@ grant execute on function
   public.active_movie_nights(),
   public.add_movie_night_top_titles(uuid),
   public.pick_movie_night_card(uuid, uuid, date, jsonb),
-  public.pick_movie_night_title(uuid, uuid, date, jsonb)
+  public.pick_movie_night_title(uuid, uuid, date, jsonb),
+  public.mark_episodes(uuid, boolean, integer, integer, integer, integer, date),
+  public.mark_next_episode(uuid, date),
+  public.rate_episode(uuid, integer, integer, numeric, text)
   to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.
