@@ -11,10 +11,13 @@ import {
   MAX_GENRES,
   moodParams,
   MOODS,
+  movieNightMood,
   NIGHT_STATUS_LABEL,
   nightAction,
+  nightMood,
   parseMood,
   POINTS,
+  type NightInfo,
 } from "../src/lib/movie-night";
 
 const movie = (id: number) => ({ mediaType: "movie" as const, tmdbId: id });
@@ -154,6 +157,15 @@ test.describe("moods", () => {
     const mood = { genres: ["comedy", "family"], series: true, count: 20 as const, maxRuntime: 130 };
     expect(parseMood(Object.fromEntries(moodParams(mood)))).toEqual(mood);
   });
+});
+
+test("a family's movie night is for movies, whatever the mood or an older night asked for", () => {
+  const asked = { genres: ["comedy"], series: true, count: 30 as const, maxRuntime: 100 };
+  expect(movieNightMood(asked)).toEqual({ ...asked, series: false });
+  expect(movieNightMood(DEFAULT_MOOD)).toEqual(DEFAULT_MOOD);
+  // A night made while series were allowed still asks for more suggestions in the same mood, without series.
+  const older = { genres: ["comedy"], options: { series: true, count: 20, max: 130 } } as unknown as NightInfo;
+  expect(nightMood(older)).toEqual({ genres: ["comedy"], series: false, count: 20, maxRuntime: 130 });
 });
 
 test("points: love 2, yes 1, nope -1, and seen it adds nothing", () => {

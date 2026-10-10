@@ -121,7 +121,8 @@ export function Hub({
           </section>
         ) : (
           <MoodPicker
-            start={(options) => startMovieNight({ groupId: family.id, ...options })}
+            allowSeries={false}
+            start={({ genres, count, max }) => startMovieNight({ groupId: family.id, genres, count, max })}
             startLabel={`Start movie night for ${family.name}`}
             hint={`Everyone in ${family.name} gets an invite to swipe too, and the votes decide what to watch.`}
           />

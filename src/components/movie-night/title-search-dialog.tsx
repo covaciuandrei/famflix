@@ -11,7 +11,7 @@ import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import type { TmdbItem } from "@/lib/tmdb";
 
 /**
- * "Pick something else": a window to search for any movie or series, not only the ones the night showed. It opens as
+ * "Pick something else": a window to search for any movie, not only the ones the night showed. It opens as
  * soon as it is shown, so show it only while it is wanted (and drop it from `onClose`). Choosing a result hands the
  * title to `onSelect`.
  */
@@ -48,7 +48,7 @@ export function TitleSearchDialog({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=movie`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Search failed. Please try again.");
       setResults(data.results as TmdbItem[]);
@@ -77,8 +77,8 @@ export function TitleSearchDialog({
         Pick something else
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Decided on a title that wasn&apos;t in the stack? Search for any movie or series. Picking it ends the movie
-        night, like picking one from the leaderboard.
+        Decided on a movie that wasn&apos;t in the stack? Search for any movie. Picking it ends the movie night, like
+        picking one from the leaderboard.
       </p>
 
       <form onSubmit={search} className="mt-4 flex gap-2">
@@ -90,8 +90,8 @@ export function TitleSearchDialog({
             enterKeyHint="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search movies & series…"
-            aria-label="Search for a title"
+            placeholder="Search movies…"
+            aria-label="Search for a movie"
             className="pl-9"
           />
         </div>

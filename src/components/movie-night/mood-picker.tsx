@@ -69,12 +69,15 @@ export function MoodPicker({
   start,
   startLabel,
   hint,
+  allowSeries = true,
 }: {
   /** Starts the stack. It redirects to it when it works, so it only comes back with a problem to show. */
   start: (options: StackOptions) => Promise<{ error?: string } | void>;
   startLabel: string;
   /** A line under the button about what happens next. */
   hint: string;
+  /** Whether the stack may have series: Discover's can, a family's movie night is for movies only. */
+  allowSeries?: boolean;
 }) {
   const [genres, setGenres] = useState<string[]>([]);
   const [series, setSeries] = useState(false);
@@ -83,9 +86,10 @@ export function MoodPicker({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Some categories only exist for series (Kids), so with series off they'd find nothing.
+  // Some categories only exist for series (Kids), so with series off they'd find nothing; a stack of movies has none.
+  const genreChips = allowSeries ? BROWSE_GENRES : BROWSE_GENRES.filter((genre) => genre.movie !== null);
   const seriesOnly =
-    genres.length > 0 && !series && genres.every((slug) => findGenre(slug)?.movie === null);
+    allowSeries && genres.length > 0 && !series && genres.every((slug) => findGenre(slug)?.movie === null);
 
   function toggleGenre(slug: string) {
     setGenres((current) =>
@@ -96,7 +100,7 @@ export function MoodPicker({
   function go() {
     setError(null);
     startTransition(async () => {
-      const res = await start({ genres, series, count, max: maxRuntime });
+      const res = await start({ genres, series: allowSeries && series, count, max: maxRuntime });
       if (res?.error) setError(res.error);
     });
   }
@@ -110,6 +114,7 @@ export function MoodPicker({
           </h2>
           <p className="text-sm text-muted-foreground">
             Pick a mood to start from, or mix your own from the genres. No pick means a bit of everything.
+            {!allowSeries && " Movie nights are for movies; series are tracked on My list."}
           </p>
         </div>
         <div className="flex flex-col gap-2">
@@ -153,7 +158,7 @@ export function MoodPicker({
             <span className="text-xs text-muted-foreground">up to {MAX_GENRES}</span>
           </p>
           <div role="group" aria-labelledby="genres-label" className="flex flex-wrap gap-1.5">
-            {BROWSE_GENRES.map((genre) => {
+            {genreChips.map((genre) => {
               const active = genres.includes(genre.slug);
               return (
                 <button
@@ -186,7 +191,7 @@ export function MoodPicker({
           <span>
             More options
             <span className="ml-2 font-normal text-muted-foreground">
-              {count} cards{series ? ", with series" : ""}
+              {count} cards{allowSeries && series ? ", with series" : ""}
               {maxRuntime ? `, up to ${maxRuntime} min` : ""}
             </span>
           </span>
@@ -203,27 +208,29 @@ export function MoodPicker({
               ))}
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm">Include series</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={series}
-              aria-label="Include series"
-              onClick={() => setSeries((on) => !on)}
-              className={cn(
-                "relative h-6 w-11 rounded-full border border-border transition-colors",
-                series ? "bg-primary" : "bg-muted",
-              )}
-            >
-              <span
+          {allowSeries && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm">Include series</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={series}
+                aria-label="Include series"
+                onClick={() => setSeries((on) => !on)}
                 className={cn(
-                  "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform",
-                  series && "translate-x-5",
+                  "relative h-6 w-11 rounded-full border border-border transition-colors",
+                  series ? "bg-primary" : "bg-muted",
                 )}
-              />
-            </button>
-          </div>
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform",
+                    series && "translate-x-5",
+                  )}
+                />
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm">Movie length</span>
             <div role="group" aria-label="Movie length" className="inline-flex rounded-lg border border-border p-0.5">

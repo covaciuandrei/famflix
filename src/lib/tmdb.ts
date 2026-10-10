@@ -156,16 +156,16 @@ function normalizeMany(
     .filter((x): x is TmdbItem => x !== null);
 }
 
-/** Search movies and TV shows by title. */
-export async function searchMedia(query: string): Promise<TmdbItem[]> {
+/** Search movies and TV shows by title, or only movies (`only: "movie"`). */
+export async function searchMedia(query: string, only?: MediaType): Promise<TmdbItem[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
   const data = await tmdbFetch<{ results: RawResult[] }>(
-    "/search/multi",
+    only ? `/search/${only}` : "/search/multi",
     { query: trimmed, include_adult: "false", page: "1" },
     600,
   );
-  return normalizeMany(data.results);
+  return normalizeMany(data.results, only);
 }
 
 /** Curated browse rows for the discover page. */

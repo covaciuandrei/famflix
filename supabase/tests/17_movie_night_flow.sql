@@ -86,7 +86,7 @@ select test.expect_error($$select public.start_movie_night(test.v('fl_fam'), '{}
 select test.expect_eq((select count(*) from public.movie_nights), 0::bigint, 'refused starts left nothing behind');
 
 -- Ana starts: ten suggestions and F9729, which is on the family list.
-select public.start_movie_night(test.v('fl_fam'), array['comedy','horror'], '{"series": true, "count": 25}',
+select public.start_movie_night(test.v('fl_fam'), array['comedy','horror'], '{"count": 25}',
   test.cands(9710, 9719) || jsonb_build_array(jsonb_build_object('media_id', (select id from public.media where tmdb_id = 9729),
     'list_item_id', test.v('fl_li'), 'origin', 'list'))) as night_id \gset
 reset role;
@@ -96,7 +96,7 @@ select test.expect_eq((select status from public.movie_nights where id = test.v(
 select test.expect_eq((select source from public.movie_nights where id = test.v('fl_night')), 'swipe'::text, 'it is a swipe night');
 select test.expect_eq((select started_by from public.movie_nights where id = test.v('fl_night')), :ana::uuid, 'Ana started it');
 select test.expect_eq((select genres from public.movie_nights where id = test.v('fl_night')), array['comedy','horror'], 'with its genres');
-select test.expect_eq((select options from public.movie_nights where id = test.v('fl_night')), '{"series": true, "count": 25, "max": null}'::jsonb, 'and its options');
+select test.expect_eq((select options from public.movie_nights where id = test.v('fl_night')), '{"series": false, "count": 25, "max": null}'::jsonb, 'and its options');
 select test.expect_eq((select count(*) from public.movie_night_stacks where night_id = test.v('fl_night')), 1::bigint, 'one stack');
 select test.expect_eq((select count(*) from public.movie_night_candidates where night_id = test.v('fl_night')), 11::bigint, 'with eleven cards');
 select test.expect_eq((select origin from public.movie_night_candidates where id = test.cand(9729)), 'list'::text, 'the list title says so');

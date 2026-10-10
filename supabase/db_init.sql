@@ -1271,7 +1271,7 @@ end;
 $$;
 
 -- Checks the cards of a new stack: [{"media_id": ..., "list_item_id": ... or null, "origin": "list" or "suggested"}].
--- Only a night's first stack may use family list titles (p_allow_list).
+-- Only a night's first stack may use family list titles (p_allow_list), and every card is a movie.
 create function public.movie_night_check_candidates(p_group uuid, p_candidates jsonb, p_allow_list boolean)
 returns void
 language plpgsql
@@ -1309,6 +1309,13 @@ begin
   end if;
   if exists (
     select 1 from jsonb_array_elements(p_candidates) as e(elem)
+    join public.media m on m.id = (e.elem ->> 'media_id')::uuid
+    where m.media_type <> 'movie'
+  ) then
+    raise exception 'Movie nights are for movies. Series are tracked on My list';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_candidates) as e(elem)
     where e.elem ->> 'origin' = 'list'
       and not exists (
         select 1 from public.list_items li
@@ -1324,7 +1331,8 @@ end;
 $$;
 
 -- Starts a movie night for a family with its first stack. Any member can; one night at a time per family.
--- p_genres: up to 5 browse category slugs. p_options: {"series": bool, "count": 8-40, "max": minutes or null}.
+-- p_genres: up to 5 browse category slugs. p_options: {"count": 8-40, "max": minutes or null} (movie nights are for
+-- movies, so "series" is false or left out; it is kept in the saved options for the nights made before that).
 create function public.start_movie_night(
   p_group      uuid,
   p_genres     text[],
@@ -1357,8 +1365,11 @@ begin
   if jsonb_typeof(coalesce(p_options, '{}'::jsonb)) is distinct from 'object' then
     raise exception 'Those options are not valid';
   end if;
+  if coalesce((p_options ->> 'series')::boolean, false) then
+    raise exception 'Movie nights are for movies. Series are tracked on My list';
+  end if;
   v_options := jsonb_build_object(
-    'series', coalesce((p_options ->> 'series')::boolean, false),
+    'series', false,
     'count',  coalesce((p_options ->> 'count')::integer, 25),
     'max',    (p_options ->> 'max')::integer
   );
@@ -1930,7 +1941,8 @@ $$;
 
 -- Called by log_watch once a watch is saved. If the family has a movie night going with this title as one of its cards,
 -- the night ends with it (a pick), and its best titles join the family list. Otherwise the watch becomes a "logged" night
--- in the history, merging with one for the same title and day. The people who watched are marked on it.
+-- in the history, merging with one for the same title and day. The people who watched are marked on it. A series watched
+-- together is only on the family's Watched together list: movie nights (and their history) are for movies.
 create function public.record_movie_night_watch(p_item uuid, p_date date, p_viewers uuid[])
 returns void
 language plpgsql
@@ -1940,9 +1952,12 @@ as $$
 declare
   v_group uuid;
   v_media uuid;
+  v_type  text;
   v_night uuid;
 begin
-  select group_id, media_id into v_group, v_media from public.list_items where id = p_item;
+  select li.group_id, li.media_id, m.media_type into v_group, v_media, v_type
+  from public.list_items li join public.media m on m.id = li.media_id
+  where li.id = p_item;
   if v_group is null then
     return;
   end if;
@@ -1963,6 +1978,9 @@ begin
     where id = v_night;
     perform public.movie_night_add_top_titles(v_night);
   else
+    if v_type <> 'movie' then
+      return;
+    end if;
     -- Someone else saving the same pick a moment later joins that night instead of making another.
     select id into v_night
     from public.movie_nights
@@ -2048,11 +2066,16 @@ declare
   n         public.movie_nights;
   v_item    uuid;
   v_deleted timestamptz;
+  v_type    text;
 begin
   n := public.movie_night_for_member(p_night);
   perform public.movie_night_require_open(n);
-  if not exists (select 1 from public.media where id = p_media) then
+  select media_type into v_type from public.media where id = p_media;
+  if not found then
     raise exception 'That title was not found';
+  end if;
+  if v_type <> 'movie' then
+    raise exception 'Movie nights are for movies. Series are tracked on My list';
   end if;
 
   -- (set_config comes first: PERFORM would reset FOUND between the lookup and the check below.)

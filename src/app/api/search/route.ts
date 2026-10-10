@@ -16,9 +16,12 @@ export async function GET(request: Request) {
   const limited = await overRateLimit(user.id, LIMITS.search);
   if (limited) return NextResponse.json({ error: limited }, { status: 429 });
 
-  const q = new URL(request.url).searchParams.get("q") ?? "";
+  const params = new URL(request.url).searchParams;
+  const q = params.get("q") ?? "";
+  // "type=movie": only movies (a movie night is for movies).
+  const only = params.get("type") === "movie" ? "movie" : undefined;
   try {
-    const results = await searchMedia(q);
+    const results = await searchMedia(q, only);
     return NextResponse.json({ results });
   } catch (error) {
     console.error("Search failed:", error);

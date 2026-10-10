@@ -10,6 +10,7 @@ import {
   cardKey,
   MAX_STACKS,
   MAX_VOTES_PER_SAVE,
+  movieNightMood,
   nightMood,
   parseMood,
   type Vote,
@@ -77,23 +78,24 @@ async function recentTitles(supabase: Supabase, groupId: string): Promise<Set<st
 
 /**
  * Starts a movie night for a family: builds its first stack (the family's To watch titles that fit the mood, then
- * suggestions), creates the night and sends the starter to it. Only returns when something is wrong.
+ * suggestions; movies only, series are tracked on My list), creates the night and sends the starter to it. Only
+ * returns when something is wrong.
  */
 export async function startMovieNight(input: {
   groupId: string;
   genres: string[];
-  series: boolean;
   count: number;
   max: number | null;
 }): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!UUID.test(String(input?.groupId))) return { error: "That isn't one of your families." };
-  const mood = parseMood({
-    genres: Array.isArray(input.genres) ? input.genres.map(String) : [],
-    series: input.series === true ? "1" : "0",
-    count: input.count,
-    max: input.max,
-  });
+  const mood = movieNightMood(
+    parseMood({
+      genres: Array.isArray(input.genres) ? input.genres.map(String) : [],
+      count: input.count,
+      max: input.max,
+    }),
+  );
 
   const { data: member } = await supabase
     .from("group_members")
@@ -117,7 +119,7 @@ export async function startMovieNight(input: {
   const { data, error } = await supabase.rpc("start_movie_night", {
     p_group: input.groupId,
     p_genres: mood.genres,
-    p_options: { series: mood.series, count: mood.count, max: mood.maxRuntime },
+    p_options: { series: false, count: mood.count, max: mood.maxRuntime },
     p_candidates: built.candidates,
   });
   if (error) return { error: friendly(error) };

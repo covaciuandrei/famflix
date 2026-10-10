@@ -245,6 +245,48 @@ test("a family night: the invite, swiping, a leaderboard without popups, and a p
   await closeAll(pages);
 });
 
+test("a family's movie night is for movies: no series option, no series-only category, no series card", async ({ browser }, testInfo) => {
+  test.setTimeout(240_000);
+  const { users, pages } = await makeFamily(browser, testInfo.project, "Movies Only", ["Ana"]);
+  const [ana] = users;
+  const [anaPage] = pages;
+
+  // A series is on the family's To watch list; it never becomes a card.
+  const { data: family } = await admin.from("groups").select("id").eq("name", "Movies Only").eq("created_by", ana.id).single();
+  const { data: series } = await admin
+    .from("media")
+    .upsert({ tmdb_id: 87108, media_type: "tv", title: "Chernobyl" }, { onConflict: "tmdb_id,media_type" })
+    .select("id")
+    .single();
+  await admin.from("list_items").insert({ group_id: family!.id, added_by: ana.id, media_id: series!.id });
+
+  const genres = anaPage.getByRole("group", { name: "Genres" });
+  await openFamilyNight(anaPage, "Movies Only");
+  await expect(anaPage.getByText(/Movie nights are for movies; series are tracked on My list\./)).toBeVisible();
+  await anaPage.getByText("More options").click();
+  await expect(anaPage.getByRole("switch", { name: "Include series" })).toHaveCount(0);
+  await expect(genres.getByRole("button", { name: "Comedy" })).toBeVisible();
+  await expect(genres.getByRole("button", { name: "Kids" })).toHaveCount(0);
+
+  // Discover is yours alone and lands on My list, so it keeps both.
+  await anaPage.goto("/app/browse/discover");
+  await anaPage.getByText("More options").click();
+  await expect(anaPage.getByRole("switch", { name: "Include series" })).toBeVisible();
+  await expect(genres.getByRole("button", { name: "Kids" })).toBeVisible();
+
+  await startNight(anaPage, "Movies Only");
+  const { data: night } = await admin.from("movie_nights").select("id").eq("started_by", ana.id).single();
+  const { data: cards } = await admin
+    .from("movie_night_candidates")
+    .select("media(tmdb_id, media_type)")
+    .eq("night_id", night!.id);
+  const media = (cards ?? []).map((c) => (c as unknown as { media: { tmdb_id: number; media_type: string } }).media);
+  expect(media.length).toBeGreaterThanOrEqual(20);
+  expect(media.every((m) => m.media_type === "movie")).toBe(true);
+
+  await closeAll(pages);
+});
+
 test("a movie night can end with a title that wasn't on the leaderboard", async ({ browser }, testInfo) => {
   test.setTimeout(240_000);
   const { users, pages } = await makeFamily(browser, testInfo.project, "Free Crew", ["Ana", "Ben"]);
@@ -264,7 +306,13 @@ test("a movie night can end with a title that wasn't on the leaderboard", async 
   await finishStack(anaPage);
   await anaPage.getByRole("button", { name: "Pick something else" }).click();
   await expect(search).toBeVisible();
-  await search.getByRole("searchbox", { name: "Search for a title" }).fill("The Matrix");
+  // Movies only: a search that finds a series too (Dune: Prophecy) doesn't show it.
+  const box = search.getByRole("searchbox", { name: "Search for a movie" });
+  await box.fill("Dune");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(search.getByRole("button", { name: /^Pick Dune \(2021\)$/ })).toBeVisible();
+  await expect(search.getByText(/^Series( · |$)/)).toHaveCount(0);
+  await box.fill("The Matrix");
   await search.getByRole("button", { name: "Search", exact: true }).click();
   await search.getByRole("button", { name: /^Pick The Matrix \(1999\)$/ }).first().click();
   const who = anaPage.getByRole("dialog", { name: "Who watched The Matrix?" });

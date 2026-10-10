@@ -131,6 +131,11 @@ export const DEFAULT_MOOD: MoodOptions = {
   maxRuntime: null,
 };
 
+/** A family's movie night is for movies: its mood never asks for series, whatever it was given. */
+export function movieNightMood(mood: MoodOptions): MoodOptions {
+  return { ...mood, series: false };
+}
+
 /** Reads a mood from URL parameters or a form, keeping only values that make sense. */
 export function parseMood(input: {
   genres?: string | readonly string[] | null;
@@ -359,10 +364,11 @@ export function candidateToCard(c: NightCandidate): DeckCard {
 
 /** The mood a night was started with, for asking for more suggestions in the same spirit. */
 export function nightMood(night: NightInfo): MoodOptions {
-  return parseMood({
-    genres: night.genres,
-    series: night.options.series ? "1" : "0",
-    count: night.options.count,
-    max: night.options.max,
-  });
+  return movieNightMood(
+    parseMood({
+      genres: night.genres,
+      count: night.options.count,
+      max: night.options.max,
+    }),
+  );
 }

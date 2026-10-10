@@ -8,6 +8,7 @@ import {
   cardKey,
   MIN_STACK_SIZE,
   MIN_SUGGESTIONS,
+  movieNightMood,
   type DeckCard,
   type DiscoverCard,
   type MoodOptions,
@@ -29,6 +30,7 @@ import type { ListItemCard, MediaType } from "@/lib/types";
 
 const NOT_ENOUGH =
   "We couldn't find enough titles for that mood. Try a few more genres, or include series.";
+const NOT_ENOUGH_MOVIES = "We couldn't find enough movies for that mood. Try a few more genres.";
 const NOT_ENOUGH_LIKE = "There aren't enough more titles like that one. Ask for more suggestions in the same mood instead.";
 const TMDB_DOWN = "Couldn't reach the movie database. Please try again.";
 
@@ -84,7 +86,9 @@ async function collectSuggestions({
         maxRuntime: mood.maxRuntime,
         seed,
       });
-  const queue = found.filter((item) => !exclude.has(cardKey(item)));
+  const queue = found.filter(
+    (item) => !exclude.has(cardKey(item)) && (mood.series || item.mediaType === "movie"),
+  );
   const ready: TmdbDetails[] = [];
   let next = 0;
   while (ready.length < wanted && next < queue.length) {
@@ -181,14 +185,15 @@ interface PoolItem {
  * titles that fit the mood and fills the rest with suggestions; a short list still gives a full stack. A "more
  * suggestions" stack (`suggestionsOnly`) is all suggestions. Suggestions never repeat a title on the family list or
  * in `exclude` (the night's earlier stacks and its recent nights). Suggested titles are saved to the shared `media`
- * table here, since the night stores them by id.
+ * table here, since the night stores them by id. A movie night is for movies, so a series on the family list is
+ * never a card.
  */
 export async function buildFamilyCandidates({
   userId,
   groupId,
-  mood,
+  mood: asked,
   seed,
-  size = mood.count,
+  size,
   suggestionsOnly = false,
   exclude = new Set<string>(),
   like,
@@ -203,6 +208,8 @@ export async function buildFamilyCandidates({
   /** Suggest titles like this one (a "more like this" stack). */
   like?: LikeTitle;
 }): Promise<{ candidates: FamilyCandidate[] } | { error: string }> {
+  const mood = movieNightMood(asked);
+  const count = size ?? mood.count;
   try {
     const cards = await getListCards({ groupId, userId });
     const listPool: PoolItem[] = suggestionsOnly
@@ -218,8 +225,8 @@ export async function buildFamilyCandidates({
             details: null,
           }));
 
-    const listShare = Math.max(0, size - MIN_SUGGESTIONS);
-    const slots = suggestionsOnly ? size : size - Math.min(listPool.length, listShare);
+    const listShare = Math.max(0, count - MIN_SUGGESTIONS);
+    const slots = suggestionsOnly ? count : count - Math.min(listPool.length, listShare);
     const found = await collectSuggestions({
       mood,
       seed,
@@ -235,8 +242,8 @@ export async function buildFamilyCandidates({
       details,
     }));
 
-    const deck = composeDeck({ list: listPool, suggestions, size, seed });
-    if (deck.length < MIN_STACK_SIZE) return { error: like ? NOT_ENOUGH_LIKE : NOT_ENOUGH };
+    const deck = composeDeck({ list: listPool, suggestions, size: count, seed });
+    if (deck.length < MIN_STACK_SIZE) return { error: like ? NOT_ENOUGH_LIKE : NOT_ENOUGH_MOVIES };
 
     const saved = await saveMediaMany(
       deck.flatMap(({ card }) => (card.details ? [detailsToMediaRow(card.details)] : [])),
