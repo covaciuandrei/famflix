@@ -37,22 +37,22 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   on your own: ✓ yes or ♥ love puts the title on My list, ✕ nope and 👁 seen it
   add nothing. Buttons or the arrow keys on a computer, swipes on a phone. When
   the stack is done, My list says how many titles went on it.
-- **Movie night**: can't decide? Pick a mood and swipe through a stack of
-  titles: ✕ nope (−1 point), ♥ love (+2, three per stack), ✓ yes (+1) or 👁 seen
-  it (0, you've already seen it), with buttons or the arrow keys on a computer
-  and swipes on a phone. On your own, what you swipe
-  right goes on My list. With a family, everyone swipes the same stack (the
-  family's To watch titles plus suggestions from TMDB), gets an invite when the
-  night starts, and sees the leaderboard once they have finished: points per
-  title, who voted what, "more suggestions" or "more like this" for another
-  stack. Any member can show the results early, cancel, or pick a title ("We
-  watched this"), which logs it as Watched together, ends the night and adds its
-  best 7 titles to the family list. A night closes by itself after 12 hours
-  without activity. The page lists every night with its status (in progress,
-  finished, cancelled or expired), the ones in progress first, for the family
-  you chose or for all of yours; nothing is ever deleted from it. The old
-  shuffle of what's left to watch is still there under "Browse your To watch
-  list".
+- **Movie night**: a family thing. Can't decide? Start one for a family, pick a
+  mood and everyone in it swipes through the same stack (the family's To watch
+  titles plus suggestions from TMDB): ✕ nope (−1 point), ♥ love (+2, three per
+  stack), ✓ yes (+1) or 👁 seen it (0, you've already seen it), with buttons or
+  the arrow keys on a computer and swipes on a phone. Everyone gets an invite
+  when the night starts and sees the leaderboard once they have finished:
+  points per title, who voted what, "more suggestions" or "more like this" for
+  another stack. Any member can show the results early, cancel, or pick a title
+  ("We watched this"), which logs it as Watched together, ends the night and
+  adds its best 7 titles to the family list. A night closes by itself after 12
+  hours without activity. The page lists every night of the family you chose
+  (the first one until you pick another) with its status (in progress,
+  finished, cancelled or expired), the ones in progress first; nothing is ever
+  deleted from it. Without a family the page points to creating or joining one,
+  and to Discover for swiping on your own. The old shuffle of what's left to
+  watch is still there under "Browse your To watch list".
 - **Activity feed**: see what happened in each family; removed titles can be
   restored for 30 days.
 - **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can

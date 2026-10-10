@@ -4,36 +4,38 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { startDiscover } from "@/app/app/browse/discover/actions";
 import { cancelNight, startMovieNight } from "@/app/app/movie-night/actions";
 import { MoodPicker, chip } from "@/components/movie-night/mood-picker";
-import { NightList, PendingNights } from "@/components/movie-night/night-list";
-import { useNightStatus } from "@/components/movie-night/night-status";
+import { NightList } from "@/components/movie-night/night-list";
+import { useNightStatus, waitingOnMe } from "@/components/movie-night/night-status";
 import { buttonVariants } from "@/components/ui/button";
 import { findGenre } from "@/lib/genres";
 import { type HistoryEntry, nightAction } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
 
 /**
- * Picks who is watching (just you, or one of your families), the mood, and starts the night. A family with a night
- * already going gets that night instead of a new one. Beside it (below it on a phone) is the list of movie nights
- * with their status: the chosen family's, or all of mine when it is Just me.
+ * Starts a movie night for a family: the mood, then the stack everyone in the family swipes. With more than one family
+ * you pick which (a dot says where a night is waiting for you). A family with a night already going gets that night
+ * instead of the form. Beside it (below it on a phone) is the list of that family's movie nights with their status.
  */
 export function Hub({
   families,
-  who,
+  selectedId,
   history,
 }: {
+  /** Every family I'm in, oldest first. Never empty: without one there is nothing to start. */
   families: { id: string; name: string; members: number }[];
-  /** The family chosen in the address, if any. */
-  who: string | null;
-  /** The first page of nights that are over, for the chosen family or all of mine; null without a family. */
-  history: { entries: HistoryEntry[]; hasMore: boolean } | null;
+  /** The family being looked at: the one in the address, or the first. */
+  selectedId: string;
+  /** The first page of that family's nights that are over. */
+  history: { entries: HistoryEntry[]; hasMore: boolean };
 }) {
   const router = useRouter();
-  const family = families.find((f) => f.id === who) ?? null;
+  const family = families.find((f) => f.id === selectedId) ?? families[0];
+  const nights = useNightStatus();
   // The chosen family's night that is going, kept up to date like the dot on the menu.
-  const openNight = useNightStatus().find((n) => n.group_id === family?.id) ?? null;
+  const openNight = nights.find((n) => n.group_id === family.id) ?? null;
+  const waitingIn = new Set(nights.filter(waitingOnMe).map((n) => n.group_id));
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -51,40 +53,37 @@ export function Hub({
 
   return (
     // On a computer the list of movie nights sits beside the form; everywhere else it is one column.
-    <div className={cn("grid items-start gap-x-10 gap-y-8", history && "lg:grid-cols-[minmax(0,1fr)_24rem]")}>
+    <div className="grid items-start gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
       <div className="flex min-w-0 flex-col gap-6">
-        {families.length > 0 && (
-          <section aria-labelledby="who-title" className="flex flex-col gap-3">
-            <h2 id="who-title" className="text-lg font-semibold">
-              Who&apos;s watching?
+        {families.length > 1 && (
+          <section aria-labelledby="family-title" className="flex flex-col gap-3">
+            <h2 id="family-title" className="text-lg font-semibold">
+              Which family?
             </h2>
-            <nav aria-label="Who is watching" className="flex flex-wrap gap-1.5">
-              <Link
-                href="/app/movie-night"
-                scroll={false}
-                aria-current={family ? undefined : "page"}
-                className={chip(!family)}
-              >
-                Just me
-              </Link>
+            <nav aria-label="Choose a family" className="flex flex-wrap gap-1.5">
               {families.map((f) => (
                 <Link
                   key={f.id}
                   href={`/app/movie-night?who=${f.id}`}
                   scroll={false}
-                  aria-current={family?.id === f.id ? "page" : undefined}
-                  className={cn(chip(family?.id === f.id), "max-w-full truncate")}
+                  aria-current={family.id === f.id ? "page" : undefined}
+                  className={cn(chip(family.id === f.id), "inline-flex max-w-full items-center gap-1.5")}
                 >
-                  {f.name} <span className="text-xs opacity-70">{f.members}</span>
+                  <span className="truncate">{f.name}</span>
+                  <span className="text-xs opacity-70">{f.members}</span>
+                  {family.id !== f.id && waitingIn.has(f.id) && (
+                    <>
+                      <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />
+                      <span className="sr-only">(a movie night is waiting for you)</span>
+                    </>
+                  )}
                 </Link>
               ))}
             </nav>
           </section>
         )}
 
-        {!family && <PendingNights />}
-
-        {family && openNight && inProgress && (
+        {openNight && inProgress ? (
           <section
             aria-label="Movie night in progress"
             className="flex flex-col gap-3 rounded-2xl border border-primary/50 bg-primary/10 p-4"
@@ -120,19 +119,11 @@ export function Hub({
               </p>
             )}
           </section>
-        )}
-
-        {!(family && openNight) && (
+        ) : (
           <MoodPicker
-            start={(options) =>
-              family ? startMovieNight({ groupId: family.id, ...options }) : startDiscover(options)
-            }
-            startLabel={family ? `Start movie night for ${family.name}` : "Start swiping"}
-            hint={
-              family
-                ? `Everyone in ${family.name} gets an invite to swipe too, and the votes decide what to watch.`
-                : "Swipe right on what you'd watch. Those go on My list."
-            }
+            start={(options) => startMovieNight({ groupId: family.id, ...options })}
+            startLabel={`Start movie night for ${family.name}`}
+            hint={`Everyone in ${family.name} gets an invite to swipe too, and the votes decide what to watch.`}
           />
         )}
 
@@ -145,17 +136,13 @@ export function Hub({
         </p>
       </div>
 
-      {history && (
-        <NightList
-          // Starts over when the first page changes (a night ended, or another family was chosen).
-          key={`${family?.id ?? "all"}:${history.entries.map((e) => e.id).join(",")}`}
-          scope={family ? { groupId: family.id, familyName: family.name } : null}
-          showFamily={!family && families.length > 1}
-          pendingOnTopBelowLg={!family}
-          initial={history.entries}
-          initialHasMore={history.hasMore}
-        />
-      )}
+      <NightList
+        // Starts over when the first page changes (a night ended, or another family was chosen).
+        key={`${family.id}:${history.entries.map((e) => e.id).join(",")}`}
+        scope={{ groupId: family.id, familyName: family.name }}
+        initial={history.entries}
+        initialHasMore={history.hasMore}
+      />
     </div>
   );
 }

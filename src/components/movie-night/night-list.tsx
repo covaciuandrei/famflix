@@ -58,7 +58,7 @@ function People({ entry }: { entry: HistoryEntry }) {
 }
 
 /** A night that is over: what was picked, or why nothing was. */
-function Entry({ entry, showFamily }: { entry: HistoryEntry; showFamily: boolean }) {
+function Entry({ entry }: { entry: HistoryEntry }) {
   const headline =
     entry.status === "closed"
       ? (entry.picked?.title ?? "A title that was removed")
@@ -69,7 +69,6 @@ function Entry({ entry, showFamily }: { entry: HistoryEntry; showFamily: boolean
         : "Nobody picked";
   const genres = genreNames(entry.genres);
   const facts = [
-    showFamily ? entry.groupName : null,
     formatDay(entry.happenedOn),
     entry.source === "logged" ? "Watched together" : null,
     entry.status === "expired" ? "ended after 12 hours" : null,
@@ -120,16 +119,15 @@ function Entry({ entry, showFamily }: { entry: HistoryEntry; showFamily: boolean
 }
 
 /** A night that is going: the way in is on the row ("Join in", "Keep swiping", "See the leaderboard"). */
-function PendingEntry({ night, showFamily, className }: { night: ActiveNight; showFamily: boolean; className?: string }) {
+function PendingEntry({ night }: { night: ActiveNight }) {
   const genres = genreNames(night.genres);
   const facts = [
-    showFamily ? night.group_name : null,
     formatDay(night.created_at.slice(0, 10)),
     `${night.done_members} of ${night.members} done`,
     genres.length > 0 ? genres.join(", ") : null,
   ].filter(Boolean);
   return (
-    <li className={className}>
+    <li>
       <Link
         href={`/app/movie-night/${night.night_id}`}
         className="flex items-center gap-3 rounded-xl border border-primary/50 bg-primary/10 p-2.5 transition-colors hover:bg-primary/15"
@@ -149,46 +147,21 @@ function PendingEntry({ night, showFamily, className }: { night: ActiveNight; sh
 }
 
 /**
- * The movie nights going on in my families, for the top of the page on a phone, where the list of all nights is
- * far below the form. (On a computer the same rows head the list.) Kept up to date like the dot on the menu.
- */
-export function PendingNights() {
-  const nights = useNightStatus();
-  if (nights.length === 0) return null;
-  const showFamily = new Set(nights.map((n) => n.group_id)).size > 1;
-  return (
-    <section aria-label="Movie nights in progress" className="lg:hidden">
-      <ul className="flex flex-col gap-2">
-        {nights.map((night) => (
-          <PendingEntry key={night.night_id} night={night} showFamily={showFamily} />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/**
- * Every movie night, with its status: the ones in progress first (live, from the same check as the dot on the menu),
- * then those that are over, newest first, a page at a time. Nothing is ever deleted from it. `scope` is one family,
- * or null for all of mine, and then each row says which family it is for. `pendingOnTopBelowLg` leaves the nights in
- * progress out of this list on a phone, where they are shown at the top of the page instead.
+ * Every movie night of a family, with its status: the ones in progress first (live, from the same check as the dot on
+ * the menu), then those that are over, newest first, a page at a time. Nothing is ever deleted from it.
  */
 export function NightList({
   scope,
-  showFamily,
-  pendingOnTopBelowLg,
   initial,
   initialHasMore,
 }: {
-  scope: { groupId: string; familyName: string } | null;
-  showFamily: boolean;
-  pendingOnTopBelowLg: boolean;
+  scope: { groupId: string; familyName: string };
   initial: HistoryEntry[];
   initialHasMore: boolean;
 }) {
   const router = useRouter();
   const live = useNightStatus();
-  const pending = scope ? live.filter((n) => n.group_id === scope.groupId) : live;
+  const pending = live.filter((n) => n.group_id === scope.groupId);
   const [entries, setEntries] = useState(initial);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
@@ -209,8 +182,7 @@ export function NightList({
     setLoading(true);
     setError(null);
     try {
-      const group = scope ? `group=${scope.groupId}&` : "";
-      const res = await fetch(`/api/movie-night/history?${group}offset=${entries.length}`, { cache: "no-store" });
+      const res = await fetch(`/api/movie-night/history?group=${scope.groupId}&offset=${entries.length}`, { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
       const page = (await res.json()) as { entries: HistoryEntry[]; hasMore: boolean };
       // A night that ended in the meantime shifts the pages by one: never show an entry twice.
@@ -229,26 +201,19 @@ export function NightList({
   return (
     <section id="movie-nights" aria-labelledby="nights-title" className="flex scroll-mt-20 flex-col gap-3">
       <h2 id="nights-title" className="text-lg font-semibold">
-        {scope ? `Movie nights in ${scope.familyName}` : "Movie nights"}
+        Movie nights in {scope.familyName}
       </h2>
       {pending.length === 0 && entries.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-          {scope
-            ? `No movie nights yet. Start one for ${scope.familyName} and it will show up here, with its status.`
-            : "No movie nights yet. When one of your families starts one, it will show up here, with its status."}
+          No movie nights yet. Start one for {scope.familyName} and it will show up here, with its status.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {pending.map((night) => (
-            <PendingEntry
-              key={night.night_id}
-              night={night}
-              showFamily={showFamily}
-              className={pendingOnTopBelowLg ? "max-lg:hidden" : undefined}
-            />
+            <PendingEntry key={night.night_id} night={night} />
           ))}
           {entries.map((entry) => (
-            <Entry key={entry.id} entry={entry} showFamily={showFamily} />
+            <Entry key={entry.id} entry={entry} />
           ))}
         </ul>
       )}

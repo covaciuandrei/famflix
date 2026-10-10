@@ -60,10 +60,16 @@ async function makeFamily(browser: Browser, project: TestInfo["project"], name: 
   return { users, pages };
 }
 
+/** Movie night for one family: with several the family is picked with a pill, with one it is already chosen. */
+async function openFamilyNight(page: Page, family: string) {
+  await page.goto("/app/movie-night");
+  const pill = page.getByRole("link", { name: new RegExp(`^${family}`) });
+  if (await pill.count()) await pill.click();
+}
+
 /** The family's open night, started from Movie night; waits for the first card. */
 async function startNight(page: Page, family: string) {
-  await page.goto("/app/movie-night");
-  await page.getByRole("link", { name: new RegExp(`^${family}`) }).click();
+  await openFamilyNight(page, family);
   await page.getByRole("button", { name: `Start movie night for ${family}` }).click();
   await expect(topCard(page)).toBeVisible({ timeout: TMDB });
   await expect(page).toHaveURL(/\/app\/movie-night\/[0-9a-f-]{36}$/);
@@ -222,8 +228,7 @@ test("a family night: the invite, swiping, a leaderboard without popups, and a p
   expect((onMyLists ?? []).every((m) => m.status === "watched")).toBe(true);
 
   // It is kept in the family's list of movie nights as finished, and Ben is asked how he liked it once he leaves the night.
-  await anaPage.goto("/app/movie-night");
-  await anaPage.getByRole("link", { name: /^Movie Crew/ }).click();
+  await openFamilyNight(anaPage, "Movie Crew");
   const history = anaPage.locator("#movie-nights");
   await expect(history.getByText(title)).toBeVisible();
   await expect(history.getByText("Finished", { exact: true })).toBeVisible();
@@ -240,9 +245,8 @@ test("cancelling ends a night for everybody, and one that goes quiet closes by i
   const [anaPage, benPage] = pages;
 
   await startNight(anaPage, "Quiet Crew");
-  await benPage.goto("/app/movie-night");
-  await benPage.getByRole("link", { name: /^Quiet Crew/ }).click();
-  await benPage.getByRole("link", { name: "Join in" }).click();
+  await openFamilyNight(benPage, "Quiet Crew");
+  await benPage.getByRole("region", { name: "Movie night in progress" }).getByRole("link", { name: "Join in" }).click();
   await expect(topCard(benPage)).toBeVisible();
 
   // Ana cancels from the menu; Ben, still swiping, is told by the next check.
@@ -263,8 +267,7 @@ test("cancelling ends a night for everybody, and one that goes quiet closes by i
   await expect(anaPage.getByText(/ended after 12 hours/)).toBeVisible();
 
   // Both are in the list, newest first, with their status.
-  await anaPage.goto("/app/movie-night");
-  await anaPage.getByRole("link", { name: /^Quiet Crew/ }).click();
+  await openFamilyNight(anaPage, "Quiet Crew");
   const history = anaPage.locator("#movie-nights ul > li");
   await expect(history).toHaveCount(2);
   await expect(history.nth(0)).toContainText("Nobody picked");
@@ -282,9 +285,8 @@ test("more suggestions give everybody another stack, and more like this makes on
   const keys = testInfo.project.name === "desktop";
 
   await startNight(anaPage, "Stack Crew");
-  await benPage.goto("/app/movie-night");
-  await benPage.getByRole("link", { name: /^Stack Crew/ }).click();
-  await benPage.getByRole("link", { name: "Join in" }).click();
+  await openFamilyNight(benPage, "Stack Crew");
+  await benPage.getByRole("region", { name: "Movie night in progress" }).getByRole("link", { name: "Join in" }).click();
   await expect(topCard(benPage)).toBeVisible();
   await vote(anaPage, "yes", keys);
   await finishStack(anaPage);
@@ -309,6 +311,18 @@ test("more suggestions give everybody another stack, and more like this makes on
   await expect(counter(anaPage)).toHaveText(/^1 \/ \d+$/, { timeout: TMDB });
 
   await closeAll(pages);
+});
+
+test("Movie night is for families: without one there is a way to get one", async ({ page, context }) => {
+  await signIn(context, await createUser("Dan"));
+  await page.goto("/app/movie-night");
+  await expect(page.getByRole("heading", { name: "Movie night is for families" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Just me" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Start/ })).toHaveCount(0);
+  // Swiping on your own moved to Discover, and the page says where.
+  await expect(page.getByRole("link", { name: "Try Discover" })).toHaveAttribute("href", "/app/browse/discover");
+  await page.getByRole("link", { name: "Create or join a family" }).click();
+  await expect(page).toHaveURL(/\/app\/groups$/);
 });
 
 test("the history keeps every night and shows 20 at a time", async ({ browser }, testInfo) => {
@@ -356,7 +370,7 @@ test("the history keeps every night and shows 20 at a time", async ({ browser },
   await page.context().close();
 });
 
-test("the list shows every night with its status, the one in progress first, across families", async ({ browser }, testInfo) => {
+test("the list shows a family's nights with their status, the one in progress first, and families are picked with pills", async ({ browser }, testInfo) => {
   const ana = await createUser("Ana");
   const ben = await createUser("Ben");
   const anaPage = await openAs(browser, testInfo.project, ana);
@@ -394,48 +408,47 @@ test("the list shows every night with its status, the one in progress first, acr
   await night({ group_id: alpha, source: "logged", status: "closed", started_by: ana.id, ended_by: ana.id, picked_media_id: media[9], happened_on: day(4) });
   await night({ group_id: beta, source: "logged", status: "closed", started_by: ana.id, ended_by: ana.id, picked_media_id: media[10], happened_on: day(5) });
 
-  // Just me: every family's nights, each saying which family it is for, with their status in words.
+  // There is no "Just me": the first (oldest) family is chosen, with its nights and their status in words.
   await anaPage.goto("/app/movie-night");
+  await expect(anaPage.getByRole("link", { name: "Just me" })).toHaveCount(0);
+  const pills = anaPage.getByRole("navigation", { name: "Choose a family" });
+  await expect(pills.getByRole("link", { name: /^Alpha Crew/ })).toHaveAttribute("aria-current", "page");
   const list = anaPage.locator("#movie-nights");
-  await expect(list.getByRole("heading", { name: "Movie nights", exact: true })).toBeVisible();
-  await expect(list).toContainText("Alpha Crew");
-  await expect(list).toContainText("Beta Crew");
+  await expect(list.getByRole("heading", { name: "Movie nights in Alpha Crew" })).toBeVisible();
+  await expect(list).not.toContainText("Beta Crew");
   for (const status of ["Finished", "Cancelled", "Expired"]) {
     await expect(list.getByText(status, { exact: true }).first()).toBeVisible();
   }
-  // The night in progress: its row heads the list on a computer, and is at the top of the page on a phone (the list
-  // is far below the form there). Either way it says it is in progress and what you can do next.
-  const row = anaPage.getByRole("link", { name: /Started by Ben/ });
-  await expect(row).toBeVisible();
+  // The night in progress: a card in place of the form says so and what to do next, and the same night heads the list.
+  await expect(anaPage.getByRole("region", { name: "Movie night in progress" })).toBeVisible();
+  await expect(anaPage.getByRole("button", { name: /^Start movie night/ })).toHaveCount(0);
+  const row = list.getByRole("link", { name: /Started by Ben/ });
   await expect(row).toContainText("In progress");
   await expect(row).toContainText("Join in");
-  if (testInfo.project.name === "desktop") {
-    await expect(list.locator("ul > li").first()).toContainText("In progress");
-  } else {
-    const rowBox = (await row.boundingBox())!;
-    const startBox = (await anaPage.getByRole("button", { name: "Start swiping" }).boundingBox())!;
-    expect(rowBox.y).toBeLessThan(startBox.y);
-  }
+  await expect(list.locator("ul > li").first()).toContainText("In progress");
 
-  // One family: just its nights, with the card for the one going in place of the form, and the same night in the list.
-  await anaPage.goto(`/app/movie-night?who=${alpha}`);
-  await expect(list.getByRole("heading", { name: "Movie nights in Alpha Crew" })).toBeVisible();
-  await expect(list).not.toContainText("Beta Crew");
-  await expect(anaPage.getByRole("region", { name: "Movie night in progress" })).toBeVisible();
-  await expect(list.getByRole("link", { name: /Started by Ben/ })).toContainText("In progress");
+  // Beta is one pill away, with its own log and its own form; Alpha's pill shows the night waiting there.
+  await expect(pills.getByRole("link", { name: /^Beta Crew/ })).not.toContainText("waiting for you");
+  await pills.getByRole("link", { name: /^Beta Crew/ }).click();
+  await expect(list.getByRole("heading", { name: "Movie nights in Beta Crew" })).toBeVisible();
+  await expect(list.locator("ul > li")).toHaveCount(1);
+  await expect(list).not.toContainText("Alpha Crew");
+  await expect(anaPage.getByRole("button", { name: "Start movie night for Beta Crew" })).toBeVisible();
+  await expect(pills.getByRole("link", { name: /^Alpha Crew/ })).toContainText("a movie night is waiting for you");
 
-  // Cancelling it from the card puts it in the list as cancelled, straight away.
+  // Cancelling Alpha's from its card puts it in the list as cancelled, straight away.
+  await pills.getByRole("link", { name: /^Alpha Crew/ }).click();
   await anaPage.getByRole("button", { name: "Cancel it" }).click();
   await expect(list.getByRole("link", { name: /Started by Ben/ })).toHaveCount(0);
   await expect(list.locator("ul > li").first()).toContainText("Cancelled by Ana");
   await expect(anaPage.getByRole("button", { name: "Start movie night for Alpha Crew" })).toBeVisible();
 
-  // The next page of the list is for every family when none is named, and answers for what it is asked.
-  const all = await (await anaPage.request.get("/api/movie-night/history?offset=0")).json();
-  expect(all.entries).toHaveLength(6);
-  expect(new Set(all.entries.map((e: { groupName: string }) => e.groupName))).toEqual(new Set(["Alpha Crew", "Beta Crew"]));
+  // The next page of a family's list answers for the family it is asked for, and for nothing else.
+  const onlyAlpha = await (await anaPage.request.get(`/api/movie-night/history?group=${alpha}&offset=0`)).json();
+  expect(onlyAlpha.entries).toHaveLength(5);
   const onlyBeta = await (await anaPage.request.get(`/api/movie-night/history?group=${beta}&offset=0`)).json();
   expect(onlyBeta.entries).toHaveLength(1);
+  expect((await anaPage.request.get("/api/movie-night/history?offset=0")).status()).toBe(400);
   expect((await anaPage.request.get("/api/movie-night/history?group=nope")).status()).toBe(400);
 
   await closeAll([anaPage, benPage]);

@@ -485,18 +485,17 @@ export async function getActiveMovieNights(): Promise<ActiveNight[]> {
 }
 
 /**
- * The movie nights that are over (finished, cancelled or expired), newest first, `limit` at a time from `offset`: one
- * family's, or with a null `groupId` those of every family the user is in (row level security keeps everyone else's
- * out). Nights still going aren't here: they come from active_movie_nights(). `hasMore` says whether there is
- * another page.
+ * One family's movie nights that are over (finished, cancelled or expired), newest first, `limit` at a time from
+ * `offset` (row level security keeps everyone but its members out). Nights still going aren't here: they come from
+ * active_movie_nights(). `hasMore` says whether there is another page.
  */
 export async function getNightHistory(
-  groupId: string | null,
+  groupId: string,
   offset: number,
   limit: number,
 ): Promise<{ entries: HistoryEntry[]; hasMore: boolean }> {
   const supabase = await createClient();
-  let query = supabase
+  const { data, error } = await supabase
     .from("movie_nights")
     .select(
       `id, group_id, source, status, genres, happened_on, ended_by,
@@ -506,13 +505,12 @@ export async function getNightHistory(
        stacks:movie_night_stacks(count),
        cards:movie_night_candidates(count)`,
     )
+    .eq("group_id", groupId)
     .neq("status", "open")
     .order("happened_on", { ascending: false })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range(offset, offset + limit);
-  if (groupId) query = query.eq("group_id", groupId);
-  const { data, error } = await query;
   if (error) {
     console.error("Could not load movie night history:", error.message);
     return { entries: [], hasMore: false };
