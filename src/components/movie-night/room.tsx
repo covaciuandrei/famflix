@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Sparkles, TriangleAlert } from "lucide-react";
+import { Loader2, Search, Sparkles, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -11,6 +11,8 @@ import {
   cancelNight,
   finishStack,
   joinNight,
+  pickCard,
+  pickTitle,
   requestMoreStack,
   revealNight,
 } from "@/app/app/movie-night/actions";
@@ -20,10 +22,12 @@ import { PickDialog } from "@/components/movie-night/pick-dialog";
 import { ProgressStrip, WatchedBy } from "@/components/movie-night/progress-strip";
 import { SharePick } from "@/components/movie-night/share-pick";
 import { SwipeDeck } from "@/components/movie-night/swipe-deck";
+import { TitleSearchDialog } from "@/components/movie-night/title-search-dialog";
 import { useNightState } from "@/components/movie-night/use-night-state";
 import { useVoteQueue } from "@/components/movie-night/use-vote-queue";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { formatDay } from "@/lib/format";
+import type { TmdbItem } from "@/lib/tmdb";
 import { cn } from "@/lib/utils";
 import {
   candidateToCard,
@@ -68,6 +72,9 @@ export function Room({ initial }: { initial: NightState }) {
   const [busy, setBusy] = useState<string | null>(null);
   const busyNow = useRef(false);
   const [pickId, setPickId] = useState<string | null>(null);
+  // Picking something that isn't one of the cards: first the search window, then the title it gave.
+  const [searching, setSearching] = useState(false);
+  const [otherTitle, setOtherTitle] = useState<TmdbItem | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -272,6 +279,7 @@ export function Room({ initial }: { initial: NightState }) {
         compact={Boolean(swipingStack)}
         onBoard={swipingStack && stacks.some((s) => s.can_see_results) ? peekAtBoard : undefined}
         onReveal={reveal}
+        onPickOther={() => setSearching(true)}
         onCancel={cancel}
       />
 
@@ -372,12 +380,20 @@ export function Room({ initial }: { initial: NightState }) {
                     </p>
                   )}
                 </div>
-                {canAddMore && (
-                  <Button size="sm" variant="outline" onClick={() => moreSuggestions()} disabled={busy !== null}>
-                    {busy === "more" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                    {busy === "more" ? "Finding titles…" : "More suggestions"}
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {isOpen && (
+                    <Button size="sm" variant="outline" onClick={() => setSearching(true)} disabled={busy !== null}>
+                      <Search className="size-3.5" />
+                      Pick something else
+                    </Button>
+                  )}
+                  {canAddMore && (
+                    <Button size="sm" variant="outline" onClick={() => moreSuggestions()} disabled={busy !== null}>
+                      {busy === "more" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                      {busy === "more" ? "Finding titles…" : "More suggestions"}
+                    </Button>
+                  )}
+                </div>
               </div>
               {state.results.length > 0 ? (
                 <Leaderboard state={state} actions={actions} />
@@ -395,14 +411,37 @@ export function Room({ initial }: { initial: NightState }) {
 
       {pickCandidate && (
         <PickDialog
-          nightId={night.id}
           groupName={night.group_name}
-          card={pickCandidate}
+          title={pickCandidate.title}
           members={members}
           meId={me}
+          pick={(input) => pickCard({ nightId: night.id, candidateId: pickCandidate.id, ...input })}
           onPicked={() => void refresh(true)}
           onFailed={() => void refresh(true)}
           onClose={() => setPickId(null)}
+        />
+      )}
+      {isOpen && searching && (
+        <TitleSearchDialog
+          onSelect={(item) => {
+            setSearching(false);
+            setOtherTitle(item);
+          }}
+          onClose={() => setSearching(false)}
+        />
+      )}
+      {isOpen && otherTitle && (
+        <PickDialog
+          groupName={night.group_name}
+          title={otherTitle.title}
+          members={members}
+          meId={me}
+          pick={(input) =>
+            pickTitle({ nightId: night.id, tmdbId: otherTitle.tmdbId, mediaType: otherTitle.mediaType, ...input })
+          }
+          onPicked={() => void refresh(true)}
+          onFailed={() => void refresh(true)}
+          onClose={() => setOtherTitle(null)}
         />
       )}
     </div>

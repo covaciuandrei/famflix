@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, EyeIcon, ListOrdered, MoreVertical, Popcorn, XCircle } from "lucide-react";
+import { ArrowLeft, EyeIcon, ListOrdered, MoreVertical, Popcorn, Search, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -9,9 +9,9 @@ import type { NightInfo } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
 
 /**
- * The title of a night and, while it is open, a menu to show the results now or cancel it (any member can). `compact`
- * (while swiping) takes less room on a phone, where every pixel goes to the card: the family's name moves up beside the
- * title and the line under it goes.
+ * The title of a night and, while it is open, a menu to show the results now, pick a title yourself or cancel it (any
+ * member can). `compact` (while swiping) takes less room on a phone, where every pixel goes to the card: the family's
+ * name moves up beside the title and the line under it goes.
  */
 export function NightHeader({
   night,
@@ -19,6 +19,7 @@ export function NightHeader({
   compact = false,
   onBoard,
   onReveal,
+  onPickOther,
   onCancel,
 }: {
   night: NightInfo;
@@ -27,6 +28,8 @@ export function NightHeader({
   /** Offered while swiping, when there is a leaderboard to look at first. */
   onBoard?: () => void;
   onReveal: () => void;
+  /** Search for any title and end the night with it. */
+  onPickOther: () => void;
   onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -111,6 +114,18 @@ export function NightHeader({
                 >
                   <EyeIcon className="size-4" />
                   Show results now
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  onClick={() => {
+                    setOpen(false);
+                    onPickOther();
+                  }}
+                >
+                  <Search className="size-4" />
+                  Pick something else
                 </button>
                 <button
                   type="button"

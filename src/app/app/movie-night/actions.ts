@@ -16,6 +16,7 @@ import {
 } from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { putOnList } from "@/lib/list-add";
+import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
 import type { MediaType } from "@/lib/types";
 import { cleanScore, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
@@ -243,25 +244,22 @@ export async function requestMoreStack(input: {
   return error ? { error: error.message } : { stackId: data as string };
 }
 
-/**
- * Picks a title from the leaderboard: whoever picks says who watched it and when, like Watched together on the family
- * list. In one go the title joins the family list if it isn't there, the watch is logged and the night ends (the best
- * titles join the list too). Then the picker's own note is saved. Nothing changes if the watch is refused, and a night
- * that someone already picked gets "Ana already picked Dune".
- */
-export async function pickCard(input: {
+/** What every pick sends: the night, the day, who watched (with a score for anyone who had none) and the picker's note. */
+interface PickInput {
   nightId: string;
-  candidateId: string;
   watchedOn: string;
   viewers: { userId: string; score: number | null }[];
   /** The signed-in user's own note, when they are among the viewers and wrote one. */
   note?: string;
-}): Promise<ActionResult> {
-  const { supabase, user } = await requireUser();
+}
+
+/** Checks what a pick sends before the database is asked, and puts the viewers the way the database wants them. */
+function checkPick(
+  input: PickInput,
+): { error: string } | { viewers: { user_id: string; score: number | null }[]; note: string | undefined } {
   const viewers = Array.isArray(input?.viewers) ? input.viewers : [];
   if (
     !UUID.test(String(input?.nightId)) ||
-    !UUID.test(String(input?.candidateId)) ||
     !isDay(input?.watchedOn) ||
     viewers.length === 0 ||
     viewers.length > MAX_VIEWERS ||
@@ -277,22 +275,73 @@ export async function pickCard(input: {
   if (note !== undefined && tooLong(note.trim())) {
     return { error: `Notes can be at most ${MAX_TEXT} characters.` };
   }
+  return { viewers: viewers.map((v, i) => ({ user_id: v.userId, score: scores[i] ?? null })), note };
+}
+
+/** After a pick: only your own note (the others add theirs when they're asked to rate it), and the app refreshes. */
+async function finishPick(
+  supabase: Supabase,
+  userId: string,
+  itemId: string,
+  viewers: { user_id: string }[],
+  note: string | undefined,
+): Promise<ActionResult> {
+  if (note !== undefined && viewers.some((v) => v.user_id === userId)) {
+    const saved = await saveOwnNote(supabase, itemId, userId, note);
+    if (saved.error) return saved;
+  }
+  revalidatePath("/app", "layout");
+  return {};
+}
+
+/**
+ * Picks a title from the leaderboard: whoever picks says who watched it and when, like Watched together on the family
+ * list. In one go the title joins the family list if it isn't there, the watch is logged and the night ends (the best
+ * titles join the list too). Then the picker's own note is saved. Nothing changes if the watch is refused, and a night
+ * that someone already picked gets "Ana already picked Dune".
+ */
+export async function pickCard(input: PickInput & { candidateId: string }): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  const checked = UUID.test(String(input?.candidateId)) ? checkPick(input) : { error: "Pick at least one person who watched it, and a date." };
+  if ("error" in checked) return checked;
 
   const { data: itemId, error } = await supabase.rpc("pick_movie_night_card", {
     p_night: input.nightId,
     p_candidate: input.candidateId,
     p_watched_on: input.watchedOn,
-    p_viewers: viewers.map((v, i) => ({ user_id: v.userId, score: scores[i] })),
+    p_viewers: checked.viewers,
   });
   if (error) return { error: error.message };
+  return finishPick(supabase, user.id, itemId as string, checked.viewers, checked.note);
+}
 
-  // Only your own note: the others add theirs when they're asked to rate it.
-  if (note !== undefined && viewers.some((v) => v.userId === user.id)) {
-    const saved = await saveOwnNote(supabase, itemId as string, user.id, note);
-    if (saved.error) return saved;
+/**
+ * Picks a title that isn't one of the night's cards: after the swiping the family decided on something else. The title
+ * comes from a TMDB search, so it is looked up and saved to the shared movie info here (like any title added to a
+ * list); from there it is the same as picking a card, and the night ends with it.
+ */
+export async function pickTitle(
+  input: PickInput & { tmdbId: number; mediaType: MediaType },
+): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  const checked = checkPick(input);
+  if ("error" in checked) return checked;
+
+  const saved = await saveTitle(user.id, { tmdbId: input?.tmdbId, mediaType: input?.mediaType });
+  if ("error" in saved) return { error: saved.error };
+
+  const { data: itemId, error } = await supabase.rpc("pick_movie_night_title", {
+    p_night: input.nightId,
+    p_media: saved.id,
+    p_watched_on: input.watchedOn,
+    p_viewers: checked.viewers,
+  });
+  if (error) {
+    // PGRST202: the database doesn't have the function yet (the app was updated before it).
+    if (error.code === "PGRST202") return { error: "Picking another title isn't available yet. Please try again in a little while." };
+    return { error: error.message };
   }
-  revalidatePath("/app", "layout");
-  return {};
+  return finishPick(supabase, user.id, itemId as string, checked.viewers, checked.note);
 }
 
 /**

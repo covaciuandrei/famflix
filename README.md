@@ -49,7 +49,10 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   points per title, who voted what, "more suggestions" or "more like this" for
   another stack. Any member can show the results early, cancel, or pick a title
   ("We watched this"), which logs it as Watched together, ends the night and
-  adds its best 7 titles to the family list. A night closes by itself after 12
+  adds its best 7 titles to the family list. The family may also have decided
+  on something that wasn't in the stack: "Pick something else" (on the
+  leaderboard, or in the night's menu) searches for any movie or series and ends
+  the night with it the same way. A night closes by itself after 12
   hours without activity. The page lists every night of the family you chose
   (the first one until you pick another) with its status (in progress,
   finished, cancelled or expired), the ones in progress first; nothing is ever

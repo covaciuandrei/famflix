@@ -245,6 +245,49 @@ test("a family night: the invite, swiping, a leaderboard without popups, and a p
   await closeAll(pages);
 });
 
+test("a movie night can end with a title that wasn't on the leaderboard", async ({ browser }, testInfo) => {
+  test.setTimeout(240_000);
+  const { users, pages } = await makeFamily(browser, testInfo.project, "Free Crew", ["Ana", "Ben"]);
+  const [ana] = users;
+  const [anaPage] = pages;
+
+  await startNight(anaPage, "Free Crew");
+  const search = anaPage.getByRole("dialog", { name: "Pick something else" });
+  // It is in the night's menu while swiping...
+  await anaPage.getByRole("button", { name: "Movie night menu" }).click();
+  await anaPage.getByRole("menuitem", { name: "Pick something else" }).click();
+  await expect(search).toBeVisible();
+  await search.getByRole("button", { name: "Cancel" }).click();
+  await expect(search).toBeHidden();
+
+  // ...and beside the leaderboard. Search for a title the stack doesn't have, and pick it.
+  await finishStack(anaPage);
+  await anaPage.getByRole("button", { name: "Pick something else" }).click();
+  await expect(search).toBeVisible();
+  await search.getByRole("searchbox", { name: "Search for a title" }).fill("The Matrix");
+  await search.getByRole("button", { name: "Search", exact: true }).click();
+  await search.getByRole("button", { name: /^Pick The Matrix \(1999\)$/ }).first().click();
+  const who = anaPage.getByRole("dialog", { name: "Who watched The Matrix?" });
+  await expect(who).toBeVisible();
+  await who.getByRole("button", { name: "Save" }).click();
+
+  await expect(anaPage.getByText(/picked The Matrix/)).toBeVisible({ timeout: 30_000 });
+  await expect(anaPage.getByRole("button", { name: "Pick something else" })).toHaveCount(0);
+  const { data: night } = await admin
+    .from("movie_nights")
+    .select("status, ended_by, picked_media_id, picked_list_item_id")
+    .eq("started_by", ana.id)
+    .single();
+  expect(night!.status).toBe("closed");
+  expect(night!.ended_by).toBe(ana.id);
+  const { data: picked } = await admin.from("media").select("tmdb_id").eq("id", night!.picked_media_id!).single();
+  expect(picked!.tmdb_id).toBe(603);
+  const { data: watches } = await admin.from("watches").select("user_id").eq("list_item_id", night!.picked_list_item_id!);
+  expect((watches ?? []).map((w) => w.user_id)).toContain(ana.id);
+
+  await closeAll(pages);
+});
+
 test("cancelling ends a night for everybody, and one that goes quiet closes by itself", async ({ browser }, testInfo) => {
   test.setTimeout(240_000);
   const { users, pages } = await makeFamily(browser, testInfo.project, "Quiet Crew", ["Ana", "Ben"]);
