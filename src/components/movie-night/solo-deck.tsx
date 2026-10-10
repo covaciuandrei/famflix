@@ -160,6 +160,7 @@ export function SoloDeck({ cards, storageKey }: { cards: DeckCard[]; storageKey:
         cards={cards}
         startAt={resumeAt}
         lovesLeft={null}
+        note={`${picked} picked`}
         onVote={(card, vote) => {
           votes.current[card.id] = vote;
           persist();
@@ -176,9 +177,6 @@ export function SoloDeck({ cards, storageKey }: { cards: DeckCard[]; storageKey:
         finishText="That was the last one. Putting your picks on My list…"
         finishButton="Show my list"
       />
-      <p className="text-sm text-muted-foreground" aria-live="polite">
-        {picked === 0 ? "Nothing picked yet" : `${picked} picked so far`}
-      </p>
       {problem && (
         <p role="alert" className="text-sm text-destructive">
           {problem} Your picks are kept, and we&apos;ll try again.

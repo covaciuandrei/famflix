@@ -24,6 +24,7 @@ import { useNightState } from "@/components/movie-night/use-night-state";
 import { useVoteQueue } from "@/components/movie-night/use-vote-queue";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { formatDay } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   candidateToCard,
   deckOrder,
@@ -37,9 +38,10 @@ import {
 /** How often a room checks in with the server while it is open. */
 const POLL_MS = 6000;
 
-// The swipe stack's height, a little shorter than a solo stack's: the room has a title above it.
+// The swipe stack's height: what is left of the screen after the header, the room's title row, the counter and the vote
+// buttons (the title row is a little shorter on a phone while swiping, see NightHeader's `compact`).
 const ROOM_STACK_HEIGHT =
-  "h-[clamp(11rem,calc(100dvh-23rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-20.5rem),36rem)]";
+  "h-[clamp(18rem,calc(100dvh-20.3rem),38rem)] sm:h-[clamp(22rem,calc(100dvh-21.4rem),38rem)]";
 
 /** Done with every stack that is still open for voting (once the results are shown, nobody has anything left). */
 function isDone(member: MemberProgress, state: NightState): boolean {
@@ -262,10 +264,12 @@ export function Room({ initial }: { initial: NightState }) {
   const canAddTop = (night.status === "cancelled" || night.status === "expired") && state.results.length > 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    // While swiping on a phone the page sits closer to the top and bottom (the deck takes all the room it can).
+    <div className={cn("flex flex-col gap-4", swipingStack && "max-sm:-mt-2 max-sm:-mb-8 max-sm:gap-1.5")}>
       <NightHeader
         night={night}
         canAct={isOpen}
+        compact={Boolean(swipingStack)}
         onBoard={swipingStack && stacks.some((s) => s.can_see_results) ? peekAtBoard : undefined}
         onReveal={reveal}
         onCancel={cancel}

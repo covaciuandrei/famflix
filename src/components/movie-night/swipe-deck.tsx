@@ -36,8 +36,9 @@ const REST_TRANSITION = "transform 200ms ease-out";
 const BEHIND_CARDS = 2;
 // Each card behind is a little smaller and lower, so its edge peeks out under the one on top.
 const BEHIND_TRANSFORMS = ["none", "scale(0.94) translateY(26px)", "scale(0.88) translateY(50px)"];
-// Fits between the app's header and bottom bar on a phone (and under the header on a computer), up to a sensible size.
-const STACK_HEIGHT = "h-[clamp(11rem,calc(100dvh-21.5rem),36rem)] sm:h-[clamp(22rem,calc(100dvh-19rem),36rem)]";
+// The card is as wide as the screen allows (up to 24 rem) and as tall as fits between the app's header and bottom bar on
+// a phone (and under the header on a computer): what is left of the screen after everything else on this page.
+const STACK_HEIGHT = "h-[clamp(18rem,calc(100dvh-19.7rem),38rem)] sm:h-[clamp(22rem,calc(100dvh-19.4rem),38rem)]";
 
 function subscribeReducedMotion(onChange: () => void) {
   const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -96,6 +97,7 @@ export function SwipeDeck({
   onUndo,
   onFinish,
   onSkip,
+  note,
   finishText,
   finishButton,
   heightClass = STACK_HEIGHT,
@@ -112,6 +114,8 @@ export function SwipeDeck({
   onFinish: () => void;
   /** Adds a "Skip the rest" link (family nights). */
   onSkip?: () => void;
+  /** A short live note at the end of the counter row, such as how many were picked so far. */
+  note?: string;
   finishText: string;
   finishButton: string;
   /** The stack's height; the default leaves room for the app's header and bottom bar plus one line above the stack. */
@@ -296,31 +300,34 @@ export function SwipeDeck({
   const shown = cards.slice(index, index + 1 + BEHIND_CARDS);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            {Math.min(index + 1, cards.length)} / {cards.length}
-          </span>
-          {onSkip && !done && (
-            <button type="button" onClick={onSkip} className="underline underline-offset-2 hover:text-foreground">
-              Skip the rest
-            </button>
-          )}
-        </div>
+    <div className="flex w-full flex-col items-center gap-3">
+      <div className="flex w-full max-w-sm items-center gap-3 text-sm text-muted-foreground">
+        <span className="shrink-0 tabular-nums">
+          {Math.min(index + 1, cards.length)} / {cards.length}
+        </span>
         <div
           role="progressbar"
           aria-label="Cards voted on"
           aria-valuemin={0}
           aria-valuemax={cards.length}
           aria-valuenow={index}
-          className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted"
+          className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
         >
           <div
             className="h-full rounded-full bg-primary transition-[width] duration-200"
             style={{ width: `${(index / Math.max(cards.length, 1)) * 100}%` }}
           />
         </div>
+        {onSkip && !done && (
+          <button type="button" onClick={onSkip} className="shrink-0 underline underline-offset-2 hover:text-foreground">
+            Skip the rest
+          </button>
+        )}
+        {note && (
+          <span className="shrink-0" aria-live="polite">
+            {note}
+          </span>
+        )}
       </div>
 
       {done ? (
@@ -341,7 +348,8 @@ export function SwipeDeck({
           </div>
         </div>
       ) : (
-        <div className={cn("relative mx-auto mb-6 aspect-[2/3] max-w-full", heightClass)}>
+        // The bottom margin leaves room for the cards behind to peek out below the top one.
+        <div className={cn("relative mb-5 w-full max-w-sm", heightClass)}>
           {shown.map((card, pos) => {
             const top = pos === 0;
             const style: CSSProperties = {
@@ -364,7 +372,7 @@ export function SwipeDeck({
                 onPointerUp={top ? onPointerUp : undefined}
                 onPointerCancel={top ? onPointerCancel : undefined}
                 className={cn(
-                  "group absolute inset-0 overflow-hidden rounded-2xl border border-border bg-card shadow-xl select-none",
+                  "swipe-card absolute inset-0 overflow-hidden rounded-2xl border border-border bg-card shadow-xl select-none",
                   top && "cursor-grab active:cursor-grabbing",
                   top && restored && "fade-in",
                 )}

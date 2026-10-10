@@ -10,7 +10,11 @@ import type { DeckCard } from "@/lib/movie-night";
 const stamp =
   "pointer-events-none absolute rounded-md border-4 bg-black/45 px-3 py-1 text-2xl font-extrabold tracking-wider";
 
-/** What one card shows, like a title you'd browse on Netflix: poster, name, a line of facts, genres and a short blurb. */
+/**
+ * What one card shows, like a title you'd browse on Netflix: the poster on top and, below it on a panel of its own
+ * (so the picture isn't covered), the name, a line of facts, genres and a blurb of up to four lines. How much of the
+ * text shows depends on the card's height (see .swipe-card in globals.css), so the poster never shrinks to a sliver.
+ */
 export function SwipeCardFace({
   card,
   priority,
@@ -29,46 +33,52 @@ export function SwipeCardFace({
 
   return (
     <>
-      {poster ? (
-        <Image
-          src={poster}
-          alt=""
-          fill
-          priority={priority}
-          draggable={false}
-          sizes="(max-width: 640px) 92vw, 380px"
-          className="pointer-events-none object-cover"
-        />
-      ) : (
-        <div className="flex h-full items-center justify-center bg-muted text-muted-foreground">
-          <Film className="size-12" />
+      <div className="flex h-full flex-col">
+        <div className="relative min-h-0 flex-1 bg-muted">
+          {poster ? (
+            <Image
+              src={poster}
+              alt=""
+              fill
+              priority={priority}
+              draggable={false}
+              sizes="(max-width: 640px) 92vw, 380px"
+              className="pointer-events-none object-cover object-[center_25%]"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              <Film className="size-12" />
+            </div>
+          )}
+          {/* The picture fades into the panel under it. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-card to-transparent"
+          />
         </div>
-      )}
 
-      {/* On a very short screen the card is small, so everything in it is: no genre chips or blurb (the info sheet has them). */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-gradient-to-t from-black/95 via-black/75 to-transparent p-4 pt-24 text-white [@media(max-height:620px)]:gap-1 [@media(max-height:620px)]:p-2.5 [@media(max-height:620px)]:pt-14 group-aria-hidden:[@media(max-height:620px)]:invisible">
-        <h2 className="line-clamp-2 text-2xl leading-tight font-bold [@media(max-height:620px)]:text-base">{card.title}</h2>
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-white/80 [@media(max-height:620px)]:text-xs">
-          {facts.join(" · ")}
-          {card.rating ? (
-            <span className="inline-flex items-center gap-1 text-amber-300">
-              <Star className="size-3.5 fill-current" />
-              {formatScore(Math.round(card.rating * 10) / 10)}
-            </span>
-          ) : null}
-        </p>
-        {card.genres.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5 [@media(max-height:620px)]:hidden">
-            {card.genres.slice(0, 3).map((genre) => (
-              <li key={genre} className="rounded-full bg-white/15 px-2 py-0.5 text-xs">
-                {genre}
-              </li>
-            ))}
-          </ul>
-        )}
-        {card.overview && (
-          <p className="line-clamp-3 text-sm text-white/85 [@media(max-height:620px)]:hidden">{card.overview}</p>
-        )}
+        <div className="flex min-h-[9.5rem] shrink-0 flex-col gap-1.5 px-4 pt-0.5 pb-4">
+          <h2 className="line-clamp-2 text-xl leading-tight font-bold text-foreground">{card.title}</h2>
+          <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+            {facts.join(" · ")}
+            {card.rating ? (
+              <span className="inline-flex items-center gap-1 text-star">
+                <Star className="size-3.5 fill-current" />
+                {formatScore(Math.round(card.rating * 10) / 10)}
+              </span>
+            ) : null}
+          </p>
+          {card.genres.length > 0 && (
+            <ul className="swipe-chips flex flex-wrap gap-1.5">
+              {card.genres.slice(0, 3).map((genre) => (
+                <li key={genre} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  {genre}
+                </li>
+              ))}
+            </ul>
+          )}
+          {card.overview && <p className="swipe-blurb text-sm leading-snug text-foreground/80">{card.overview}</p>}
+        </div>
       </div>
 
       <span className="absolute top-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white">

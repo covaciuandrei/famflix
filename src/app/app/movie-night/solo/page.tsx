@@ -54,7 +54,8 @@ export default async function SoloPage({
 
   const labels = mood.genres.map((slug) => findGenre(slug)?.label).filter(Boolean);
   return (
-    <div className="flex flex-col gap-3">
+    // On a phone the page sits closer to the top and bottom: the deck takes all the room it can.
+    <div className="flex flex-col gap-3 max-sm:-mt-2 max-sm:-mb-8 max-sm:gap-2">
       <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
         <Link href="/app/movie-night" className="inline-flex items-center gap-1 hover:text-foreground">
           <ArrowLeft className="size-4" />

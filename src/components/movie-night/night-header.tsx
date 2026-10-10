@@ -8,16 +8,22 @@ import { findGenre } from "@/lib/genres";
 import type { NightInfo } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
 
-/** The title of a night and, while it is open, a menu to show the results now or cancel it (any member can). */
+/**
+ * The title of a night and, while it is open, a menu to show the results now or cancel it (any member can). `compact`
+ * (while swiping) takes less room on a phone, where every pixel goes to the card: the family's name moves up beside the
+ * title and the line under it goes.
+ */
 export function NightHeader({
   night,
   canAct,
+  compact = false,
   onBoard,
   onReveal,
   onCancel,
 }: {
   night: NightInfo;
   canAct: boolean;
+  compact?: boolean;
   /** Offered while swiping, when there is a leaderboard to look at first. */
   onBoard?: () => void;
   onReveal: () => void;
@@ -48,11 +54,14 @@ export function NightHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="flex items-center gap-2 text-xl font-bold">
+        <h1 className={cn("flex items-center gap-2 font-bold", compact ? "text-lg sm:text-xl" : "text-xl")}>
           <Popcorn className="size-5 shrink-0 text-primary" />
           <span className="truncate">Movie night</span>
+          {compact && (
+            <span className="truncate text-sm font-normal text-muted-foreground sm:hidden">· {night.group_name}</span>
+          )}
         </h1>
-        <p className="truncate text-sm text-muted-foreground">
+        <p className={cn("truncate text-sm text-muted-foreground", compact && "max-sm:hidden")}>
           {night.group_name} · {genres.length > 0 ? genres.join(", ") : "a bit of everything"}
         </p>
       </div>
@@ -63,7 +72,10 @@ export function NightHeader({
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label="Movie night menu"
-          className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          className={cn(
+            "flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground",
+            compact && "max-sm:size-8",
+          )}
         >
           <MoreVertical className="size-5" />
         </button>

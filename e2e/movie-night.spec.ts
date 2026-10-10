@@ -21,6 +21,27 @@ async function vote(page: Page, kind: Kind, keys: boolean) {
   if (position < total) await expect(counter(page)).toHaveText(`${position + 1} / ${total}`);
 }
 
+/**
+ * On a phone the card is nearly as wide as the screen and tall, leaves room for three or more lines of the
+ * description, and the whole row of buttons (captions too) sits above the bottom bar, so the page doesn't scroll.
+ */
+async function expectRoomyCardOnPhone(page: Page) {
+  const view = page.viewportSize()!;
+  const card = (await topCard(page).boundingBox())!;
+  expect(card.width).toBeGreaterThan(view.width - 48);
+  expect(card.height).toBeGreaterThan(view.height * 0.5);
+
+  const blurb = topCard(page).locator(".swipe-blurb");
+  if (await blurb.count()) {
+    expect(await blurb.evaluate((el) => Number(getComputedStyle(el).webkitLineClamp))).toBeGreaterThanOrEqual(3);
+  }
+
+  const caption = (await page.getByText(/^Love( · \d+ left)?$/).boundingBox())!;
+  const bar = (await page.locator("nav.fixed").boundingBox())!;
+  expect(caption.y + caption.height).toBeLessThanOrEqual(bar.y);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
+}
+
 const leaderboard = (page: Page) => page.getByRole("heading", { name: "Leaderboard" });
 const rows = (page: Page) => page.locator("ol > li");
 const noDialogOpen = (page: Page) => expect(page.locator("dialog[open]")).toHaveCount(0);
@@ -77,6 +98,7 @@ test("on your own: swipe a stack with the keyboard or the buttons, and what you 
   await page.getByRole("button", { name: "Start swiping" }).click();
   await expect(topCard(page)).toBeVisible({ timeout: TMDB });
   await expect(counter(page)).toHaveText("1 / 25");
+  if (!keys) await expectRoomyCardOnPhone(page);
 
   // A yes and a love go on My list; a nope and a seen-it don't, nor do the rest.
   await vote(page, "yes", keys);
@@ -101,6 +123,7 @@ test("a family night: the invite, swiping, a leaderboard without popups, and a p
 
   await startNight(anaPage, "Movie Crew");
   await expect(counter(anaPage)).toHaveText("1 / 25");
+  if (!keys) await expectRoomyCardOnPhone(anaPage);
 
   // Cara hears about it, and closes the invite with "not now": a dot and a banner keep the way back.
   await caraPage.goto("/app");
