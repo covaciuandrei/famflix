@@ -109,18 +109,25 @@ test("Discover, from Browse: swipe a stack with the keyboard or the buttons, and
   await expect(counter(page)).toHaveText("1 / 25");
   if (!keys) await expectRoomyCardOnPhone(page);
 
-  // A yes and a love go on My list; a nope and a seen-it don't, nor do the rest.
+  // A yes and a love go on My list; a nope and a seen-it don't, nor do the rest. A title goes on the moment it is
+  // swiped, not at the end of the stack.
+  const onMyList = async () =>
+    ((await admin.from("list_items").select("id").eq("added_by", ana.id).is("group_id", null)).data ?? []).length;
   await vote(page, "yes", keys);
+  await expect.poll(onMyList, { timeout: 15_000 }).toBe(1);
   await vote(page, "nope", keys);
   await vote(page, "love", keys);
+  await expect.poll(onMyList, { timeout: 15_000 }).toBe(2);
   await vote(page, "seen", keys);
   for (let i = 4; i < 25; i++) await vote(page, "nope", keys);
 
+  // Nothing is left to save or wait for: the note is there at once, with no spinner and no countdown.
+  await expect(page.getByText("That was the last one. 2 titles are on My list.")).toBeVisible({ timeout: 3_000 });
+  expect(await onMyList()).toBe(2);
+  await expect(page.getByRole("link", { name: "Discover more" })).toHaveAttribute("href", "/app/browse/discover");
   await page.getByRole("button", { name: "Show my list" }).click();
   await expect(page).toHaveURL(/\/app\/mine\?added=2/, { timeout: 60_000 });
   await expect(page.getByText("Added 2 titles from Discover to My list.")).toBeVisible();
-  const { data } = await admin.from("list_items").select("id").eq("added_by", ana.id).is("group_id", null);
-  expect(data).toHaveLength(2);
 });
 
 test("Discover: a stack where nothing is picked goes back to Browse", async ({ page, context }, testInfo) => {
@@ -134,7 +141,7 @@ test("Discover: a stack where nothing is picked goes back to Browse", async ({ p
   await expect(topCard(page)).toBeVisible({ timeout: TMDB });
   for (let i = 0; i < 25; i++) await vote(page, "nope", keys);
 
-  await expect(page.getByText("That was the last one. Taking you back to Browse…")).toBeVisible();
+  await expect(page.getByText("That was the last one. Nothing picked this time.")).toBeVisible({ timeout: 3_000 });
   await page.getByRole("button", { name: "Back to Browse" }).click();
   await expect(page).toHaveURL(/\/app\/browse$/, { timeout: 60_000 });
   const { data } = await admin.from("list_items").select("id").eq("added_by", ben.id);

@@ -9,6 +9,7 @@ import {
   MIN_STACK_SIZE,
   MIN_SUGGESTIONS,
   type DeckCard,
+  type DiscoverCard,
   type MoodOptions,
 } from "@/lib/movie-night";
 import { saveMediaMany } from "@/lib/save-media";
@@ -127,7 +128,8 @@ function toDeckCard(details: TmdbDetails): DeckCard {
 
 /**
  * A Discover stack: only suggestions, never a title already on My list. The same seed gives the same stack, so a
- * refresh doesn't change the cards under someone's thumb.
+ * refresh doesn't change the cards under someone's thumb. The titles are saved to the shared `media` table here, in one
+ * go, so that swiping one right later only has to put it on the list (no waiting for TMDB per title).
  */
 export async function buildDiscoverDeck({
   userId,
@@ -137,13 +139,22 @@ export async function buildDiscoverDeck({
   userId: string;
   mood: MoodOptions;
   seed: number;
-}): Promise<{ cards: DeckCard[] } | { error: string }> {
+}): Promise<{ cards: DiscoverCard[] } | { error: string }> {
   try {
     const mine = await getListCards({ groupId: null, userId });
     const exclude = new Set(mine.map(listKey));
     const found = await collectSuggestions({ mood, seed, exclude, wanted: mood.count });
     if (found.length < MIN_STACK_SIZE) return { error: NOT_ENOUGH };
-    return { cards: found.map(toDeckCard) };
+
+    const saved = await saveMediaMany(found.map(detailsToMediaRow));
+    if ("error" in saved) return saved;
+    const cards: DiscoverCard[] = [];
+    for (const details of found) {
+      const mediaId = saved.get(cardKey(details));
+      if (!mediaId) return { error: "Couldn't save these titles. Please try again later." };
+      cards.push({ ...toDeckCard(details), mediaId });
+    }
+    return { cards };
   } catch (error) {
     console.error("Building a Discover stack failed:", error);
     return { error: TMDB_DOWN };

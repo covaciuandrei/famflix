@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Undo2 } from "lucide-react";
+import { CircleCheck, Loader2, Undo2 } from "lucide-react";
 import {
   useEffect,
   useEffectEvent,
@@ -9,6 +9,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 
 import { CardInfoSheet } from "@/components/movie-night/card-info-sheet";
@@ -100,6 +101,8 @@ export function SwipeDeck({
   note,
   finishText,
   finishButton,
+  autoFinish = true,
+  finishExtra,
   heightClass = STACK_HEIGHT,
 }: {
   /** In the order they should be shown. */
@@ -118,6 +121,13 @@ export function SwipeDeck({
   note?: string;
   finishText: string;
   finishButton: string;
+  /**
+   * Whether the done note moves on by itself a few seconds after the last card (it can be undone meanwhile). Without
+   * it the note is a plain "all done", for when there is nothing left to save or wait for.
+   */
+  autoFinish?: boolean;
+  /** More to offer on the done note, next to Undo and the finish button. */
+  finishExtra?: ReactNode;
   /** The stack's height; the default leaves room for the app's header and bottom bar plus one line above the stack. */
   heightClass?: string;
 }) {
@@ -292,10 +302,10 @@ export function SwipeDeck({
 
   const finish = useEffectEvent(() => onFinish());
   useEffect(() => {
-    if (!done) return;
+    if (!done || !autoFinish) return;
     const timer = window.setTimeout(() => finish(), FINISH_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [done]);
+  }, [done, autoFinish]);
 
   const shown = cards.slice(index, index + 1 + BEHIND_CARDS);
 
@@ -337,7 +347,11 @@ export function SwipeDeck({
             heightClass,
           )}
         >
-          <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
+          {autoFinish ? (
+            <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
+          ) : (
+            <CircleCheck className="size-7 text-like" aria-hidden />
+          )}
           <p className="text-lg font-semibold">{finishText}</p>
           <div className="flex flex-wrap justify-center gap-2">
             <Button variant="outline" onClick={undo} disabled={history.length === 0}>
@@ -345,6 +359,7 @@ export function SwipeDeck({
               Undo
             </Button>
             <Button onClick={() => onFinish()}>{finishButton}</Button>
+            {finishExtra}
           </div>
         </div>
       ) : (

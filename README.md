@@ -34,9 +34,12 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   family's until they change it on My list, and "I wasn't there" takes the title
   off their My list again.
 - **Discover**: on Browse, pick a mood and swipe through a stack of suggestions
-  on your own: ✓ yes or ♥ love puts the title on My list, ✕ nope and 👁 seen it
-  add nothing. Buttons or the arrow keys on a computer, swipes on a phone. When
-  the stack is done, My list says how many titles went on it.
+  on your own: ✓ yes or ♥ love puts the title on My list the moment you swipe
+  it (the stack's titles are saved up front, so it is a quick insert), ✕ nope
+  and 👁 seen it add nothing. Buttons or the arrow keys on a computer, swipes on
+  a phone. There is nothing to wait for at the end: the last card ends with a
+  note of how many titles are on My list and buttons to show it or to Discover
+  more.
 - **Movie night**: a family thing. Can't decide? Start one for a family, pick a
   mood and everyone in it swipes through the same stack (the family's To watch
   titles plus suggestions from TMDB): ✕ nope (−1 point), ♥ love (+2, three per

@@ -4,11 +4,9 @@ import { redirect } from "next/navigation";
 
 import type { ActionResult } from "@/app/app/movie-night/actions";
 import { requireUser } from "@/lib/auth";
-import { cardKey, moodParams, parseMood } from "@/lib/movie-night";
+import { moodParams, parseMood } from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
-import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
-import type { MediaType } from "@/lib/types";
 
 /** Most titles sent to My list in one go. */
 const MAX_BATCH = 10;
@@ -73,30 +71,35 @@ async function ensureOnMyList(supabase: Supabase, userId: string, mediaId: strin
 }
 
 /**
- * Adds the titles someone swiped right (or loved) on a Discover stack to My list; a title they loved also gets a thumbs up.
- * Returns the list item of each title that went in, so a later undo can take it back out. Stops at the first problem,
- * keeping what was already added. Doesn't refresh the page: the stack on screen must not change under their thumb.
+ * Adds the titles someone swiped right (or loved) on a Discover stack to My list; a title they loved also gets a thumbs
+ * up. A title is named by its row in `media`, which the stack saved when it was built, so this is only a few quick
+ * inserts. Returns the list item of each title that went in, so a later undo can take it back out. Stops at the first
+ * problem, keeping what was already added. Doesn't refresh the page: the stack on screen must not change under their
+ * thumb.
  */
 export async function addSwipedToMyList(
-  items: { tmdbId: number; mediaType: MediaType; love: boolean }[],
+  items: { key: string; mediaId: string; love: boolean }[],
 ): Promise<{ added: { key: string; itemId: string }[]; error?: string }> {
   const { supabase, user } = await requireUser();
-  if (!Array.isArray(items) || items.length === 0 || items.length > MAX_BATCH) {
-    return { added: [], error: "Too many titles at once." };
+  if (
+    !Array.isArray(items) ||
+    items.length === 0 ||
+    items.length > MAX_BATCH ||
+    !items.every((item) => typeof item?.key === "string" && item.key.length <= 40 && UUID.test(String(item.mediaId)))
+  ) {
+    return { added: [], error: "That isn't a valid title." };
   }
 
   const added: { key: string; itemId: string }[] = [];
   for (const item of items) {
-    const saved = await saveTitle(user.id, { tmdbId: item?.tmdbId, mediaType: item?.mediaType });
-    if ("error" in saved) return { added, error: saved.error };
-    const itemId = await ensureOnMyList(supabase, user.id, saved.id);
+    const itemId = await ensureOnMyList(supabase, user.id, item.mediaId);
     if (!itemId) return { added, error: "Couldn't add a title to My list. Please try again." };
     if (item.love === true) {
       await supabase
         .from("reactions")
         .upsert({ list_item_id: itemId, user_id: user.id, value: "like" }, { onConflict: "list_item_id,user_id" });
     }
-    added.push({ key: cardKey({ mediaType: item.mediaType, tmdbId: item.tmdbId }), itemId });
+    added.push({ key: item.key, itemId });
   }
   return { added };
 }

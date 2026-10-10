@@ -70,6 +70,11 @@ export interface DeckCard {
   origin: "list" | "suggested";
 }
 
+/** A card of a Discover stack: its title is already saved in `media`, so swiping right is one insert on My list. */
+export interface DiscoverCard extends DeckCard {
+  mediaId: string;
+}
+
 /** One title across lists and TMDB. */
 export function cardKey(card: { mediaType: MediaType; tmdbId: number }): string {
   return `${card.mediaType}:${card.tmdbId}`;
