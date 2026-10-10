@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 
+import { APP_HOME } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
 
 /** Exchanges an OAuth / email-confirmation code for a session. */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  let next = searchParams.get("next") ?? "/app";
+  let next = searchParams.get("next") ?? APP_HOME;
   // Paths only: appended to the origin, "@evil.com" would turn the address into evil.com.
-  if (!next.startsWith("/") || next.startsWith("//")) next = "/app";
+  if (!next.startsWith("/") || next.startsWith("//")) next = APP_HOME;
 
   let failure = searchParams.get("error_description");
 

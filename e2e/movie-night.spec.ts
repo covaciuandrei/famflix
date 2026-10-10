@@ -125,14 +125,15 @@ test("a family night: the invite, swiping, a leaderboard without popups, and a p
   await expect(counter(anaPage)).toHaveText("1 / 25");
   if (!keys) await expectRoomyCardOnPhone(anaPage);
 
-  // Cara hears about it, and closes the invite with "not now": a dot and a banner keep the way back.
+  // Cara hears about it, and closes the invite with "not now": the dot on the menu keeps the way back, to Movie night.
   await caraPage.goto("/app");
   const caraInvite = caraPage.getByRole("dialog", { name: "Ana started a movie night" });
   await expect(caraInvite).toBeVisible();
   await caraPage.keyboard.press("Escape");
   await expect(caraInvite).toBeHidden();
-  await expect(caraPage.getByRole("link", { name: /a movie night is waiting for you/ })).toBeVisible();
-  await expect(caraPage.getByRole("region", { name: "Movie nights in progress" }).getByRole("link", { name: "Join in" })).toBeVisible();
+  await caraPage.getByRole("link", { name: /a movie night is waiting for you/ }).click();
+  await expect(caraPage).toHaveURL(/\/app\/movie-night/);
+  await expect(caraPage.getByRole("link", { name: /Join in/ }).first()).toBeVisible();
 
   // Ben takes the invite straight into the stack.
   await benPage.goto("/app");

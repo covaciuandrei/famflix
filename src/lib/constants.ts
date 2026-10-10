@@ -1,5 +1,8 @@
 import type { MediaType, SortKey } from "@/lib/types";
 
+/** Where the app opens (after signing in, from the logo, or from /app): the first tab of the menu. */
+export const APP_HOME = "/app/browse";
+
 export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "recent", label: "Recently added" },
   { value: "most_liked", label: "Most liked" },

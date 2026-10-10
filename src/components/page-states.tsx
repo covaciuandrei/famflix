@@ -4,6 +4,7 @@ import { RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { APP_HOME } from "@/lib/constants";
 
 /** Shared body of the error boundaries: what happened and a way out. */
 export function ErrorState({ onRetry }: { onRetry: () => void }) {
@@ -24,7 +25,7 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
           <RotateCcw className="size-4" />
           Try again
         </Button>
-        <Link href="/app" className={buttonVariants({ variant: "outline" })}>
+        <Link href={APP_HOME} className={buttonVariants({ variant: "outline" })}>
           Go home
         </Link>
       </div>
@@ -44,7 +45,7 @@ export function NotFoundState() {
           shared a family with you, ask them for the invite code.
         </p>
       </div>
-      <Link href="/app" className={buttonVariants()}>
+      <Link href={APP_HOME} className={buttonVariants()}>
         Go to FamFlix
       </Link>
     </div>

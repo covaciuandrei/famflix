@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { APP_HOME } from "@/lib/constants";
+
 /**
  * Refreshes the Supabase auth session on every request and guards the
  * authenticated `/app` area. Returns the response with updated cookies.
@@ -56,7 +58,7 @@ export async function updateSession(request: NextRequest) {
   // Signed-in users skip the login screen.
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone();
-    url.pathname = "/app";
+    url.pathname = APP_HOME;
     return NextResponse.redirect(url);
   }
 

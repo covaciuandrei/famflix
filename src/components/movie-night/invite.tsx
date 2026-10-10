@@ -33,7 +33,7 @@ function remember(nightId: string) {
 /**
  * "Ana started a movie night": opens by itself when a family's night starts and I haven't joined it (right away, or
  * within half a minute if the app is already open). Take me there, or tap outside to close; closing means "not now",
- * and the menu dot, the Home banner and the family page keep the way back. It waits for any dialog that is open.
+ * and the menu dot, the Movie night page and the family page keep the way back. It waits for any dialog that is open.
  */
 export function NightInvite() {
   const nights = useNightStatus();

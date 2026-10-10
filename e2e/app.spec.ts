@@ -55,6 +55,23 @@ test("the login page only offers Google", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Terms" })).toBeVisible();
 });
 
+test("the menu has four tabs, and the app opens on Browse", async ({ page, context }, testInfo) => {
+  await signIn(context, await createUser("Ana"));
+
+  // Old links and bookmarks to /app (and the installed app's start page) land on the first tab.
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/app\/browse$/);
+
+  const menu = testInfo.project.name === "desktop" ? page.locator("header nav") : page.locator("nav.fixed");
+  await expect(menu.getByRole("link")).toHaveText(["Browse", "Movie night", "My list", "Families"]);
+  await expect(page.getByRole("link", { name: "Home", exact: true })).toHaveCount(0);
+
+  // The logo goes to the same place.
+  await page.goto("/app/mine");
+  await page.getByRole("link", { name: "FamFlix" }).click();
+  await expect(page).toHaveURL(/\/app\/browse$/);
+});
+
 test("signed-out visitors go to the login page", async ({ page }) => {
   await page.goto("/app/mine");
   await expect(page).toHaveURL(/\/login$/);

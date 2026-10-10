@@ -3,7 +3,6 @@
 import {
   Bookmark,
   Compass,
-  Home,
   LogOut,
   Popcorn,
   Settings,
@@ -17,17 +16,12 @@ import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/avatar";
 import { useNightStatus, waitingOnMe } from "@/components/movie-night/night-status";
 import { RatingRequests } from "@/components/rating-requests";
+import { APP_HOME } from "@/lib/constants";
 import { placePopover } from "@/lib/popover";
 import type { PendingRating } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  {
-    href: "/app",
-    label: "Home",
-    icon: Home,
-    match: (p: string) => p === "/app",
-  },
   {
     href: "/app/browse",
     label: "Browse",
@@ -87,7 +81,7 @@ export function AppNav({
     <>
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Link href="/app" className="flex items-center gap-2 font-semibold">
+          <Link href={APP_HOME} className="flex items-center gap-2 font-semibold">
             <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary">
               ▶
             </span>

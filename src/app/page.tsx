@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
+import { APP_HOME } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function LandingPage({
@@ -14,7 +15,7 @@ export default async function LandingPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect("/app");
+  if (user) redirect(APP_HOME);
   const { deleted } = await searchParams;
 
   const features = [
