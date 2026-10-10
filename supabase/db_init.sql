@@ -2028,6 +2028,70 @@ begin
 end;
 $$;
 
+-- Picks a title that isn't one of a night's cards: after the swiping the family decided on something else. The night
+-- ends with it just as it would with a card: the title goes on the family list if it isn't there (or comes back if it
+-- was removed), the watch is logged like Watched together does, the night is closed with it as its pick and its best
+-- titles join the list. All in one go, so if the watch is refused nothing changes. Returns the list item, for the
+-- picker's note.
+create function public.pick_movie_night_title(
+  p_night      uuid,
+  p_media      uuid,
+  p_watched_on date,
+  p_viewers    jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n         public.movie_nights;
+  v_item    uuid;
+  v_deleted timestamptz;
+begin
+  n := public.movie_night_for_member(p_night);
+  perform public.movie_night_require_open(n);
+  if not exists (select 1 from public.media where id = p_media) then
+    raise exception 'That title was not found';
+  end if;
+
+  -- (set_config comes first: PERFORM would reset FOUND between the lookup and the check below.)
+  perform set_config('famflix.adding_from_night', 'on', true);
+  select id, deleted_at into v_item, v_deleted
+  from public.list_items where group_id = n.group_id and media_id = p_media;
+  if not found then
+    insert into public.list_items (group_id, added_by, media_id)
+    values (n.group_id, auth.uid(), p_media)
+    returning id into v_item;
+  elsif v_deleted is not null then
+    update public.list_items set deleted_at = null where id = v_item;
+  end if;
+  perform set_config('famflix.adding_from_night', 'off', true);
+
+  -- The night ends with this pick first, so that logging the watch finds a night that ended with this title that day
+  -- and joins it, instead of making a "logged" one beside it.
+  update public.movie_nights
+  set status = 'closed', ended_at = now(), ended_by = auth.uid(), picked_media_id = p_media,
+      picked_list_item_id = v_item, happened_on = p_watched_on, last_activity_at = now()
+  where id = p_night and status = 'open';
+  if not found then
+    -- Someone else ended it in the meantime: say how, as for any other night that is over.
+    perform public.movie_night_require_open(public.movie_night_for_member(p_night));
+    raise exception 'This movie night has already ended';
+  end if;
+
+  perform public.log_watch(v_item, p_watched_on, p_viewers);
+  perform public.movie_night_add_top_titles(p_night);
+
+  -- The people who watched are marked on this night, whatever else was logged for the title that day.
+  insert into public.movie_night_members (night_id, user_id, watched)
+  select p_night, v.u, true
+  from (select distinct (x ->> 'user_id')::uuid as u from jsonb_array_elements(p_viewers) as x) v
+  on conflict (night_id, user_id) do update set watched = true;
+  return v_item;
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 --  Activity feed: written only by these triggers and functions
 -- ---------------------------------------------------------------------------
@@ -2281,7 +2345,8 @@ grant execute on function
   public.movie_night_state(uuid, boolean),
   public.active_movie_nights(),
   public.add_movie_night_top_titles(uuid),
-  public.pick_movie_night_card(uuid, uuid, date, jsonb)
+  public.pick_movie_night_card(uuid, uuid, date, jsonb),
+  public.pick_movie_night_title(uuid, uuid, date, jsonb)
   to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.

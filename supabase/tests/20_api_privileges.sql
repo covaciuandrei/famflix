@@ -59,7 +59,7 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname) from
     'leave_group', 'log_watch', 'pending_rating_requests',
     'start_movie_night', 'join_movie_night', 'cast_movie_night_votes', 'finish_movie_night_stack',
     'add_movie_night_stack', 'reveal_movie_night', 'cancel_movie_night', 'movie_night_state', 'active_movie_nights',
-    'add_movie_night_top_titles', 'pick_movie_night_card']) x),
+    'add_movie_night_top_titles', 'pick_movie_night_card', 'pick_movie_night_title']) x),
   'signed-in people can run exactly these functions');
 
 -- The server (service-role key): reads and writes every table, and runs the one function it calls.
