@@ -8,18 +8,16 @@ import { getListCards, getMyGroups, getSessionProfile } from "@/lib/data";
 import { isToWatch } from "@/lib/list-status";
 import { cn } from "@/lib/utils";
 
-/** The whole To watch list in random order, for choosing without swiping. Also where a solo stack ends. */
+/** The whole To watch list in random order, for choosing without swiping. */
 export default async function MovieNightListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ list?: string | string[]; added?: string | string[] }>;
+  searchParams: Promise<{ list?: string | string[] }>;
 }) {
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
-  const { list, added } = await searchParams;
-  // How many titles a solo stack just put on My list.
-  const addedCount = typeof added === "string" ? Number.parseInt(added, 10) : 0;
+  const { list } = await searchParams;
   const groups = await getMyGroups();
   const lists = [
     ...groups.map((g) => ({ id: g.id, label: g.name })),
@@ -54,12 +52,6 @@ export default async function MovieNightListPage({
           Swipe more
         </Link>
       </div>
-
-      {addedCount > 0 && (
-        <p role="status" className="rounded-lg border border-border bg-card px-4 py-2 text-sm">
-          Added {addedCount} {addedCount === 1 ? "title" : "titles"} from your stack to My list.
-        </p>
-      )}
 
       {lists.length > 1 && (
         <nav className="flex flex-wrap gap-1.5" aria-label="Choose a list">

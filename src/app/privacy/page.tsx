@@ -42,7 +42,8 @@ export default function PrivacyPage() {
             family starts a movie night, the titles it shows, who took part,
             how each person voted (nope, yes, love or seen it) and what was
             picked. Every night stays in the family&apos;s history. Swiping on
-            your own stores nothing except the titles you put on My list.
+            your own (Discover) stores nothing except the titles you put on My
+            list.
           </li>
           <li>
             <strong className="text-foreground">Counters:</strong> how often

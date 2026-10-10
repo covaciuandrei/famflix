@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { formatDay, formatScore } from "@/lib/format";
+import { isSwipingPath } from "@/lib/movie-night";
 import { whenNoModalOpen } from "@/lib/popup";
 import type { PendingRating } from "@/lib/types";
 
@@ -46,8 +47,8 @@ export function RatingRequests({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pathname = usePathname();
-  // Not in the middle of a movie night: it opens once they are somewhere else.
-  const inMovieNight = pathname.startsWith("/app/movie-night");
+  // Not in the middle of swiping (a movie night, or Discover): it opens once they are somewhere else.
+  const swiping = isSwipingPath(pathname);
 
   // Opens by itself once per browser session for requests someone else logged.
   useEffect(() => {
@@ -61,7 +62,7 @@ export function RatingRequests({
     const hasNew = pending.some(
       (p) => p.logged_by !== currentUserId && !dismissed.has(p.list_item_id),
     );
-    if (!hasNew || dialog.open || inMovieNight) return;
+    if (!hasNew || dialog.open || swiping) return;
     // One popup at a time: a movie night invite that opens with the page goes first (the check waits a moment for
     // it), and anything else that is open finishes before this one.
     let stopWaiting = () => {};
@@ -72,7 +73,7 @@ export function RatingRequests({
       window.clearTimeout(timer);
       stopWaiting();
     };
-  }, [pending, currentUserId, inMovieNight]);
+  }, [pending, currentUserId, swiping]);
 
   function rememberDismissed() {
     const dismissed = readDismissed();

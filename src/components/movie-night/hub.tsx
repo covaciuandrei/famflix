@@ -1,63 +1,18 @@
 "use client";
 
-import { BookOpen, Brain, ChevronDown, Ghost, Laugh, Loader2, Mountain, Play, Sofa, Users, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { cancelNight, startMovieNight, startSoloStack } from "@/app/app/movie-night/actions";
-import { useNightStatus } from "@/components/movie-night/night-status";
+import { startDiscover } from "@/app/app/browse/discover/actions";
+import { cancelNight, startMovieNight } from "@/app/app/movie-night/actions";
+import { MoodPicker, chip } from "@/components/movie-night/mood-picker";
 import { NightList, PendingNights } from "@/components/movie-night/night-list";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { BROWSE_GENRES, findGenre } from "@/lib/genres";
-import {
-  DEFAULT_STACK_SIZE,
-  type HistoryEntry,
-  MAX_GENRES,
-  MOODS,
-  nightAction,
-  RUNTIME_LIMITS,
-  STACK_SIZES,
-  type StackSize,
-} from "@/lib/movie-night";
+import { useNightStatus } from "@/components/movie-night/night-status";
+import { buttonVariants } from "@/components/ui/button";
+import { findGenre } from "@/lib/genres";
+import { type HistoryEntry, nightAction } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
-
-const chip = (active: boolean) =>
-  cn(
-    "rounded-full border border-border px-3 py-1 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
-    active && "border-primary bg-primary/15 text-foreground",
-  );
-
-// A mood is a ready-made mix of genres, so it is drawn as a tile with its own picture, not as another genre pill.
-const MOOD_ICONS: Record<(typeof MOODS)[number]["slug"], LucideIcon> = {
-  laugh: Laugh,
-  cozy: Sofa,
-  edge: Zap,
-  mind: Brain,
-  adventure: Mountain,
-  scare: Ghost,
-  family: Users,
-  true: BookOpen,
-};
-
-// Side by side on a phone (two to a row); on wider screens the picture is above the name so the names fit on a line.
-const moodTile = (active: boolean) =>
-  cn(
-    "flex items-center gap-2.5 rounded-xl border p-1.5 pr-2.5 text-left text-sm leading-tight font-medium text-foreground transition-colors sm:flex-col sm:justify-center sm:gap-1.5 sm:px-1.5 sm:py-2.5 sm:text-center sm:text-[13px]",
-    active ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/50",
-  );
-
-const groupLabel = "text-xs font-semibold tracking-wide text-muted-foreground uppercase";
-
-const segment = (active: boolean) =>
-  cn(
-    "rounded-md px-3 py-1.5 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground",
-    active && "bg-muted text-foreground",
-  );
-
-function sameGenres(a: readonly string[], b: readonly string[]) {
-  return a.length === b.length && a.every((g) => b.includes(g));
-}
 
 /**
  * Picks who is watching (just you, or one of your families), the mood, and starts the night. A family with a night
@@ -79,34 +34,8 @@ export function Hub({
   const family = families.find((f) => f.id === who) ?? null;
   // The chosen family's night that is going, kept up to date like the dot on the menu.
   const openNight = useNightStatus().find((n) => n.group_id === family?.id) ?? null;
-  const [genres, setGenres] = useState<string[]>([]);
-  const [series, setSeries] = useState(false);
-  const [count, setCount] = useState<StackSize>(DEFAULT_STACK_SIZE);
-  const [maxRuntime, setMaxRuntime] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-
-  // Some categories only exist for series (Kids), so with series off they'd find nothing.
-  const seriesOnly =
-    genres.length > 0 && !series && genres.every((slug) => findGenre(slug)?.movie === null);
-
-  function toggleGenre(slug: string) {
-    setGenres((current) =>
-      current.includes(slug) ? current.filter((g) => g !== slug) : [...current, slug].slice(0, MAX_GENRES),
-    );
-  }
-
-  function go() {
-    setError(null);
-    start(async () => {
-      // Redirects to the stack (or the family's night) when it works.
-      const options = { genres, series, count, max: maxRuntime };
-      const res = family
-        ? await startMovieNight({ groupId: family.id, ...options })
-        : await startSoloStack(options);
-      if (res?.error) setError(res.error);
-    });
-  }
 
   function cancelOpenNight() {
     if (!openNight || !window.confirm("Cancel this movie night for everyone? Its votes stay in the history.")) return;
@@ -194,167 +123,17 @@ export function Hub({
         )}
 
         {!(family && openNight) && (
-          <>
-            <section aria-labelledby="mood-title" className="flex flex-col gap-4">
-              <div>
-                <h2 id="mood-title" className="text-lg font-semibold">
-                  What are you in the mood for?
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Pick a mood to start from, or mix your own from the genres. No pick means a bit of everything.
-                </p>
-              </div>
-              <div className="flex flex-col gap-2">
-                <p className="flex items-baseline gap-2">
-                  <span id="moods-label" className={groupLabel}>
-                    Moods
-                  </span>
-                  <span className="text-xs text-muted-foreground">a ready-made mix of genres</span>
-                </p>
-                <div role="group" aria-labelledby="moods-label" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {MOODS.map((mood) => {
-                    const active = sameGenres(genres, mood.genres);
-                    const Icon = MOOD_ICONS[mood.slug];
-                    return (
-                      <button
-                        key={mood.slug}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => setGenres(active ? [] : [...mood.genres])}
-                        className={moodTile(active)}
-                      >
-                        <span
-                          className={cn(
-                            "flex size-7 shrink-0 items-center justify-center rounded-lg",
-                            active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
-                          )}
-                        >
-                          <Icon className="size-4" aria-hidden />
-                        </span>
-                        {mood.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <p className="flex items-baseline gap-2">
-                  <span id="genres-label" className={groupLabel}>
-                    Genres
-                  </span>
-                  <span className="text-xs text-muted-foreground">up to {MAX_GENRES}</span>
-                </p>
-                <div role="group" aria-labelledby="genres-label" className="flex flex-wrap gap-1.5">
-                  {BROWSE_GENRES.map((genre) => {
-                    const active = genres.includes(genre.slug);
-                    return (
-                      <button
-                        key={genre.slug}
-                        type="button"
-                        aria-pressed={active}
-                        disabled={!active && genres.length >= MAX_GENRES}
-                        title={!active && genres.length >= MAX_GENRES ? `Up to ${MAX_GENRES} genres` : undefined}
-                        onClick={() => toggleGenre(genre.slug)}
-                        className={chip(active)}
-                      >
-                        {genre.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {genres.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {genres.length} of {MAX_GENRES} genres.{" "}
-                    <button type="button" onClick={() => setGenres([])} className="underline underline-offset-2 hover:text-foreground">
-                      Clear
-                    </button>
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <details className="group rounded-xl border border-border bg-card">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium select-none">
-                <span>
-                  More options
-                  <span className="ml-2 font-normal text-muted-foreground">
-                    {count} cards{series ? ", with series" : ""}
-                    {maxRuntime ? `, up to ${maxRuntime} min` : ""}
-                  </span>
-                </span>
-                <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="flex flex-col gap-4 border-t border-border px-4 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm">Cards in the stack</span>
-                  <div role="group" aria-label="Cards in the stack" className="inline-flex rounded-lg border border-border p-0.5">
-                    {STACK_SIZES.map((size) => (
-                      <button key={size} type="button" aria-pressed={count === size} onClick={() => setCount(size)} className={segment(count === size)}>
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm">Include series</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={series}
-                    aria-label="Include series"
-                    onClick={() => setSeries((on) => !on)}
-                    className={cn(
-                      "relative h-6 w-11 rounded-full border border-border transition-colors",
-                      series ? "bg-primary" : "bg-muted",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform",
-                        series && "translate-x-5",
-                      )}
-                    />
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm">Movie length</span>
-                  <div role="group" aria-label="Movie length" className="inline-flex rounded-lg border border-border p-0.5">
-                    <button type="button" aria-pressed={maxRuntime === null} onClick={() => setMaxRuntime(null)} className={segment(maxRuntime === null)}>
-                      Any
-                    </button>
-                    {RUNTIME_LIMITS.map((limit) => (
-                      <button key={limit} type="button" aria-pressed={maxRuntime === limit} onClick={() => setMaxRuntime(limit)} className={segment(maxRuntime === limit)}>
-                        Under {limit} min
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            {seriesOnly && (
-              <p role="status" className="text-sm text-amber-500">
-                Kids only has series. Turn on Include series (under More options), or pick another genre.
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-
-            <div className="flex flex-col items-start gap-2">
-              <Button size="lg" onClick={go} disabled={pending || seriesOnly} className="h-auto min-h-11 max-w-full py-2 whitespace-normal">
-                {pending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4 fill-current" />}
-                {family ? `Start movie night for ${family.name}` : "Start swiping"}
-              </Button>
-              <p className="text-sm text-muted-foreground">
-                {family
-                  ? `Everyone in ${family.name} gets an invite to swipe too, and the votes decide what to watch.`
-                  : "Swipe right on what you'd watch. Those go on My list."}
-              </p>
-            </div>
-          </>
+          <MoodPicker
+            start={(options) =>
+              family ? startMovieNight({ groupId: family.id, ...options }) : startDiscover(options)
+            }
+            startLabel={family ? `Start movie night for ${family.name}` : "Start swiping"}
+            hint={
+              family
+                ? `Everyone in ${family.name} gets an invite to swipe too, and the votes decide what to watch.`
+                : "Swipe right on what you'd watch. Those go on My list."
+            }
+          />
         )}
 
         <p className="text-sm text-muted-foreground">

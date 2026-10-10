@@ -76,13 +76,15 @@ async function finishStack(page: Page) {
 
 const closeAll = (pages: Page[]) => Promise.all(pages.map((page) => page.context().close()));
 
-test("on your own: swipe a stack with the keyboard or the buttons, and what you like lands on My list", async ({ page, context }, testInfo) => {
+test("Discover, from Browse: swipe a stack with the keyboard or the buttons, and what you like lands on My list", async ({ page, context }, testInfo) => {
   test.setTimeout(180_000);
   const ana = await createUser("Ana");
   await signIn(context, ana);
   const keys = testInfo.project.name === "desktop";
 
-  await page.goto("/app/movie-night");
+  await page.goto("/app/browse");
+  await page.getByRole("link", { name: "Discover" }).click();
+  await expect(page).toHaveURL(/\/app\/browse\/discover$/);
   await expect(page.getByRole("heading", { name: "What are you in the mood for?" })).toBeVisible();
 
   // Moods (ready-made mixes) and genres are separate, labelled groups, and picking a mood fills in its genres.
@@ -97,6 +99,7 @@ test("on your own: swipe a stack with the keyboard or the buttons, and what you 
 
   await page.getByRole("button", { name: "Start swiping" }).click();
   await expect(topCard(page)).toBeVisible({ timeout: TMDB });
+  await expect(page).toHaveURL(/\/app\/browse\/discover\/swipe\?/);
   await expect(counter(page)).toHaveText("1 / 25");
   if (!keys) await expectRoomyCardOnPhone(page);
 
@@ -108,10 +111,28 @@ test("on your own: swipe a stack with the keyboard or the buttons, and what you 
   for (let i = 4; i < 25; i++) await vote(page, "nope", keys);
 
   await page.getByRole("button", { name: "Show my list" }).click();
-  await expect(page).toHaveURL(/\/app\/movie-night\/list\?list=mine&added=2/, { timeout: 60_000 });
-  await expect(page.getByText("Added 2 titles from your stack to My list.")).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/mine\?added=2/, { timeout: 60_000 });
+  await expect(page.getByText("Added 2 titles from Discover to My list.")).toBeVisible();
   const { data } = await admin.from("list_items").select("id").eq("added_by", ana.id).is("group_id", null);
   expect(data).toHaveLength(2);
+});
+
+test("Discover: a stack where nothing is picked goes back to Browse", async ({ page, context }, testInfo) => {
+  test.setTimeout(180_000);
+  const ben = await createUser("Ben");
+  await signIn(context, ben);
+  const keys = testInfo.project.name === "desktop";
+
+  await page.goto("/app/browse/discover");
+  await page.getByRole("button", { name: "Start swiping" }).click();
+  await expect(topCard(page)).toBeVisible({ timeout: TMDB });
+  for (let i = 0; i < 25; i++) await vote(page, "nope", keys);
+
+  await expect(page.getByText("That was the last one. Taking you back to Browse…")).toBeVisible();
+  await page.getByRole("button", { name: "Back to Browse" }).click();
+  await expect(page).toHaveURL(/\/app\/browse$/, { timeout: 60_000 });
+  const { data } = await admin.from("list_items").select("id").eq("added_by", ben.id);
+  expect(data).toHaveLength(0);
 });
 
 test("a family night: the invite, swiping, a leaderboard without popups, and a pick that ends it", async ({ browser }, testInfo) => {

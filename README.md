@@ -33,6 +33,10 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   "Watched with Ben, Cara on 09.10.2026". Their score there follows the
   family's until they change it on My list, and "I wasn't there" takes the title
   off their My list again.
+- **Discover**: on Browse, pick a mood and swipe through a stack of suggestions
+  on your own: ✓ yes or ♥ love puts the title on My list, ✕ nope and 👁 seen it
+  add nothing. Buttons or the arrow keys on a computer, swipes on a phone. When
+  the stack is done, My list says how many titles went on it.
 - **Movie night**: can't decide? Pick a mood and swipe through a stack of
   titles: ✕ nope (−1 point), ♥ love (+2, three per stack), ✓ yes (+1) or 👁 seen
   it (0, you've already seen it), with buttons or the arrow keys on a computer

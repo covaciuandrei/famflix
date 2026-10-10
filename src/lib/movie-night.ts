@@ -45,9 +45,14 @@ export const RUNTIME_LIMITS = [100, 130] as const;
 //  Cards
 // ---------------------------------------------------------------------------------------------------------------
 
+/** Pages where someone is swiping, which nothing should pop up over: a movie night, or Discover. */
+export function isSwipingPath(pathname: string): boolean {
+  return pathname.startsWith("/app/movie-night") || pathname.startsWith("/app/browse/discover");
+}
+
 /** What a swipe card shows. */
 export interface DeckCard {
-  /** A candidate's id on a family night; "movie:123" or "tv:456" on a solo deck. */
+  /** A candidate's id on a family night; "movie:123" or "tv:456" on a Discover stack. */
   id: string;
   mediaType: MediaType;
   tmdbId: number;

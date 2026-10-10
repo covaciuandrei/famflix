@@ -126,10 +126,10 @@ function toDeckCard(details: TmdbDetails): DeckCard {
 }
 
 /**
- * A solo stack: only suggestions, never a title already on My list. The same seed gives the same stack, so a
+ * A Discover stack: only suggestions, never a title already on My list. The same seed gives the same stack, so a
  * refresh doesn't change the cards under someone's thumb.
  */
-export async function buildSoloDeck({
+export async function buildDiscoverDeck({
   userId,
   mood,
   seed,
@@ -145,7 +145,7 @@ export async function buildSoloDeck({
     if (found.length < MIN_STACK_SIZE) return { error: NOT_ENOUGH };
     return { cards: found.map(toDeckCard) };
   } catch (error) {
-    console.error("Building a solo stack failed:", error);
+    console.error("Building a Discover stack failed:", error);
     return { error: TMDB_DOWN };
   }
 }

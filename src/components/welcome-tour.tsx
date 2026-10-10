@@ -2,6 +2,7 @@
 
 import {
   ChevronLeft,
+  Layers,
   Popcorn,
   Sparkles,
   Star,
@@ -30,6 +31,11 @@ const STEPS: Step[] = [
     icon: Users,
     title: "Family lists",
     text: "Create a family or join one with an invite code. Everyone adds what they want to watch, and you still get a private list just for you.",
+  },
+  {
+    icon: Layers,
+    title: "Discover",
+    text: "Not sure what to watch? On Browse, tap Discover, pick a mood and swipe through titles. Swipe right on what you'd watch and it goes on your My list.",
   },
   {
     icon: Star,

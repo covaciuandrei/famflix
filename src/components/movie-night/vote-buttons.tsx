@@ -31,7 +31,7 @@ export function VoteButtons({
   onVote: (vote: Vote) => void;
   onUndo: () => void;
   canUndo: boolean;
-  /** Loves still available in this stack, or null when there is no limit (solo). */
+  /** Loves still available in this stack, or null when there is no limit (Discover). */
   lovesLeft: number | null;
   disabled?: boolean;
 }) {

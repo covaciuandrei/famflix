@@ -1,8 +1,11 @@
+import { Layers } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { CategoryLinks } from "@/components/category-chips";
 import { MediaRow } from "@/components/media-row";
 import { SearchBox } from "@/components/search-box";
+import { buttonVariants } from "@/components/ui/button";
 import {
   getLibraryIndex,
   getMyGroups,
@@ -82,8 +85,18 @@ export default async function BrowsePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Browse</h1>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Browse</h1>
+          <Link
+            href="/app/browse/discover"
+            title="Swipe through titles that fit your mood"
+            className={buttonVariants()}
+          >
+            <Layers className="size-4" />
+            Discover
+          </Link>
+        </div>
         <p className="text-muted-foreground">
           Search or pick from popular titles, then add to a list.
         </p>

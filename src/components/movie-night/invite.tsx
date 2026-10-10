@@ -9,6 +9,7 @@ import { useNightStatus } from "@/components/movie-night/night-status";
 import { buttonVariants } from "@/components/ui/button";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { findGenre } from "@/lib/genres";
+import { isSwipingPath } from "@/lib/movie-night";
 import { whenNoModalOpen } from "@/lib/popup";
 
 const SEEN_KEY = "famflix:night-invites";
@@ -41,11 +42,12 @@ export function NightInvite() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [shownId, setShownId] = useState<string | null>(null);
   const night = shownId ? nights.find((n) => n.night_id === shownId) : undefined;
-  // Someone already in Movie night is where the invite would take them.
+  // Someone already in Movie night is where the invite would take them. And nobody is interrupted while swiping.
   const onNightPages = pathname.startsWith("/app/movie-night");
+  const swiping = isSwipingPath(pathname);
 
   useEffect(() => {
-    if (shownId || onNightPages) return;
+    if (shownId || swiping) return;
     const seen = readSeen();
     const next = nights.find((n) => !n.joined && !seen.has(n.night_id));
     if (!next) return;
@@ -54,7 +56,7 @@ export function NightInvite() {
       // Opened in the same breath, so anything else waiting for a turn sees this one has taken it.
       openModal(dialogRef.current);
     });
-  }, [nights, shownId, onNightPages]);
+  }, [nights, shownId, swiping]);
 
   // The night ended, or I joined it, while the invite was up.
   useEffect(() => {

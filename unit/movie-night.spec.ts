@@ -7,6 +7,7 @@ import {
   deckOrder,
   DEFAULT_MOOD,
   groupVotes,
+  isSwipingPath,
   MAX_GENRES,
   moodParams,
   MOODS,
@@ -209,5 +210,16 @@ test.describe("what a night in progress offers", () => {
       cancelled: "Cancelled",
       expired: "Expired",
     });
+  });
+});
+
+test.describe("isSwipingPath", () => {
+  test("a movie night and Discover are swiping pages, the rest of the app isn't", () => {
+    for (const path of ["/app/movie-night", "/app/movie-night/0f0f", "/app/browse/discover", "/app/browse/discover/swipe"]) {
+      expect(isSwipingPath(path), path).toBe(true);
+    }
+    for (const path of ["/app", "/app/browse", "/app/mine", "/app/groups", "/app/media/movie/603"]) {
+      expect(isSwipingPath(path), path).toBe(false);
+    }
   });
 });

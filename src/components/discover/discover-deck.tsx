@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { addSwipedToMyList, removeSwipedFromMyList } from "@/app/app/movie-night/actions";
+import { addSwipedToMyList, removeSwipedFromMyList } from "@/app/app/browse/discover/actions";
 import { SwipeDeck } from "@/components/movie-night/swipe-deck";
 import type { DeckCard, Vote } from "@/lib/movie-night";
 
-/** A stack of your own: ✓ and ♥ put the title on My list, the rest add nothing. */
+/** A stack of your own (Discover): ✓ and ♥ put the title on My list, the rest add nothing. */
 
 /** Swipes are sent in small batches this long after the last one, so a quick undo costs nothing. */
 const SEND_DELAY_MS = 2500;
@@ -17,7 +17,7 @@ const MAX_RETRIES = 3;
 const FINISH_RETRY_MS = 15_000;
 const FINISH_ATTEMPTS = 4;
 const BATCH = 10;
-const STORAGE_PREFIX = "famflix:movie-night:solo:";
+const STORAGE_PREFIX = "famflix:discover:";
 
 interface Saved {
   votes: Record<string, Vote>;
@@ -44,9 +44,9 @@ function store(key: string, saved: Saved | null) {
 
 const wants = (vote: Vote | undefined) => vote === "yes" || vote === "love";
 
-export function SoloDeck({ cards, storageKey }: { cards: DeckCard[]; storageKey: string }) {
+export function DiscoverDeck({ cards, storageKey }: { cards: DeckCard[]; storageKey: string }) {
   const router = useRouter();
-  // Read once, when the stack opens (it only renders in the browser, see solo-deck-loader).
+  // Read once, when the stack opens (it only renders in the browser, see discover-deck-loader).
   const [initial] = useState(() => load(storageKey));
   const votes = useRef<Record<string, Vote>>(initial.votes);
   const sent = useRef<Record<string, string>>(initial.sent);
@@ -151,7 +151,8 @@ export function SoloDeck({ cards, storageKey }: { cards: DeckCard[]; storageKey:
     // Everything picked on this stack, including what went in before a refresh.
     const added = Object.keys(sent.current).filter((key) => wants(votes.current[key])).length;
     store(storageKey, null);
-    router.push(`/app/movie-night/list?list=mine&added=${added}`);
+    // My list, with a note on what went in; with nothing picked there is nothing to show, so back to Browse.
+    router.push(added > 0 ? `/app/mine?added=${added}` : "/app/browse");
   }
 
   return (
@@ -174,8 +175,12 @@ export function SoloDeck({ cards, storageKey }: { cards: DeckCard[]; storageKey:
           schedule();
         }}
         onFinish={finish}
-        finishText="That was the last one. Putting your picks on My list…"
-        finishButton="Show my list"
+        finishText={
+          picked > 0
+            ? "That was the last one. Putting your picks on My list…"
+            : "That was the last one. Taking you back to Browse…"
+        }
+        finishButton={picked > 0 ? "Show my list" : "Back to Browse"}
       />
       {problem && (
         <p role="alert" className="text-sm text-destructive">

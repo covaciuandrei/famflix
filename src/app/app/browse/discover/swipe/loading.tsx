@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 
 // Building a stack asks TMDB for dozens of titles, which can take a few seconds the first time.
-export default function SoloLoading() {
+export default function DiscoverSwipeLoading() {
   return (
     <div
       role="status"
