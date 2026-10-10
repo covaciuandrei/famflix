@@ -167,7 +167,7 @@ export interface ActivityEvent {
 export interface LibraryEntry {
   /** My list (listId null) first, then families; itemId is the list item, for removing it. */
   lists: { listId: string | null; itemId: string; label: string; watched: boolean }[];
-  /** Names of family members marked as having watched it ("You" for yourself). */
+  /** Names of family members marked as having watched it ("You" for yourself); only filled in when asked for. */
   seenBy: string[];
 }
 

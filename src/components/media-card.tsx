@@ -5,7 +5,7 @@ import {
   AddToListButton,
   type AddTarget,
 } from "@/components/add-to-list-button";
-import { ListBadges, SeenBy } from "@/components/library-badges";
+import { ListBadges } from "@/components/library-badges";
 import { MediaPoster } from "@/components/media-poster";
 import { mediaTypeLabel } from "@/lib/constants";
 import type { TmdbItem } from "@/lib/tmdb";
@@ -46,7 +46,6 @@ export function MediaCard({
           {mediaTypeLabel(item.mediaType)}
           {item.year ? ` · ${item.year}` : ""}
         </p>
-        <SeenBy names={library?.seenBy} />
       </div>
       <AddToListButton
         tmdbId={item.tmdbId}

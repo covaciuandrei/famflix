@@ -326,10 +326,14 @@ export async function getActivity(opts: {
   return (data ?? []) as ActivityEvent[];
 }
 
-/** For every title on the user's lists: which lists have it and who in their families has seen it. */
+/**
+ * For every title on the user's lists: which lists have it and, when `seenBy` is asked for, who in their families has
+ * seen it (a title's own page shows that; Browse only needs the lists, so it leaves the extra queries out).
+ */
 export async function getLibraryIndex(
   userId: string,
   groups: { id: string; name: string }[],
+  { seenBy: withSeenBy = false }: { seenBy?: boolean } = {},
 ): Promise<LibraryIndex> {
   const supabase = await createClient();
   const [items, watches, members] = await Promise.all([
@@ -337,16 +341,18 @@ export async function getLibraryIndex(
       .from("list_items")
       .select("id, group_id, status, media(tmdb_id, media_type)")
       .is("deleted_at", null),
-    supabase
-      .from("watches")
-      .select("user_id, list_items(deleted_at, media(tmdb_id, media_type))"),
-    supabase.from("group_members").select("user_id, profiles(display_name)"),
+    withSeenBy
+      ? supabase
+          .from("watches")
+          .select("user_id, list_items(deleted_at, media(tmdb_id, media_type))")
+      : null,
+    withSeenBy ? supabase.from("group_members").select("user_id, profiles(display_name)") : null,
   ]);
 
   type MediaRef = { tmdb_id: number; media_type: MediaType } | null;
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
   const names = new Map(
-    ((members.data ?? []) as unknown as {
+    ((members?.data ?? []) as unknown as {
       user_id: string;
       profiles: { display_name: string } | null;
     }[]).map((m) => [m.user_id, m.profiles?.display_name ?? "Someone"]),
@@ -376,7 +382,7 @@ export async function getLibraryIndex(
     });
   }
 
-  for (const w of (watches.data ?? []) as unknown as {
+  for (const w of (watches?.data ?? []) as unknown as {
     user_id: string;
     list_items: { deleted_at: string | null; media: MediaRef } | null;
   }[]) {

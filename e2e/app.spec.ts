@@ -150,6 +150,16 @@ test("watched together: the others confirm their score and add a note", async ({
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
 
+  // Who has seen it is told on the title's own page...
+  await anaPage.goto("/app/media/movie/438631");
+  await expect(anaPage.getByText(/^Seen by (You, Bogdan|Bogdan, You)$/)).toBeVisible();
+  // ...and not on Browse's cards, where it would make some taller than the rest: they only wear their list's badge.
+  await anaPage.goto("/app/browse");
+  await anaPage.getByRole("searchbox", { name: "Search movies and series" }).fill("Dune");
+  await anaPage.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(anaPage.getByRole("img", { name: "On My list, Test family" })).toBeVisible();
+  await expect(anaPage.getByText(/^Seen by/)).toHaveCount(0);
+
   // It is on Ana's My list as watched, with Bogdan and today's date, and her note.
   await openMyWatched(anaPage);
   const anaCard = listCard(anaPage, "Dune");

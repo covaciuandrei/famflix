@@ -38,7 +38,7 @@ export default async function MediaDetailPage({
     { id: null, label: "My list" },
     ...groups.map((g) => ({ id: g.id, label: g.name })),
   ];
-  const library = (await getLibraryIndex(user.id, groups))[
+  const library = (await getLibraryIndex(user.id, groups, { seenBy: true }))[
     libraryKey(mediaType, id)
   ];
   const onMyList = library?.lists.find((l) => l.listId === null);
