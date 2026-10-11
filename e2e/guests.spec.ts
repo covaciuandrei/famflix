@@ -1,13 +1,53 @@
 import { test, type Page } from "@playwright/test";
 
-import { admin, expect } from "./helpers";
-import { closeAll, finishStack, makeFamily, openFamilyNight, rows, startNight, TMDB, topCard } from "./night-helpers";
+import { admin, createUser, expect, openAnonymous, openAs } from "./helpers";
+import {
+  acceptConfirms,
+  closeAll,
+  finishStack,
+  makeFamily,
+  openFamilyNight,
+  rows,
+  startNight,
+  TMDB,
+  topCard,
+  vote,
+} from "./night-helpers";
 
 const people = (page: Page) => page.getByRole("list", { name: "Who is taking part" });
 const personIn = (page: Page, name: string) => people(page).getByRole("listitem").filter({ hasText: name });
 
 /** A link's token, from the address a guest would open. */
 const tokenOf = (url: string) => url.split("/guest/")[1];
+
+/** The night's guest link, from the invite window of a member's page. */
+async function inviteLink(page: Page, action?: "New link" | "Turn off link"): Promise<string> {
+  await page.getByRole("button", { name: "Movie night menu" }).click();
+  await page.getByRole("menuitem", { name: "Invite a guest" }).click();
+  const dialog = page.getByRole("dialog", { name: "Invite a guest" });
+  const link = dialog.getByRole("textbox", { name: "Guest link" });
+  await expect(link).toHaveValue(/\/guest\/[0-9a-f]{64}$/);
+  const before = await link.inputValue();
+  if (action === "New link") {
+    await dialog.getByRole("button", { name: action }).click();
+    await expect(link).not.toHaveValue(before);
+  } else if (action === "Turn off link") {
+    await dialog.getByRole("button", { name: action }).click();
+    await expect(dialog.getByText("The link is turned off")).toBeVisible();
+  }
+  const url = action === "Turn off link" ? before : await link.inputValue();
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toBeHidden();
+  return url;
+}
+
+/** Opens a guest link and joins with a name; waits for the first card. */
+async function joinAs(guest: Page, link: string, name: string) {
+  await guest.goto(link);
+  await guest.getByLabel("Your name").fill(name);
+  await guest.getByRole("button", { name: "Join the movie night" }).click();
+  await expect(topCard(guest)).toBeVisible({ timeout: TMDB });
+}
 
 test("members invite guests from the night's menu: a link to copy, replace and turn off, and guests they can take out", async ({ browser }, testInfo) => {
   test.setTimeout(300_000);
@@ -124,4 +164,176 @@ test("members invite guests from the night's menu: a link to copy, replace and t
   expect(await linkIsOpen(tokenOf(third))).toBe(false);
 
   await closeAll(pages);
+});
+
+test("a guest joins with the link and no account, votes, sees the leaderboard and can leave", async ({ browser, request }, testInfo) => {
+  test.setTimeout(300_000);
+  const { pages } = await makeFamily(browser, testInfo.project, "Link Crew", ["Ana", "Ben"]);
+  const [anaPage] = pages;
+  const keys = testInfo.project.name === "desktop";
+  await startNight(anaPage, "Link Crew");
+  const nightId = anaPage.url().split("/").pop()!;
+  const link = await inviteLink(anaPage);
+  const path = new URL(link).pathname;
+
+  // The link opens a page of its own: a name to give and none of the app, nothing the search engines or other
+  // sites would get to know about.
+  const guest = await openAnonymous(browser, testInfo.project);
+  acceptConfirms(guest);
+  const response = await guest.goto(link);
+  expect(response!.headers()["referrer-policy"]).toBe("no-referrer");
+  expect(response!.headers()["x-robots-tag"]).toContain("noindex");
+  expect(response!.headers()["cache-control"]).toMatch(/no-store|private/);
+  await expect(guest.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  await expect(guest.getByRole("heading", { name: "Link Crew's movie night" })).toBeVisible();
+  await expect(guest.getByRole("link", { name: /^(Browse|Movie night|My list|Families)$/ })).toHaveCount(0);
+  await expect(guest.getByRole("button", { name: "Join the movie night" })).toBeDisabled();
+
+  // Joining gives the guest a cookie that scripts can't read and only this link's pages get.
+  await guest.getByLabel("Your name").fill("  Zoe ");
+  await guest.getByRole("button", { name: "Join the movie night" }).click();
+  await expect(topCard(guest)).toBeVisible({ timeout: TMDB });
+  const cookie = (await guest.context().cookies()).find((c) => c.name === "famflix_guest")!;
+  expect(cookie).toMatchObject({ httpOnly: true, sameSite: "Lax", path });
+  expect(await guest.evaluate(() => document.cookie)).not.toContain("famflix_guest");
+
+  // The same room, without what the family does: the menu has no way to pick, cancel, invite or show results.
+  await expect(guest.getByRole("heading", { name: /^Movie night/ })).toBeVisible();
+  await guest.getByRole("button", { name: "Movie night menu" }).click();
+  const menu = guest.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "Leave this movie night" })).toBeVisible();
+  for (const name of ["Invite a guest", "Cancel movie night", "Show results now", "Pick something else", "Back to Movie night"]) {
+    await expect(menu.getByRole("menuitem", { name })).toHaveCount(0);
+  }
+  await guest.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  if (!keys) {
+    // A phone has no bottom bar here, so the stack has the room and the page doesn't scroll.
+    expect(await guest.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
+    const caption = (await guest.getByText(/^Love( · \d+ left)?$/).boundingBox())!;
+    expect(caption.y + caption.height).toBeLessThanOrEqual(guest.viewportSize()!.height);
+  }
+
+  // Votes of all four kinds, then the leaderboard, with the guest's own votes in it as "You".
+  for (const kind of ["love", "yes", "nope", "seen"] as const) await vote(guest, kind, keys);
+  await finishStack(guest);
+  const { data: zoe } = await admin.from("movie_night_guests").select("id, name").eq("night_id", nightId).single();
+  expect(zoe!.name).toBe("Zoe");
+  const saved = await admin.from("movie_night_guest_votes").select("vote").eq("guest_id", zoe!.id);
+  expect((saved.data ?? []).map((v) => v.vote).sort()).toEqual(["love", "nope", "seen", "yes"]);
+  await expect(rows(guest)).toHaveCount(4);
+  await rows(guest).first().getByRole("button").first().click();
+  await expect(rows(guest).first()).toContainText("You");
+  for (const name of [/We watched this/, /^Add to/, /More like this/, "Pick something else", "More suggestions", "Show results now"]) {
+    await expect(guest.getByRole("button", { name })).toHaveCount(0);
+  }
+  // A title's details are there, without a way into the app.
+  await rows(guest).first().getByRole("button", { name: "Details" }).click();
+  const sheet = guest.getByRole("dialog");
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole("link", { name: "Open the title page" })).toHaveCount(0);
+  await guest.keyboard.press("Escape");
+
+  // The family sees the guest's votes, marked as a guest's.
+  await finishStack(anaPage);
+  await expect(personIn(anaPage, "Zoe")).toContainText("Guest", { timeout: 30_000 });
+  await rows(anaPage).first().getByRole("button").first().click();
+  await expect(rows(anaPage).first()).toContainText("Zoe (guest)");
+
+  // What a guest can reach: their own night, and nothing of the family's or the app's.
+  expect((await guest.request.get(`/api/movie-night/${nightId}/state`)).status()).toBe(401);
+  const own = await guest.request.get(`${path}/state`);
+  expect(own.status()).toBe(200);
+  const state = await own.json();
+  expect(state.viewer).toBe("guest");
+  expect(state.results.length).toBeGreaterThan(0);
+  expect(state.results.every((r: { family_item_id: string | null; on_my_list: boolean }) => r.family_item_id === null && !r.on_my_list)).toBe(true);
+  expect((await request.get(`${path}/state`)).status()).toBe(404);
+  // The cookie belongs to this link's address alone: at any other the guest is a stranger.
+  await guest.goto(`/guest/${"0".repeat(64)}`);
+  await expect(guest.getByRole("heading", { name: "This link isn't working" })).toBeVisible();
+  expect((await guest.request.get(`/guest/${"0".repeat(64)}/state`)).status()).toBe(404);
+  await guest.goto("/app/movie-night");
+  await expect(guest).toHaveURL(/\/login/);
+  await guest.goto(link);
+  await expect(guest.getByRole("heading", { name: "Leaderboard" })).toBeVisible();
+
+  // Leaving takes the guest's name, votes and cookie with them.
+  await guest.getByRole("button", { name: "Movie night menu" }).click();
+  await guest.getByRole("menuitem", { name: "Leave this movie night" }).click();
+  await expect(guest.getByRole("heading", { name: "You left the movie night" })).toBeVisible();
+  expect((await guest.context().cookies()).some((c) => c.name === "famflix_guest")).toBe(false);
+  expect((await admin.from("movie_night_guests").select("id").eq("night_id", nightId)).data).toEqual([]);
+  await expect(personIn(anaPage, "Zoe")).toHaveCount(0, { timeout: 30_000 });
+  await expect(rows(anaPage)).toHaveCount(0);
+
+  await closeAll([...pages, guest]);
+});
+
+test("the family keeps control of the link, and a guest hears when the night is over", async ({ browser }, testInfo) => {
+  test.setTimeout(400_000);
+  const { pages } = await makeFamily(browser, testInfo.project, "Control Crew", ["Ana", "Ben"]);
+  const [anaPage, benPage] = pages;
+  const cara = await openAs(browser, testInfo.project, await createUser("Cara"));
+  const keys = testInfo.project.name === "desktop";
+  await startNight(anaPage, "Control Crew");
+  const nightId = anaPage.url().split("/").pop()!;
+  const link = await inviteLink(anaPage);
+  const guests = async () => ((await admin.from("movie_night_guests").select("name").eq("night_id", nightId)).data ?? []).map((g) => g.name);
+
+  const zoe = await openAnonymous(browser, testInfo.project);
+  await joinAs(zoe, link, "Zoe");
+  await vote(zoe, "yes", keys);
+  expect(await guests()).toEqual(["Zoe"]);
+
+  // A signed-in member who opens the link is offered the night in the app; somebody from another family is not.
+  await benPage.goto(link);
+  await expect(benPage.getByRole("heading", { name: "Control Crew's movie night" })).toBeVisible();
+  await benPage.getByRole("link", { name: "Open the night in the app" }).click();
+  await expect(benPage).toHaveURL(new RegExp(`/app/movie-night/${nightId}$`));
+  await cara.goto(link);
+  await expect(cara.getByRole("heading", { name: "Control Crew's movie night" })).toBeVisible();
+  await expect(cara.getByRole("link", { name: "Open the night in the app" })).toHaveCount(0);
+
+  // Anyone in the family can take a guest out; the guest is told on their next check, and with the link still on they
+  // could join again.
+  await finishStack(anaPage);
+  await anaPage.getByRole("button", { name: "Take Zoe out of this movie night" }).click();
+  await expect(personIn(anaPage, "Zoe")).toHaveCount(0);
+  await expect(zoe.getByRole("heading", { name: "You're not in this movie night any more" })).toBeVisible({ timeout: 30_000 });
+  await zoe.reload();
+  await expect(zoe.getByRole("heading", { name: "Control Crew's movie night" })).toBeVisible();
+  await joinAs(zoe, link, "Zoe");
+  expect(await guests()).toEqual(["Zoe"]);
+
+  // A new link stops the old one for anybody new, and a guest who is in carries on with the address they have.
+  const newer = await inviteLink(anaPage, "New link");
+  expect(newer).not.toBe(link);
+  const late = await openAnonymous(browser, testInfo.project);
+  await late.goto(link);
+  await expect(late.getByRole("heading", { name: "This link isn't working" })).toBeVisible();
+  await late.goto(newer);
+  await expect(late.getByRole("heading", { name: "Control Crew's movie night" })).toBeVisible();
+  await zoe.reload();
+  await expect(topCard(zoe)).toBeVisible();
+
+  // Turned off, nobody new gets in either; the guest who is in still is.
+  await inviteLink(anaPage, "Turn off link");
+  await late.goto(newer);
+  await expect(late.getByRole("heading", { name: "This link isn't working" })).toBeVisible();
+  await zoe.reload();
+  await expect(topCard(zoe)).toBeVisible();
+
+  // When the night ends the guest is thanked, and the link says nothing else.
+  await anaPage.getByRole("button", { name: "Movie night menu" }).click();
+  await anaPage.getByRole("menuitem", { name: "Cancel movie night" }).click();
+  await expect(anaPage.getByText(/cancelled this movie night/)).toBeVisible();
+  await expect(zoe.getByRole("heading", { name: "This movie night is over" })).toBeVisible({ timeout: 30_000 });
+  await expect(zoe.getByText("Thanks for voting!")).toBeVisible();
+  await zoe.reload();
+  await expect(zoe.getByRole("heading", { name: "This movie night is over" })).toBeVisible();
+  await late.goto(link);
+  await expect(late.getByRole("heading", { name: "This link isn't working" })).toBeVisible();
+
+  await closeAll([...pages, cara, zoe, late]);
 });

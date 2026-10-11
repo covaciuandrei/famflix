@@ -8,8 +8,8 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   addNightTitle,
   addTopTitles,
+  type ActionResult,
   cancelNight,
-  finishStack,
   joinNight,
   pickCard,
   pickTitle,
@@ -17,6 +17,7 @@ import {
   requestMoreStack,
   revealNight,
 } from "@/app/app/movie-night/actions";
+import { GuestMessage } from "@/components/guest/guest-message";
 import { GuestLinkDialog } from "@/components/movie-night/guest-link-dialog";
 import { Leaderboard, type RowActions } from "@/components/movie-night/leaderboard";
 import { NightHeader } from "@/components/movie-night/night-header";
@@ -25,6 +26,7 @@ import { ProgressStrip, WatchedBy } from "@/components/movie-night/progress-stri
 import { SharePick } from "@/components/movie-night/share-pick";
 import { SwipeDeck } from "@/components/movie-night/swipe-deck";
 import { TitleSearchDialog } from "@/components/movie-night/title-search-dialog";
+import { memberTransport, type NightTransport } from "@/components/movie-night/transport";
 import { useNightState } from "@/components/movie-night/use-night-state";
 import { useVoteQueue } from "@/components/movie-night/use-vote-queue";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -49,6 +51,9 @@ const POLL_MS = 6000;
 // buttons (the title row is a little shorter on a phone while swiping, see NightHeader's `compact`).
 const ROOM_STACK_HEIGHT =
   "h-[clamp(18rem,calc(100dvh-20.3rem),38rem)] sm:h-[clamp(22rem,calc(100dvh-21.4rem),38rem)]";
+// A guest's page has no bottom bar on a phone, which gives the stack that much more room.
+const GUEST_STACK_HEIGHT =
+  "h-[clamp(18rem,calc(100dvh-16.3rem),38rem)] sm:h-[clamp(22rem,calc(100dvh-21.4rem),38rem)]";
 
 /** Done with every stack that is still open for voting (once the results are shown, nobody has anything left). */
 function isDone(member: MemberProgress, state: NightState): boolean {
@@ -58,12 +63,29 @@ function isDone(member: MemberProgress, state: NightState): boolean {
   return open.every((s) => member.stacks.find((m) => m.stack_id === s.id)?.finished);
 }
 
-/** One night, for one person: swipe a stack, then see how the family is voting. */
-export function Room({ initial }: { initial: NightState }) {
+/**
+ * One night, for one person: swipe a stack, then see how the family is voting. A family member sees it all; a guest
+ * (`initial.viewer`), who reaches the server through their own `transport`, only swipes and sees the leaderboard, and
+ * can leave (`onLeave`).
+ */
+export function Room({
+  initial,
+  transport,
+  onLeave,
+}: {
+  initial: NightState;
+  transport?: NightTransport;
+  onLeave?: () => Promise<ActionResult>;
+}) {
   const router = useRouter();
-  const { state, refresh, gone } = useNightState(initial, POLL_MS);
+  const isGuest = initial.viewer === "guest";
+  const nightId = initial.night.id;
+  const tx = useMemo(() => transport ?? memberTransport(nightId), [transport, nightId]);
+  const { state, refresh, gone } = useNightState(initial, POLL_MS, tx.stateUrl);
   const { night, stacks, members, me } = state;
   const isOpen = night.status === "open";
+  // What only the family can do with a night that is open.
+  const canAct = isOpen && !isGuest;
 
   // Which stack I'm swiping (null: looking at the leaderboard). Starts on the first one I haven't finished.
   const [swipingId, setSwipingId] = useState<string | null>(
@@ -90,11 +112,11 @@ export function Room({ initial }: { initial: NightState }) {
   const swipingStack = isOpen
     ? (stacks.find((s) => s.id === swipingId && !s.my_finished && !s.revealed) ?? null)
     : null;
-  const { votes, setVote, flush, problem } = useVoteQueue(initial.my_votes);
+  const { votes, setVote, flush, problem } = useVoteQueue(initial.my_votes, tx.castVotes);
 
   // Taking part: someone who opens the night is on its list, even before the first swipe.
   const join = useEffectEvent(() => {
-    if (isOpen && !members.find((m) => m.user_id === me)?.joined) void joinNight(night.id);
+    if (canAct && !members.find((m) => m.user_id === me)?.joined) void joinNight(night.id);
   });
   useEffect(() => {
     join();
@@ -127,7 +149,7 @@ export function Room({ initial }: { initial: NightState }) {
       setFinishing(false);
     };
     if (!(await flush())) return stop(); // the problem is shown; the button tries again
-    const res = await finishStack(stackId);
+    const res = await tx.finishStack(stackId);
     if (res.error) {
       setMessage(res.error);
       return stop();
@@ -210,6 +232,15 @@ export function Room({ initial }: { initial: NightState }) {
     else await refresh(true);
   }
 
+  /** A guest takes their name and votes out of the night. */
+  async function leave() {
+    if (!onLeave) return;
+    if (!window.confirm("Leave this movie night? Your name and votes are removed from it.")) return;
+    setMessage(null);
+    const res = await onLeave();
+    if (res.error) setMessage(res.error);
+  }
+
   /** Takes a guest out of the night, with their votes. */
   async function takeOut(guest: MemberProgress) {
     if (!window.confirm(`Take ${guest.name} out of this movie night? Their votes are removed too.`)) return;
@@ -232,6 +263,7 @@ export function Room({ initial }: { initial: NightState }) {
     router.refresh();
   }
 
+  if (gone && isGuest) return <GuestMessage kind={gone === "over" ? "over" : "out"} />;
   if (gone) {
     return (
       <div role="alert" className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
@@ -251,13 +283,13 @@ export function Room({ initial }: { initial: NightState }) {
   const waiting = isOpen ? stacks.find((s) => !s.my_finished && !s.revealed && s.id !== swipingStack?.id) : undefined;
   const resultsShownOnMe = isOpen && swipingId !== null && !swipingStack;
   // Another stack can be asked for by anyone who sees the leaderboard, once they've swiped the ones already there.
-  const canAddMore = isOpen && !waiting && stacks.length < MAX_STACKS && stacks.some((s) => s.can_see_results);
-  const someoneStillSwiping = isOpen && members.some((m) => !isDone(m, state));
-  const pickCandidate = isOpen && pickId ? state.candidates.find((c) => c.id === pickId) : undefined;
+  const canAddMore = canAct && !waiting && stacks.length < MAX_STACKS && stacks.some((s) => s.can_see_results);
+  const someoneStillSwiping = canAct && members.some((m) => !isDone(m, state));
+  const pickCandidate = canAct && pickId ? state.candidates.find((c) => c.id === pickId) : undefined;
   const actions: RowActions = {
     familyName: night.group_name,
-    onPick: isOpen ? setPickId : undefined,
-    onAdd: addTitle,
+    onPick: canAct ? setPickId : undefined,
+    onAdd: isGuest ? undefined : addTitle,
     onMoreLike: canAddMore ? moreSuggestions : undefined,
     busy,
   };
@@ -288,16 +320,17 @@ export function Room({ initial }: { initial: NightState }) {
     <div className={cn("flex flex-col gap-4", swipingStack && "max-sm:-mt-2 max-sm:-mb-8 max-sm:gap-1.5")}>
       <NightHeader
         night={night}
-        canAct={isOpen}
         compact={Boolean(swipingStack)}
+        backHref={isGuest ? undefined : `/app/movie-night?who=${night.group_id}`}
         onBoard={swipingStack && stacks.some((s) => s.can_see_results) ? peekAtBoard : undefined}
-        onReveal={reveal}
-        onPickOther={() => setSearching(true)}
-        onInvite={() => setInviting(true)}
-        onCancel={cancel}
+        onReveal={canAct ? reveal : undefined}
+        onPickOther={canAct ? () => setSearching(true) : undefined}
+        onInvite={canAct ? () => setInviting(true) : undefined}
+        onCancel={canAct ? cancel : undefined}
+        onLeave={isGuest && onLeave ? leave : undefined}
       />
 
-      {ended && (
+      {ended && !isGuest && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm">
           {ended}
           <div className="flex flex-wrap items-center gap-2">
@@ -343,7 +376,8 @@ export function Room({ initial }: { initial: NightState }) {
             onSkip={finish}
             finishText={finishing ? "Saving your votes…" : "That was the last one."}
             finishButton="See the leaderboard"
-            heightClass={ROOM_STACK_HEIGHT}
+            heightClass={isGuest ? GUEST_STACK_HEIGHT : ROOM_STACK_HEIGHT}
+            guest={isGuest}
           />
           {problem && (
             <p role="alert" className="mt-2 text-sm text-destructive">
@@ -358,7 +392,7 @@ export function Room({ initial }: { initial: NightState }) {
             {night.status === "closed" ? (
               <WatchedBy members={members} meId={me} />
             ) : (
-              <ProgressStrip members={members} stacks={stacks} meId={me} onRemoveGuest={isOpen ? takeOut : undefined} />
+              <ProgressStrip members={members} stacks={stacks} meId={me} onRemoveGuest={canAct ? takeOut : undefined} />
             )}
             {someoneStillSwiping && (
               <button
@@ -388,14 +422,14 @@ export function Room({ initial }: { initial: NightState }) {
                   <h2 id="board-title" className="text-lg font-semibold">
                     Leaderboard
                   </h2>
-                  {isOpen && (
+                  {canAct && (
                     <p className="text-xs text-muted-foreground">
                       When you pick one, the {TOP_TITLES} best titles join {night.group_name}&apos;s list.
                     </p>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {isOpen && (
+                  {canAct && (
                     <Button size="sm" variant="outline" onClick={() => setSearching(true)} disabled={busy !== null}>
                       <Search className="size-3.5" />
                       Pick something else
@@ -415,7 +449,7 @@ export function Room({ initial }: { initial: NightState }) {
                 <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                   {stacks.some((s) => s.can_see_results)
                     ? "Nobody has voted yet."
-                    : "Finish swiping to see how the family is voting."}
+                    : "Finish swiping to see how everyone is voting."}
                 </p>
               )}
             </section>
@@ -435,10 +469,10 @@ export function Room({ initial }: { initial: NightState }) {
           onClose={() => setPickId(null)}
         />
       )}
-      {isOpen && inviting && (
+      {canAct && inviting && (
         <GuestLinkDialog nightId={night.id} groupName={night.group_name} onClose={() => setInviting(false)} />
       )}
-      {isOpen && searching && (
+      {canAct && searching && (
         <TitleSearchDialog
           onSelect={(item) => {
             setSearching(false);
@@ -447,7 +481,7 @@ export function Room({ initial }: { initial: NightState }) {
           onClose={() => setSearching(false)}
         />
       )}
-      {isOpen && otherTitle && (
+      {canAct && otherTitle && (
         <PickDialog
           groupName={night.group_name}
           title={otherTitle.title}

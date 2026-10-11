@@ -9,10 +9,10 @@ import { buildFamilyCandidates, type LikeTitle } from "@/lib/deck";
 import {
   cardKey,
   MAX_STACKS,
-  MAX_VOTES_PER_SAVE,
   movieNightMood,
   nightMood,
   parseMood,
+  validVotes,
   type Vote,
 } from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
@@ -31,8 +31,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_VIEWERS = 50;
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
-
-const VOTE_WORDS = new Set<string>(["nope", "yes", "love", "seen"]);
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -136,15 +134,7 @@ export async function castVotes(
   votes: { candidateId: string; vote: Vote | null }[],
 ): Promise<ActionResult & { loves?: number }> {
   const { supabase } = await requireUser();
-  if (
-    !UUID.test(String(stackId)) ||
-    !Array.isArray(votes) ||
-    votes.length === 0 ||
-    votes.length > MAX_VOTES_PER_SAVE ||
-    !votes.every((v) => v && UUID.test(String(v.candidateId)) && (v.vote === null || VOTE_WORDS.has(String(v.vote))))
-  ) {
-    return { error: "Those votes aren't valid." };
-  }
+  if (!UUID.test(String(stackId)) || !validVotes(votes)) return { error: "Those votes aren't valid." };
   const { data, error } = await supabase.rpc("cast_movie_night_votes", {
     p_stack: stackId,
     p_votes: votes.map((v) => ({ candidate_id: v.candidateId, vote: v.vote })),

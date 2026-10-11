@@ -2159,7 +2159,7 @@ begin
         'stack_id', c.stack_id,
         'position', c.position,
         'origin', c.origin,
-        'list_item_id', c.list_item_id,
+        'list_item_id', case when p_guest then null else c.list_item_id end,
         'media_id', m.id,
         'tmdb_id', m.tmdb_id,
         'media_type', m.media_type,
@@ -2724,8 +2724,9 @@ begin
 end;
 $$;
 
--- Server: what a link's page may say before anyone has joined: whether the night is open, whose it is, and whether it
--- has all the guests it takes.
+-- Server: what a link's page may say before anyone has joined: whether the night is open, whose it is (the page tells
+-- the night's id only to a signed-in member of that family, who can open the night in the app), and whether it has all
+-- the guests it takes.
 create function public.guest_link_info(p_token text)
 returns jsonb
 language plpgsql
@@ -2740,6 +2741,7 @@ begin
   end if;
   return jsonb_build_object(
     'open', true,
+    'night_id', v_night,
     'family_name', (select g.name from public.movie_nights n join public.groups g on g.id = n.group_id where n.id = v_night),
     'full', (select count(*) from public.movie_night_guests where night_id = v_night) >= 10
   );

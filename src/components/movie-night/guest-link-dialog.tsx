@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
-import { guestPath } from "@/lib/movie-night";
+import { guestPath, MAX_GUESTS } from "@/lib/movie-night";
 
 type LinkState =
   | { state: "loading" }
@@ -125,8 +125,8 @@ export function GuestLinkDialog({
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Anyone with this link can join {groupName}&apos;s movie night with just a name, no account needed, and swipe
-        the same cards. They only see the cards and the leaderboard, nothing else. The link stops working when the
-        night is over.
+        the same cards. They only see the cards and the leaderboard, nothing else. A night takes up to {MAX_GUESTS}
+        guests, and the link stops working when the night is over.
       </p>
 
       {link.state === "loading" && (

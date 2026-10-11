@@ -19,11 +19,14 @@ export function SwipeCardFace({
   card,
   priority,
   onInfo,
+  listLabel = "From your list",
 }: {
   card: DeckCard;
   /** The top card's poster loads first, and the next one with it so it is ready after a swipe. */
   priority: boolean;
   onInfo?: () => void;
+  /** What a card from a list says (a guest has no list of their own). */
+  listLabel?: string;
 }) {
   const poster = tmdbImage(card.posterPath, "w500");
   const facts = [
@@ -82,7 +85,7 @@ export function SwipeCardFace({
       </div>
 
       <span className="absolute top-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white">
-        {card.origin === "list" ? "From your list" : "Suggested"}
+        {card.origin === "list" ? listLabel : "Suggested"}
       </span>
       {onInfo && (
         <button

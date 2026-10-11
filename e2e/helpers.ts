@@ -110,15 +110,11 @@ export function firstCard(page: Page, row: string): Locator {
     .first();
 }
 
-/** A browser window for one signed-in person, sized like the project's screen (a computer or a phone). */
-export async function openAs(
-  browser: Browser,
-  project: TestInfo["project"],
-  user: TestUser,
-): Promise<Page> {
+/** A browser context sized like the project's screen (a computer or a phone), with nobody signed in. */
+async function newContext(browser: Browser, project: TestInfo["project"]): Promise<BrowserContext> {
   const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, baseURL } =
     project.use;
-  const context = await browser.newContext({
+  return browser.newContext({
     viewport,
     userAgent,
     deviceScaleFactor,
@@ -126,8 +122,22 @@ export async function openAs(
     hasTouch,
     baseURL,
   });
+}
+
+/** A browser window for one signed-in person, sized like the project's screen (a computer or a phone). */
+export async function openAs(
+  browser: Browser,
+  project: TestInfo["project"],
+  user: TestUser,
+): Promise<Page> {
+  const context = await newContext(browser, project);
   await signIn(context, user);
   return context.newPage();
+}
+
+/** A browser window for someone who isn't signed in at all, like a guest who got a link. */
+export async function openAnonymous(browser: Browser, project: TestInfo["project"]): Promise<Page> {
+  return (await newContext(browser, project)).newPage();
 }
 
 /** The owner starts a family and the others join it with its invite code. */

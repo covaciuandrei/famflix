@@ -17,9 +17,12 @@ import type { DeckCard } from "@/lib/movie-night";
 export function CardInfoSheet({
   card,
   onClose,
+  titlePage = true,
 }: {
   card: DeckCard | null;
   onClose: () => void;
+  /** Offer the title's page in the app (a guest has no account to open it with). */
+  titlePage?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -111,15 +114,17 @@ export function CardInfoSheet({
             />
           )}
 
-          <a
-            href={`/app/media/${card.mediaType}/${card.tmdbId}`}
-            target="_blank"
-            rel="noopener"
-            className="inline-flex items-center gap-1.5 self-start text-sm text-primary underline-offset-2 hover:underline"
-          >
-            Open the title page
-            <ExternalLink className="size-4" />
-          </a>
+          {titlePage && (
+            <a
+              href={`/app/media/${card.mediaType}/${card.tmdbId}`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1.5 self-start text-sm text-primary underline-offset-2 hover:underline"
+            >
+              Open the title page
+              <ExternalLink className="size-4" />
+            </a>
+          )}
         </div>
       )}
     </dialog>

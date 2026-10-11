@@ -79,6 +79,14 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   deleted from it. Without a family the page points to creating or joining one,
   and to Discover for swiping on your own. The old shuffle of what's left to
   watch is still there under "Browse your To watch list".
+- **Guests**: someone without an account can vote in one movie night. Any
+  member opens the night's menu → **Invite a guest** and shares the link (copy
+  or share, **New link** to replace it, **Turn off link**). The guest opens it
+  anywhere, gives a name, and swipes the same cards and sees the leaderboard;
+  they can't pick, cancel, invite or see anything else of FamFlix or the
+  family. Guests show in the people list marked Guest (any member can take one
+  out) and their votes count like everyone's. The link stops working when the
+  night is over. A night takes 10 guests, with names of up to 30 characters.
 - **Activity feed**: see what happened in each family; removed titles can be
   restored for 30 days.
 - **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can
@@ -129,7 +137,8 @@ Fill in:
 | `TMDB_ACCESS_TOKEN`             | TMDB → Settings → API → **API Read Access Token** (v4 auth) |
 
 `SUPABASE_SERVICE_ROLE_KEY` stays on the server. It lets the app save movie info,
-which signed-in users can't write themselves, and it can do anything in your
+which signed-in users can't write themselves, and speak for movie night guests
+(who have no account, see `src/lib/guest.ts`), and it can do anything in your
 database: never put it in a `NEXT_PUBLIC_` variable, never commit it.
 
 ## 3. Set up the database
@@ -193,8 +202,8 @@ create a family or join one with an invite code.
   PostgreSQL 17 installed, or `PGHOST` pointing at a server where they may
   create a database.
 - `npm run test:e2e`: the browser tests in `e2e/` (signing in, adding titles,
-  watched together, movie nights from the invite to the pick, deleting an
-  account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
+  watched together, movie nights from the invite to the pick, guests joining
+  with a link, deleting an account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
   (`supabase/config.toml`) built from `db_init.sql` the way a new project is (nothing granted by default),
   never the live one.
   `npx supabase stop` shuts it down afterwards.
@@ -229,7 +238,9 @@ limits and troubleshooting.
 
 - `src/app`: pages and routes. Signed-in pages live under `src/app/app`;
   server actions are in `src/app/app/actions.ts` (movie night's are in
-  `src/app/app/movie-night/actions.ts`).
+  `src/app/app/movie-night/actions.ts`). A movie night guest's link opens
+  `src/app/guest/[token]`, outside the signed-in area, with its own state
+  route, actions and cookie.
 - `src/components`: UI components.
 - `src/lib`: data loading (`data.ts`), the TMDB client, Supabase clients and
   the theme helpers.

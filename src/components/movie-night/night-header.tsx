@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, EyeIcon, ListOrdered, MoreVertical, Popcorn, Search, UserPlus, XCircle } from "lucide-react";
+import { ArrowLeft, EyeIcon, ListOrdered, LogOut, MoreVertical, Popcorn, Search, UserPlus, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -9,31 +9,36 @@ import type { NightInfo } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
 
 /**
- * The title of a night and, while it is open, a menu to show the results now, pick a title yourself, invite a guest
- * or cancel it (any member can). `compact` (while swiping) takes less room on a phone, where every pixel goes to the
- * card: the family's name moves up beside the title and the line under it goes.
+ * The title of a night and a menu with what can be done with it: every item is there when its handler is. A member of
+ * a night that is open can show the results now, pick a title themselves, invite a guest or cancel it; a guest can
+ * leave. `compact` (while swiping) takes less room on a phone, where every pixel goes to the card: the family's name
+ * moves up beside the title and the line under it goes.
  */
 export function NightHeader({
   night,
-  canAct,
   compact = false,
+  backHref,
   onBoard,
   onReveal,
   onPickOther,
   onInvite,
   onCancel,
+  onLeave,
 }: {
   night: NightInfo;
-  canAct: boolean;
   compact?: boolean;
+  /** Where "Back" goes: the family's Movie night page. A guest has no app to go back to. */
+  backHref?: string;
   /** Offered while swiping, when there is a leaderboard to look at first. */
   onBoard?: () => void;
-  onReveal: () => void;
+  onReveal?: () => void;
   /** Search for any title and end the night with it. */
-  onPickOther: () => void;
+  onPickOther?: () => void;
   /** Open the window with the night's guest link. */
-  onInvite: () => void;
-  onCancel: () => void;
+  onInvite?: () => void;
+  onCancel?: () => void;
+  /** A guest takes their name and votes out of the night. */
+  onLeave?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -104,67 +109,82 @@ export function NightHeader({
                 See the leaderboard
               </button>
             )}
-            {canAct && (
-              <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={item}
-                  onClick={() => {
-                    setOpen(false);
-                    onReveal();
-                  }}
-                >
-                  <EyeIcon className="size-4" />
-                  Show results now
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={item}
-                  onClick={() => {
-                    setOpen(false);
-                    onPickOther();
-                  }}
-                >
-                  <Search className="size-4" />
-                  Pick something else
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={item}
-                  onClick={() => {
-                    setOpen(false);
-                    onInvite();
-                  }}
-                >
-                  <UserPlus className="size-4" />
-                  Invite a guest
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={cn(item, "text-destructive")}
-                  onClick={() => {
-                    setOpen(false);
-                    onCancel();
-                  }}
-                >
-                  <XCircle className="size-4" />
-                  Cancel movie night
-                </button>
-              </>
+            {onReveal && (
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                onClick={() => {
+                  setOpen(false);
+                  onReveal();
+                }}
+              >
+                <EyeIcon className="size-4" />
+                Show results now
+              </button>
             )}
-            <Link
-              role="menuitem"
-              href={`/app/movie-night?who=${night.group_id}`}
-              className={item}
-              onClick={() => setOpen(false)}
-            >
-              <ArrowLeft className="size-4" />
-              Back to Movie night
-            </Link>
+            {onPickOther && (
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                onClick={() => {
+                  setOpen(false);
+                  onPickOther();
+                }}
+              >
+                <Search className="size-4" />
+                Pick something else
+              </button>
+            )}
+            {onInvite && (
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                onClick={() => {
+                  setOpen(false);
+                  onInvite();
+                }}
+              >
+                <UserPlus className="size-4" />
+                Invite a guest
+              </button>
+            )}
+            {onCancel && (
+              <button
+                type="button"
+                role="menuitem"
+                className={cn(item, "text-destructive")}
+                onClick={() => {
+                  setOpen(false);
+                  onCancel();
+                }}
+              >
+                <XCircle className="size-4" />
+                Cancel movie night
+              </button>
+            )}
+            {onLeave && (
+              <button
+                type="button"
+                role="menuitem"
+                className={cn(item, "text-destructive")}
+                onClick={() => {
+                  setOpen(false);
+                  onLeave();
+                }}
+              >
+                <LogOut className="size-4" />
+                Leave this movie night
+              </button>
+            )}
+            {backHref && (
+              <Link role="menuitem" href={backHref} className={item} onClick={() => setOpen(false)}>
+                <ArrowLeft className="size-4" />
+                Back to Movie night
+              </Link>
+            )}
           </div>
         )}
       </div>

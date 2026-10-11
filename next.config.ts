@@ -32,7 +32,18 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // A guest link is a secret: it mustn't be indexed or travel to other sites in a Referer header (a later entry
+      // overrides an earlier one for the same header).
+      {
+        source: "/guest/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+    ];
   },
 };
 

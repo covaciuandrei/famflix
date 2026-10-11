@@ -48,6 +48,13 @@ export default function PrivacyPage() {
             list.
           </li>
           <li>
+            <strong className="text-foreground">Guests:</strong> a family can
+            invite someone to vote in one movie night with a link, without an
+            account. That person gives a name, which is kept with their votes
+            in that night and shown to the family. FamFlix keeps nothing else
+            about them.
+          </li>
+          <li>
             <strong className="text-foreground">Counters:</strong> how often
             you add titles, search, try invite codes or start movie nights,
             kept for a day, to stop abuse.
@@ -73,6 +80,12 @@ export default function PrivacyPage() {
             Your votes in a family movie night stay private while you swipe.
             Once you finish a stack (or someone shows the results early), the
             other members of the family see them next to your name.
+          </li>
+          <li>
+            A guest&apos;s name and votes are shown to the members of the
+            family whose night it is, and to the other people in that night. A
+            guest sees that one night (its titles, who is taking part and the
+            votes), never the family&apos;s lists or history.
           </li>
           <li>
             FamFlix doesn&apos;t sell your data, show ads, or use analytics or
@@ -115,9 +128,11 @@ export default function PrivacyPage() {
       <Section title="Cookies and browser storage">
         <p>
           FamFlix only uses the cookies needed to keep you signed in, so it
-          doesn&apos;t ask for cookie consent. Your browser also remembers two
-          settings for FamFlix: your theme and whether you&apos;ve seen the
-          welcome tour. These stay on your device.
+          doesn&apos;t ask for cookie consent. A guest of a movie night, who
+          has no account, gets one cookie that only lets them back into that
+          night, for up to a day. Your browser also remembers two settings for
+          FamFlix: your theme and whether you&apos;ve seen the welcome tour.
+          These stay on your device.
         </p>
       </Section>
 
@@ -138,6 +153,15 @@ export default function PrivacyPage() {
           too; the nights themselves stay in the family&apos;s history. If
           database backups are kept, deleted data drops out of them within 7
           days.
+        </p>
+        <p>
+          <strong className="text-foreground">Guests:</strong> a guest can
+          leave a movie night from its menu, which deletes their name and votes
+          at once, and any member of the family can take a guest out while the
+          night is going. Once a night is over, a guest&apos;s name and votes
+          stay with it in the family&apos;s history, until the night or the
+          family is deleted; to have them removed sooner, write to{" "}
+          <ContactLink />.
         </p>
       </Section>
 

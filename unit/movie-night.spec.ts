@@ -7,9 +7,12 @@ import {
   deckOrder,
   DEFAULT_MOOD,
   groupVotes,
+  GUEST_SECRET,
   guestPath,
   isSwipingPath,
+  isUuid,
   MAX_GENRES,
+  MAX_VOTES_PER_SAVE,
   moodParams,
   MOODS,
   movieNightMood,
@@ -20,6 +23,7 @@ import {
   personLabel,
   POINTS,
   type NightInfo,
+  validVotes,
 } from "../src/lib/movie-night";
 
 const movie = (id: number) => ({ mediaType: "movie" as const, tmdbId: id });
@@ -237,6 +241,53 @@ test.describe("personLabel", () => {
 
 test("a guest link lives under /guest and holds nothing but the token", () => {
   expect(guestPath("ab12")).toBe("/guest/ab12");
+});
+
+test("a guest's link token and secret are 64 lower-case hex characters, and nothing else passes", () => {
+  const good = "0123456789abcdef".repeat(4);
+  expect(GUEST_SECRET.test(good)).toBe(true);
+  for (const bad of [good.slice(1), `${good}0`, good.toUpperCase(), `${good.slice(1)}g`, ` ${good}`, `${good}\n`, "", "../etc"]) {
+    expect(GUEST_SECRET.test(bad), JSON.stringify(bad)).toBe(false);
+  }
+});
+
+test.describe("validVotes", () => {
+  const id = "0b9a1c7e-0d3f-4a52-8f1a-3c2d4e5f6a7b";
+
+  test("takes one to the most a save allows, of the four votes or null to take one back", () => {
+    expect(validVotes([{ candidateId: id, vote: "love" }])).toBe(true);
+    expect(validVotes(["nope", "yes", "love", "seen", null].map((vote) => ({ candidateId: id, vote })))).toBe(true);
+    expect(validVotes(Array.from({ length: MAX_VOTES_PER_SAVE }, () => ({ candidateId: id, vote: "yes" })))).toBe(true);
+  });
+
+  test("refuses nothing, too many, or anything that is not a card with a vote", () => {
+    expect(validVotes([])).toBe(false);
+    expect(validVotes(Array.from({ length: MAX_VOTES_PER_SAVE + 1 }, () => ({ candidateId: id, vote: "yes" })))).toBe(false);
+    for (const bad of [
+      null,
+      undefined,
+      "yes",
+      {},
+      [null],
+      ["yes"],
+      [{ candidateId: id }],
+      [{ candidateId: id, vote: "maybe" }],
+      [{ candidateId: id, vote: "LOVE" }],
+      [{ candidateId: id, vote: 1 }],
+      [{ candidateId: "not-an-id", vote: "yes" }],
+      [{ candidateId: 7, vote: "yes" }],
+      [{ vote: "yes" }],
+      [{ candidateId: id, vote: "yes" }, { candidateId: id, vote: "nope" }, null],
+    ]) {
+      expect(validVotes(bad), JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  test("an id is a UUID", () => {
+    expect(isUuid(id)).toBe(true);
+    expect(isUuid(id.toUpperCase())).toBe(true);
+    for (const bad of [`${id}0`, id.slice(1), "", null, 5, `${id} `, id.replace(/-/g, "")]) expect(isUuid(bad)).toBe(false);
+  });
 });
 
 test.describe("what a night in progress offers", () => {

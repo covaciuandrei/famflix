@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { castVotes } from "@/app/app/movie-night/actions";
+import type { NightTransport } from "@/components/movie-night/transport";
 import type { Vote } from "@/lib/movie-night";
 
 /** Votes go out this long after the last swipe (or at 5 at once), and always when someone finishes or leaves. */
@@ -12,14 +12,15 @@ const BATCH = 50;
 const RETRY_MS = [2000, 4000, 8000, 15000];
 
 // What the server says when a night, or this stack, is no longer taking votes: retrying can't help.
-const OVER = /already (finished|picked|out)|was cancelled|ended after|not available/i;
+const OVER = /already (finished|picked|out)|was cancelled|ended after|is over|not available/i;
 
 /**
  * A person's votes in a night: shown at once, sent to the server in small batches in the background (so a swipe is
  * never a wait), and kept if the connection drops. Each stack's votes are sent to that stack, so moving between
- * stacks can't mix them up. `problem` says when a batch couldn't be sent (it is tried again).
+ * stacks can't mix them up. `problem` says when a batch couldn't be sent (it is tried again). `cast` is how a batch
+ * reaches the server (it must stay the same function between renders).
  */
-export function useVoteQueue(initial: Record<string, Vote>) {
+export function useVoteQueue(initial: Record<string, Vote>, cast: NightTransport["castVotes"]) {
   const [votes, setVotes] = useState<Record<string, Vote>>(initial);
   const [problem, setProblem] = useState<string | null>(null);
   // Not sent yet, by stack and then by card (null takes a vote back).
@@ -35,7 +36,7 @@ export function useVoteQueue(initial: Record<string, Vote>) {
           const batch = [...queue].slice(0, BATCH);
           let error: string | undefined;
           try {
-            error = (await castVotes(stackId, batch.map(([candidateId, vote]) => ({ candidateId, vote })))).error;
+            error = (await cast(stackId, batch.map(([candidateId, vote]) => ({ candidateId, vote })))).error;
           } catch {
             error = "You seem to be offline.";
           }
@@ -57,7 +58,7 @@ export function useVoteQueue(initial: Record<string, Vote>) {
       return true;
     });
     return chain.current;
-  }, []);
+  }, [cast]);
 
   const schedule = useCallback(
     (delay: number) => {

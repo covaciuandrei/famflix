@@ -234,7 +234,7 @@ export function Leaderboard({ state, actions }: { state: NightState; actions: Ro
           );
         })}
       </ol>
-      <CardInfoSheet card={info} onClose={() => setInfo(null)} />
+      <CardInfoSheet card={info} onClose={() => setInfo(null)} titlePage={state.viewer !== "guest"} />
     </>
   );
 }

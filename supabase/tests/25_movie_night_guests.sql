@@ -106,6 +106,8 @@ select test.expect_error($$insert into public.movie_night_guests (night_id, name
 :as_service
 select test.expect_eq(public.guest_link_info(test.t('gu_tok')) ->> 'open', 'true'::text, 'the link of an open night says so');
 select test.expect_eq(public.guest_link_info(test.t('gu_tok')) ->> 'family_name', 'Guest Fam'::text, 'and whose night it is');
+select test.expect_eq(public.guest_link_info(test.t('gu_tok')) ->> 'night_id', test.v('gu_a')::text, 'and which one (for the server, which only tells a member of that family)');
+select test.expect_eq(public.guest_link_info('not a link') ? 'night_id', false, 'but a link that does not work gives no night');
 select test.expect_eq(public.guest_link_info(test.t('gu_tok')) ->> 'full', 'false'::text, 'and that it has room');
 select test.expect_eq(public.guest_link_info('not a link') ->> 'open', 'false'::text, 'something that is not a link says nothing is open');
 select test.expect_eq(public.guest_link_info(repeat('0', 64)) ->> 'open', 'false'::text, 'and so does a link nobody has');
@@ -195,6 +197,24 @@ select test.expect_eq((select count(*) from jsonb_array_elements(public.guest_mo
 select test.expect_eq((select count(*) from jsonb_array_elements(public.guest_movie_night_state(test.t('gu_sec1')) -> 'results') r where (r ->> 'on_my_list')::boolean), 0::bigint, 'and nothing on My list');
 -- Guest 2 hasn't: nothing yet.
 select test.expect_eq(jsonb_array_length(public.guest_movie_night_state(test.t('gu_sec2')) -> 'results'), 0, 'one who has not finished sees no results yet');
+-- A card that came from the family's list: a guest sees where it came from but is given no id of the family's list
+-- entry, while a member is.
+reset role;
+begin;
+insert into public.list_items (group_id, added_by, media_id)
+  select test.v('gu_fam'), :mia::uuid, id from public.media where tmdb_id = 8951;
+update public.movie_night_candidates c
+  set origin = 'list',
+      list_item_id = (select li.id from public.list_items li where li.group_id = test.v('gu_fam') and li.media_id = c.media_id)
+  where c.id = test.gcand(8951);
+:as_service
+select test.expect_eq((select count(*) from jsonb_array_elements(public.guest_movie_night_state(test.t('gu_sec1'), true) -> 'candidates') c where c ->> 'origin' = 'list'), 1::bigint, 'a guest sees which card came from the family''s list');
+select test.expect_eq((select count(*) from jsonb_array_elements(public.guest_movie_night_state(test.t('gu_sec1'), true) -> 'candidates') c where c -> 'list_item_id' <> 'null'::jsonb), 0::bigint, 'but is given no list item id');
+:as_mia
+select test.expect_eq((select count(*) from jsonb_array_elements(public.movie_night_state(test.v('gu_a'), true) -> 'candidates') c where c -> 'list_item_id' <> 'null'::jsonb), 1::bigint, 'where a member is given it');
+reset role;
+rollback;
+:as_service
 select test.expect_eq((public.guest_movie_night_state(test.t('gu_sec2')) -> 'stacks' -> 0 ->> 'my_voted')::integer, 2, 'only their own votes count as theirs');
 
 -- ---- What the family sees --------------------------------------------------------------------------------------------

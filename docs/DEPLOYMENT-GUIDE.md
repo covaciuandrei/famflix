@@ -518,7 +518,7 @@ steps is still useful for learning.
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Identifies the Supabase API endpoint | Local file, GitHub build environment, Azure runtime settings |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser-compatible Supabase public/anon key | Same three places |
-| `SUPABASE_SERVICE_ROLE_KEY` | Lets the server, and only the server, save the shared movie info that signed-in users cannot write | Local file and Azure runtime settings. Not a GitHub secret (the build does not use it), never a `NEXT_PUBLIC_` variable |
+| `SUPABASE_SERVICE_ROLE_KEY` | Lets the server, and only the server, save the shared movie info that signed-in users cannot write, count requests for the abuse limits, delete accounts, and speak for movie night guests, who have no account | Local file and Azure runtime settings. Not a GitHub secret (the build does not use it), never a `NEXT_PUBLIC_` variable |
 | `TMDB_ACCESS_TOKEN` | Authorizes server calls to TMDB | Same three places, never exposed as a browser variable |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN` | Permits publishing to this SWA | GitHub Actions secret, not app runtime |
 | `GITHUB_TOKEN` | Temporary GitHub token automatically supplied to a workflow | Used by the workflow; no manually created repository secret needed |
@@ -533,11 +533,17 @@ It is **not** the powerful Supabase service-role key. Never substitute a
 service-role key into `NEXT_PUBLIC_SUPABASE_ANON_KEY`; RLS is essential to making
 public client access safe.
 
-FamFlix does use the service-role key, but only on the server and in one place:
-`src/lib/save-media.ts` saves TMDB data into the shared `media` table, which
-signed-in users have no right to write. The key skips row-level security, so keep
-it out of `NEXT_PUBLIC_` variables, Git, screenshots, and logs. If it leaks, create
-a new one in Supabase (Project Settings -> API Keys) and update the two places
+FamFlix does use the service-role key, but only on the server, through the one
+client made in `src/lib/supabase/admin.ts`: `src/lib/save-media.ts` saves TMDB
+data into the shared `media` table, which signed-in users have no right to write;
+`src/lib/rate-limit.ts` counts requests; deleting an account uses it; and
+`src/lib/guest.ts` speaks for movie night guests, who join through a link with no
+account. For guests it only calls six database functions that nobody but the
+service role may run, each of which checks the guest's own secret (a cookie only
+that link's pages receive) and that the night is still open (see "Movie night
+guests" in `supabase/db_init.sql`). The key skips row-level security, so keep it
+out of `NEXT_PUBLIC_` variables, Git, screenshots, and logs. If it leaks, create a
+new one in Supabase (Project Settings -> API Keys) and update the two places
 above.
 
 `TMDB_ACCESS_TOKEN` uses TMDB's long **API Read Access Token**, not its short API

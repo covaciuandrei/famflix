@@ -5,16 +5,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { NightState } from "@/lib/movie-night";
 
+/** Why a night can't be shown any more: it is over (a guest's link stops working then), or it is not theirs or gone. */
+export type Gone = false | "over" | "missing";
+
 /**
  * The room's copy of a night. It starts from what the server rendered and then keeps itself up to date: poll every
  * `pollMs` while the tab is visible (null stops polling), and `refresh()` after something changes. The light
- * answer has no cards, so when a stack has been added the cards are fetched too.
+ * answer has no cards, so when a stack has been added the cards are fetched too. `stateUrl` is where to ask (it must
+ * stay the same function between renders).
  */
-export function useNightState(initial: NightState, pollMs: number | null) {
-  const nightId = initial.night.id;
+export function useNightState(initial: NightState, pollMs: number | null, stateUrl: (full: boolean) => string) {
+  const guest = initial.viewer === "guest";
   const router = useRouter();
   const [state, setState] = useState(initial);
-  const [gone, setGone] = useState(false);
+  const [gone, setGone] = useState<Gone>(false);
   const stackCount = useRef(initial.stacks.length);
   // Answers can arrive out of order: only one to a newer request than the last one used is applied.
   const issued = useRef(0);
@@ -31,16 +35,20 @@ export function useNightState(initial: NightState, pollMs: number | null) {
         const request = ++issued.current;
         let res: Response;
         try {
-          res = await fetch(`/api/movie-night/${nightId}/state${full ? "?full=1" : ""}`, { cache: "no-store" });
+          res = await fetch(stateUrl(full), { cache: "no-store" });
         } catch {
           return null; // offline: the next poll tries again
         }
-        if (res.status === 401) {
+        if (res.status === 401 && !guest) {
           router.push("/login");
           return null;
         }
-        if (res.status === 404) {
-          setGone(true);
+        if (res.status === 410) {
+          setGone("over");
+          return null;
+        }
+        if (res.status === 404 || res.status === 401) {
+          setGone("missing");
           return null;
         }
         if (!res.ok) return null;
@@ -57,7 +65,7 @@ export function useNightState(initial: NightState, pollMs: number | null) {
       }
       return null;
     },
-    [nightId, router],
+    [stateUrl, guest, router],
   );
 
   useEffect(() => {

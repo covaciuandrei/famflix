@@ -38,8 +38,44 @@ export const INACTIVITY_HOURS = 12;
 /** On a pick, this many of the best titles join the family list. */
 export const TOP_TITLES = 7;
 export const HISTORY_PAGE = 20;
+/** A night takes this many guests at most, whose names are at most this long (the database says the same). */
+export const MAX_GUESTS = 10;
+export const GUEST_NAME_MAX = 30;
+/** A guest link's token and a guest's secret are both 256 random bits, as 64 hex characters. */
+export const GUEST_SECRET = /^[0-9a-f]{64}$/;
 /** Movies up to these lengths (in minutes) can be asked for. */
 export const RUNTIME_LIMITS = [100, 130] as const;
+
+// ---------------------------------------------------------------------------------------------------------------
+//  What a browser sends
+// ---------------------------------------------------------------------------------------------------------------
+
+const VOTE_WORDS: readonly string[] = ["nope", "yes", "love", "seen"];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whether `value` is the id of something in the database. */
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID.test(value);
+}
+
+/**
+ * Whether a batch of votes that comes from a browser is well formed: 1 to MAX_VOTES_PER_SAVE of them, each for a card
+ * with one of the four votes, or null to take a vote back. (The database checks all of it again.)
+ */
+export function validVotes(votes: unknown): votes is { candidateId: string; vote: Vote | null }[] {
+  return (
+    Array.isArray(votes) &&
+    votes.length > 0 &&
+    votes.length <= MAX_VOTES_PER_SAVE &&
+    votes.every(
+      (v) =>
+        v !== null &&
+        typeof v === "object" &&
+        isUuid((v as { candidateId?: unknown }).candidateId) &&
+        ((v as { vote?: unknown }).vote === null || VOTE_WORDS.includes(String((v as { vote?: unknown }).vote))),
+    )
+  );
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 //  Cards
@@ -322,6 +358,15 @@ export function groupVotes(votes: ResultRow["votes"], meId: string): { vote: Vot
 /** Where a night's guest link lives; the token is the secret part. */
 export function guestPath(token: string): string {
   return `/guest/${token}`;
+}
+
+/** What the page of a guest link may say before anyone has joined (guest_link_info in db_init.sql). */
+export interface GuestLinkInfo {
+  open: boolean;
+  /** Only for the server: it is told to nobody but a signed-in member of the family. */
+  night_id?: string;
+  family_name?: string;
+  full?: boolean;
 }
 
 /** What someone can do next with a night that is going: join it, carry on swiping, or look at how it is going. */

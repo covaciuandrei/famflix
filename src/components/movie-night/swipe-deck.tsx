@@ -104,6 +104,7 @@ export function SwipeDeck({
   autoFinish = true,
   finishExtra,
   heightClass = STACK_HEIGHT,
+  guest = false,
 }: {
   /** In the order they should be shown. */
   cards: DeckCard[];
@@ -130,6 +131,8 @@ export function SwipeDeck({
   finishExtra?: ReactNode;
   /** The stack's height; the default leaves room for the app's header and bottom bar plus one line above the stack. */
   heightClass?: string;
+  /** A guest of a night, who has no list and no app to open a title in. */
+  guest?: boolean;
 }) {
   const [index, setIndex] = useState(() => Math.min(Math.max(startAt, 0), cards.length));
   const [history, setHistory] = useState<number[]>([]);
@@ -393,7 +396,12 @@ export function SwipeDeck({
                 )}
                 style={style}
               >
-                <SwipeCardFace card={card} priority={pos < 2} onInfo={top ? () => setInfo(card) : undefined} />
+                <SwipeCardFace
+                  card={card}
+                  priority={pos < 2}
+                  onInfo={top ? () => setInfo(card) : undefined}
+                  listLabel={guest ? "From the family's list" : undefined}
+                />
               </div>
             );
           })}
@@ -413,7 +421,7 @@ export function SwipeDeck({
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
-      <CardInfoSheet card={info} onClose={() => setInfo(null)} />
+      <CardInfoSheet card={info} onClose={() => setInfo(null)} titlePage={!guest} />
     </div>
   );
 }
