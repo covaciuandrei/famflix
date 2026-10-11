@@ -1,5 +1,11 @@
-import { episodeLabel } from "@/lib/series";
-import { formatDayNumeric, formatRuntime } from "@/lib/format";
+"use client";
+
+import { MessageSquare, Star } from "lucide-react";
+import { useState } from "react";
+
+import { EpisodeRatingPanel } from "@/components/series/episode-rating";
+import { formatDayNumeric, formatRuntime, formatScore } from "@/lib/format";
+import { episodeLabel, type EpisodeLog } from "@/lib/series";
 import type { TmdbEpisode } from "@/lib/tmdb";
 import { cn } from "@/lib/utils";
 
@@ -11,25 +17,34 @@ function airLine(episode: TmdbEpisode, aired: boolean): string {
 
 /**
  * One episode of a season: a tick, its number and name, when it aired and how long it is, and what it is about.
- * Episodes that haven't aired can't be ticked. `onUpTo` (only given when there is something before it to tick) ticks
- * everything up to this episode.
+ * Episodes that haven't aired can't be ticked or rated. A button opens the person's own score and note for it.
+ * `onUpTo` (only given when there is something before it to tick) ticks everything up to this episode.
  */
 export function EpisodeRow({
   season,
   episode,
   aired,
   ticked,
+  log,
   onTick,
+  onRate,
   onUpTo,
 }: {
   season: number;
   episode: TmdbEpisode;
   aired: boolean;
   ticked: boolean;
+  /** The person's own score and note for it, if it has any. */
+  log: EpisodeLog | undefined;
   onTick: (watched: boolean) => void;
+  /** Saves a score and/or note; says what went wrong, or nothing. */
+  onRate: (score: number | null, comment: string | null) => Promise<string | null>;
   onUpTo?: () => void;
 }) {
+  const [rating, setRating] = useState(false);
   const label = episodeLabel(season, episode.number);
+  const score = log?.score ?? null;
+  const note = log?.comment ?? null;
   return (
     <li className={cn("group py-1", !aired && "opacity-60")}>
       <label
@@ -59,15 +74,61 @@ export function EpisodeRow({
           )}
         </span>
       </label>
-      {onUpTo && aired && !ticked && (
-        // Always there on a phone; on a computer it shows when the row is hovered or focused, to keep the list calm.
-        <button
-          type="button"
-          onClick={onUpTo}
-          className="mb-1 ml-9 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-        >
-          Mark all up to {label}
-        </button>
+      {aired && (
+        <div className="mb-1 ml-9 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <button
+            type="button"
+            onClick={() => setRating((open) => !open)}
+            aria-expanded={rating}
+            aria-label={
+              score !== null
+                ? `Your rating for ${label}: ${formatScore(score)}`
+                : note
+                  ? `Your note for ${label}`
+                  : `Rate or add a note to ${label}`
+            }
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+          >
+            {score !== null ? (
+              <>
+                <Star className="size-3.5 fill-star text-star" aria-hidden />
+                <span className="font-semibold text-foreground">{formatScore(score)}</span>
+              </>
+            ) : note ? (
+              <>
+                <MessageSquare className="size-3.5" aria-hidden />
+                Your note
+              </>
+            ) : (
+              <>
+                <Star className="size-3.5" aria-hidden />
+                Rate / note
+              </>
+            )}
+          </button>
+          {onUpTo && !ticked && (
+            // Always there on a phone; on a computer it shows when the row is hovered or focused, to keep the list calm.
+            <button
+              type="button"
+              onClick={onUpTo}
+              className="text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+            >
+              Mark all up to {label}
+            </button>
+          )}
+        </div>
+      )}
+      {note && !rating && <p className="mb-1 ml-9 text-xs break-words text-muted-foreground">“{note}”</p>}
+      {rating && (
+        <EpisodeRatingPanel
+          // A new form each time it opens, so it starts from what is saved.
+          key={`${score}:${note}`}
+          label={label}
+          score={score}
+          comment={note}
+          onSave={onRate}
+          onClose={() => setRating(false)}
+        />
       )}
     </li>
   );

@@ -24,8 +24,11 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   asks how it was; **Mark as watched** marks a whole series without rewriting
   your ticks (so un-marking brings them back), and a series marked watched
   shows every episode as watched until you untick one. Ticking an episode puts
-  the series on My list. Your ticks are private, like My list: family lists
-  keep a series as one title, with no episodes.
+  the series on My list. Each episode also takes your own score (1–10, one
+  decimal) and note (250 characters): **Rate / note** under it. Rating an
+  episode ticks it, and unticking one that has a score or note asks first,
+  since that deletes them. Your ticks, scores and notes are private, like My
+  list: family lists keep a series as one title, with no episodes.
 - **Browse and add**: search, browse trending and top rated titles, or pick a
   category (Comedy, Horror, Kids, ...) and decade. Trailers play from YouTube
   only once you press play.

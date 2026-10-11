@@ -240,6 +240,12 @@ export function isTicked(info: SeriesInfo, state: EpisodeState, season: number, 
   return state.ticks.has(episodeKey(season, episode));
 }
 
+/** The ticks of a state that are all of the aired episodes (what completes a series that has ended). */
+function everyAiredTicked(info: SeriesInfo, ticks: Ticked): boolean {
+  const aired = airedEpisodes(info);
+  return aired.length > 0 && aired.every(({ s, e }) => ticks.has(episodeKey(s, e)));
+}
+
 /**
  * What ticking (or unticking) a range does, the way mark_episodes() does it: only aired episodes get ticked, ticking the
  * last aired episode of a series that has ended completes it, and unticking on a completed series first ticks every aired
@@ -258,10 +264,7 @@ export function applyMark(
     for (const { s, e } of range) {
       if (e <= airedIn(info, s) && !ticks.has(episodeKey(s, e))) ticks.set(episodeKey(s, e), { on: mark.on, score: null, comment: null });
     }
-    if (!completed && isFinished(info)) {
-      const aired = airedEpisodes(info);
-      completed = aired.length > 0 && aired.every(({ s, e }) => ticks.has(episodeKey(s, e)));
-    }
+    if (!completed && isFinished(info)) completed = everyAiredTicked(info, ticks);
   } else {
     if (completed && range.some(({ s, e }) => e <= airedIn(info, s))) {
       for (const { s, e } of airedEpisodes(info)) {
@@ -271,5 +274,37 @@ export function applyMark(
     }
     for (const { s, e } of range) ticks.delete(episodeKey(s, e));
   }
+  return { ticks, completed };
+}
+
+/** A score (1 to 10, one decimal) and/or a note for one aired episode. */
+export interface EpisodeRating {
+  season: number;
+  episode: number;
+  score: number | null;
+  comment: string | null;
+  on: string;
+}
+
+/**
+ * What rating an episode does, the way rate_episode() does it: the episode gets ticked, the note is trimmed (a blank one
+ * is none), the score is kept to one decimal, and with neither a score nor a note the old ones are only taken off. Like
+ * the last tick, rating the last aired episode of a series that has ended completes it. Episodes that haven't aired
+ * are not rated.
+ */
+export function applyRating(info: SeriesInfo, state: EpisodeState, rating: EpisodeRating): EpisodeState {
+  if (rating.episode > airedIn(info, rating.season)) return state;
+  const key = episodeKey(rating.season, rating.episode);
+  const score = rating.score === null ? null : Math.round(rating.score * 10) / 10;
+  const comment = rating.comment?.trim() || null;
+  const ticks = new Map(state.ticks);
+  const existing = ticks.get(key);
+
+  if (score === null && comment === null) {
+    if (existing) ticks.set(key, { ...existing, score: null, comment: null });
+  } else {
+    ticks.set(key, { on: existing?.on ?? rating.on, score, comment });
+  }
+  const completed = state.completed || (isFinished(info) && everyAiredTicked(info, ticks));
   return { ticks, completed };
 }

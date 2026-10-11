@@ -38,6 +38,7 @@ export function SeasonBlock({
   loaded,
   onNeed,
   onMark,
+  onRate,
   firstGap,
 }: {
   info: SeriesInfo;
@@ -50,6 +51,8 @@ export function SeasonBlock({
   /** Asks for the season's episodes (once; again when `retry`). */
   onNeed: (season: number, retry?: boolean) => void;
   onMark: (watched: boolean, from: EpisodeRef, to: EpisodeRef) => void;
+  /** Saves a score and/or note for an episode; says what went wrong, or nothing. */
+  onRate: (season: number, episode: number, score: number | null, comment: string | null) => Promise<string | null>;
   /** The first aired episode that isn't ticked (where "up to here" starts to mean something). */
   firstGap: EpisodeRef | null;
 }) {
@@ -134,6 +137,8 @@ export function SeasonBlock({
                     episode={episode}
                     aired={isAired}
                     ticked={isTicked(info, state, season.n, episode.number)}
+                    log={state.ticks.get(episodeKey(season.n, episode.number))}
+                    onRate={(score, comment) => onRate(season.n, episode.number, score, comment)}
                     onTick={(watched) =>
                       onMark(watched, { s: season.n, e: episode.number }, { s: season.n, e: episode.number })
                     }

@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 
-import { admin, createUser, expect, signIn, type TestUser } from "./helpers";
+import { admin, createUser, expect, setSlider, signIn, type TestUser } from "./helpers";
 
 // Chernobyl (TMDB 87108): a miniseries that has ended, one season of five episodes.
 const CHERNOBYL = "/app/media/tv/87108";
@@ -23,6 +23,20 @@ async function myChernobyl(user: TestUser) {
     dated: item!.watched_at !== null,
     ticks: (logs ?? []).map((l) => `${l.season_number}:${l.episode_number}`).join(","),
   };
+}
+
+/** One ticked episode of season 1 of someone's series on My list: its score and note, or null when it isn't ticked. */
+async function myEpisode(user: TestUser, number: number) {
+  const { data: item } = await admin.from("list_items").select("id").eq("added_by", user.id).is("group_id", null).maybeSingle();
+  if (!item) return null;
+  const { data } = await admin
+    .from("episode_logs")
+    .select("score, comment")
+    .eq("list_item_id", item.id)
+    .eq("season_number", 1)
+    .eq("episode_number", number)
+    .maybeSingle();
+  return data ? { score: data.score as number | null, comment: data.comment as string | null } : null;
 }
 
 test("tick the episodes of a series: the next one, one by one, up to an episode, and the last one finishes it", async ({ page, context }) => {
@@ -116,4 +130,74 @@ test("marking a series watched shows every episode as watched, and un-marking br
   await expect(episodes.getByText("Watching", { exact: true })).toBeVisible();
   await expect(episodes.getByText("1 of 5 aired episodes watched")).toBeVisible();
   await expect(episodes.getByRole("checkbox", { name: /^S1E5 / })).not.toBeChecked();
+});
+
+test("rate and note an episode: it ticks it and shows on the row, and unticking it asks first", async ({ page, context }) => {
+  const ana = await createUser("Ana");
+  await signIn(context, ana);
+
+  await page.goto(CHERNOBYL);
+  const episodes = page.getByRole("region", { name: "Episodes" });
+  const panel = (n: number) => episodes.getByRole("group", { name: `Your rating for S1E${n}` });
+
+  // Rating an episode ticks it, and puts the series on My list.
+  await episodes.getByRole("button", { name: "Rate or add a note to S1E2" }).click();
+  await setSlider(panel(2).locator('input[type="range"]'), 8.5);
+  await panel(2).getByRole("textbox", { name: "Your note" }).fill("Tense and brilliant");
+  await panel(2).getByRole("button", { name: "Save" }).click();
+  await expect(panel(2)).toBeHidden();
+  await expect(episodes.getByRole("button", { name: "Your rating for S1E2: 8.5" })).toBeVisible();
+  await expect(episodes.getByText("“Tense and brilliant”")).toBeVisible();
+  await expect(episodes.getByRole("checkbox", { name: /^S1E2 / })).toBeChecked();
+  await expect(page.getByRole("img", { name: /On My list/ })).toBeVisible();
+  await expect.poll(() => myEpisode(ana, 2)).toEqual({ score: 8.5, comment: "Tense and brilliant" });
+
+  // Change the note; the score stays.
+  await episodes.getByRole("button", { name: "Your rating for S1E2: 8.5" }).click();
+  await panel(2).getByRole("textbox", { name: "Your note" }).fill("Even better the second time");
+  await panel(2).getByRole("button", { name: "Save" }).click();
+  await expect(episodes.getByText("“Even better the second time”")).toBeVisible();
+  await expect.poll(() => myEpisode(ana, 2)).toEqual({ score: 8.5, comment: "Even better the second time" });
+
+  // Take both off: the episode stays ticked.
+  await episodes.getByRole("button", { name: "Your rating for S1E2: 8.5" }).click();
+  await panel(2).getByRole("button", { name: "Remove" }).click();
+  await expect(episodes.getByRole("button", { name: "Rate or add a note to S1E2" })).toBeVisible();
+  await expect(episodes.getByRole("checkbox", { name: /^S1E2 / })).toBeChecked();
+  await expect.poll(() => myEpisode(ana, 2)).toEqual({ score: null, comment: null });
+
+  // A note alone is enough.
+  await episodes.getByRole("button", { name: "Rate or add a note to S1E3" }).click();
+  await panel(3).getByRole("textbox", { name: "Your note" }).fill("Slow burn");
+  await panel(3).getByRole("button", { name: "Save" }).click();
+  await expect(episodes.getByRole("button", { name: "Your note for S1E3" })).toBeVisible();
+  await expect.poll(() => myEpisode(ana, 3)).toEqual({ score: null, comment: "Slow burn" });
+
+  // Unticking an episode with a score or note asks first: "Cancel" leaves it, "OK" takes the score and note with it.
+  await episodes.getByRole("button", { name: "Rate or add a note to S1E4" }).click();
+  await setSlider(panel(4).locator('input[type="range"]'), 7);
+  await panel(4).getByRole("button", { name: "Save" }).click();
+  await expect(episodes.getByRole("button", { name: "Your rating for S1E4: 7" })).toBeVisible();
+  await expect.poll(() => myEpisode(ana, 4)).toEqual({ score: 7, comment: null });
+  page.once("dialog", (dialog) => {
+    expect(dialog.message()).toContain("also removes your score and note");
+    void dialog.dismiss();
+  });
+  await episodes.getByRole("checkbox", { name: /^S1E4 / }).click();
+  await expect(episodes.getByRole("checkbox", { name: /^S1E4 / })).toBeChecked();
+  await page.waitForTimeout(500);
+  expect(await myEpisode(ana, 4)).toEqual({ score: 7, comment: null });
+  page.once("dialog", (dialog) => void dialog.accept());
+  await episodes.getByRole("checkbox", { name: /^S1E4 / }).click();
+  await expect(episodes.getByRole("checkbox", { name: /^S1E4 / })).not.toBeChecked();
+  await expect.poll(() => myEpisode(ana, 4)).toBeNull();
+
+  // Rating the last episode of a series that has ended finishes it, like ticking it.
+  await episodes.getByRole("button", { name: "Mark all up to S1E4" }).click();
+  await expect(episodes.getByText("4 of 5 aired episodes watched")).toBeVisible();
+  await episodes.getByRole("button", { name: "Rate or add a note to S1E5" }).click();
+  await setSlider(panel(5).locator('input[type="range"]'), 9.5);
+  await panel(5).getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("dialog", { name: "How was Chernobyl?" })).toBeVisible();
+  await expect(episodes.getByText("Completed", { exact: true })).toBeVisible();
 });

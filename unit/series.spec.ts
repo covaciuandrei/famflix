@@ -5,6 +5,7 @@ import {
   airedIn,
   airedTotal,
   applyMark,
+  applyRating,
   episodeKey,
   episodeLabel,
   episodesBetween,
@@ -273,4 +274,55 @@ test.describe("ticking, as the page shows it", () => {
     const state = tick(long, fresh(), [1, 1], [1, 2]);
     expect(rows(tick(long, state, [1, 3], [1, 4], false))).toBe("1:1,1:2");
   });
+});
+
+test.describe("rating an episode, as the page shows it", () => {
+  const mini = seriesFromTmdb(CHERNOBYL) as SeriesInfo;
+  const long = seriesFromTmdb({
+    status: "Returning Series",
+    seasons: [{ season_number: 1, episode_count: 4 }, { season_number: 2, episode_count: 6 }],
+    last_episode_to_air: { season_number: 2, episode_number: 3 },
+  }) as SeriesInfo;
+  const none = (): EpisodeState => ({ ticks: new Map(), completed: false });
+  const rate = (info: SeriesInfo, state: EpisodeState, season: number, episode: number, score: number | null, comment: string | null) =>
+    applyRating(info, state, { season, episode, score, comment, on: "2026-10-11" });
+
+  test("rating an episode ticks it, with the score to one decimal and the note trimmed", () => {
+    const state = rate(long, none(), 1, 2, 8.46, "  Great pilot  ");
+    expect(state.ticks.get(episodeKey(1, 2))).toEqual({ on: "2026-10-11", score: 8.5, comment: "Great pilot" });
+  });
+
+  test("a note alone is enough; rating again replaces both and keeps the day", () => {
+    let state = rate(long, none(), 1, 1, null, "only a note");
+    expect(state.ticks.get(episodeKey(1, 1))).toEqual({ on: "2026-10-11", score: null, comment: "only a note" });
+    state = applyRating(long, state, { season: 1, episode: 1, score: 7, comment: "then both", on: "2026-12-01" });
+    expect(state.ticks.get(episodeKey(1, 1))).toEqual({ on: "2026-10-11", score: 7, comment: "then both" });
+  });
+
+  test("neither a score nor a note takes the old ones off and leaves the tick; on an episode nobody ticked it does nothing", () => {
+    let state = rate(long, none(), 1, 1, 9, "great");
+    state = rate(long, state, 1, 1, null, "   ");
+    expect(state.ticks.get(episodeKey(1, 1))).toEqual({ on: "2026-10-11", score: null, comment: null });
+    expect(rate(long, none(), 1, 3, null, null).ticks.size).toBe(0);
+  });
+
+  test("an episode that hasn't aired is not rated", () => {
+    expect(rate(long, none(), 2, 4, 8, "later").ticks.size).toBe(0);
+  });
+
+  test("rating the last aired episode of a finished series completes it, a show still airing never", () => {
+    let state = tickAll(mini, 4);
+    expect(rate(mini, state, 1, 5, 9, null).completed).toBe(true);
+    state = { ticks: new Map([...tickAll(long, 0).ticks]), completed: false };
+    expect(rate(long, state, 2, 3, 9, null).completed).toBe(false);
+  });
+
+  function tickAll(info: SeriesInfo, upTo: number): EpisodeState {
+    return applyMark(info, { ticks: new Map(), completed: false }, {
+      watched: true,
+      from: { s: 1, e: 1 },
+      to: { s: 1, e: upTo || 1 },
+      on: "2026-10-11",
+    });
+  }
 });

@@ -8,7 +8,7 @@ import { saveMedia } from "@/lib/save-media";
 import { MAX_EPISODES, MAX_SEASON, parseSeriesInfo, sameSeries } from "@/lib/series";
 import type { createClient } from "@/lib/supabase/server";
 import { detailsToMediaRow, getMediaDetails } from "@/lib/tmdb";
-import { isDay } from "@/lib/watch-input";
+import { cleanScore, isDay, MAX_TEXT, tooLong } from "@/lib/watch-input";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -156,6 +156,41 @@ export async function tickNextEpisode(input: { tmdbId: number; on?: string }): P
   const { data, error } = await supabase.rpc("mark_next_episode", {
     p_item: mine.itemId,
     ...(input.on ? { p_on: input.on } : {}),
+  });
+  if (error) return { error: failure(error) };
+  revalidatePath("/app", "layout");
+  return { itemId: mine.itemId ?? undefined, completed: (data as { completed?: boolean } | null)?.completed === true };
+}
+
+/**
+ * Saves the signed-in person's own score (1 to 10) and/or note for an aired episode, putting the series on My list if it
+ * isn't there. Rating an episode ticks it; with neither a score nor a note, the old ones are only taken off.
+ */
+export async function rateEpisode(input: {
+  tmdbId: number;
+  season: number;
+  episode: number;
+  score: number | null;
+  comment: string | null;
+}): Promise<EpisodeResult> {
+  const { supabase, user } = await requireUser();
+  if (!isRef({ s: input?.season, e: input?.episode })) return { error: "That episode isn't valid." };
+  const score = cleanScore(input.score ?? null);
+  if (score === undefined) return { error: "Scores must be between 1 and 10." };
+  const comment = typeof input.comment === "string" ? input.comment : null;
+  if (comment !== null && tooLong(comment.trim())) {
+    return { error: `Notes can be at most ${MAX_TEXT} characters.` };
+  }
+
+  const mine = await mySeries(supabase, user.id, input.tmdbId, true);
+  if ("error" in mine) return mine;
+
+  const { data, error } = await supabase.rpc("rate_episode", {
+    p_item: mine.itemId,
+    p_season: input.season,
+    p_episode: input.episode,
+    p_score: score,
+    p_comment: comment,
   });
   if (error) return { error: failure(error) };
   revalidatePath("/app", "layout");

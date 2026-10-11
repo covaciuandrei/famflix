@@ -3,7 +3,7 @@
 import { Check, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 
-import { tickEpisodes, tickNextEpisode, type EpisodeResult } from "@/app/app/media/series-actions";
+import { rateEpisode, tickEpisodes, tickNextEpisode, type EpisodeResult } from "@/app/app/media/series-actions";
 import { SeasonBlock, type SeasonEpisodes } from "@/components/series/season-block";
 import { ProgressBar, StatusChip } from "@/components/series/series-progress";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,10 @@ import { formatDayNumeric } from "@/lib/format";
 import {
   airedIn,
   applyMark,
+  applyRating,
   episodeKey,
   episodeLabel,
+  episodesBetween,
   isFinished,
   MAX_EPISODES,
   nextUp,
@@ -38,6 +40,9 @@ export interface TrackerItem {
 
 /** Today in the person's own time, as YYYY-MM-DD. */
 const localDay = () => new Date().toLocaleDateString("en-CA");
+
+/** What the page shows at once, before the database has answered: some episodes ticked or unticked, or one rated. */
+type Change = { mark: Parameters<typeof applyMark>[2] } | { rate: Parameters<typeof applyRating>[2] };
 
 /**
  * Where someone is with a series, and its seasons and episodes to tick: a card with the status, the next episode and
@@ -69,8 +74,8 @@ export function EpisodeTracker({
     }),
     [ticks, item?.watched],
   );
-  const [state, addOptimistic] = useOptimistic(base, (current: EpisodeState, mark: Parameters<typeof applyMark>[2]) =>
-    applyMark(series, current, mark),
+  const [state, addOptimistic] = useOptimistic(base, (current: EpisodeState, change: Change) =>
+    "mark" in change ? applyMark(series, current, change.mark) : applyRating(series, current, change.rate),
   );
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -118,11 +123,41 @@ export function EpisodeTracker({
   }
 
   function mark(watched: boolean, from: EpisodeRef, to: EpisodeRef) {
+    if (!watched) {
+      // Unticking takes an episode's score and note with it, so that is asked first.
+      const rated = episodesBetween(series, from, to).filter(({ s, e }) => {
+        const log = state.ticks.get(episodeKey(s, e));
+        return !!log && (log.score !== null || !!log.comment);
+      });
+      if (
+        rated.length > 0 &&
+        !window.confirm(
+          rated.length === 1
+            ? `Unticking ${episodeLabel(rated[0].s, rated[0].e)} also removes your score and note for it. Continue?`
+            : `Unticking these episodes also removes your scores and notes for ${rated.length} of them. Continue?`,
+        )
+      ) {
+        return;
+      }
+    }
     setError(null);
     const on = localDay();
     startTransition(async () => {
-      addOptimistic({ watched, from, to, on });
+      addOptimistic({ mark: { watched, from, to, on } });
       afterAction(await tickEpisodes({ tmdbId, watched, from, to, on }));
+    });
+  }
+
+  /** Saves the person's score and/or note for an episode; resolves to what went wrong, or null when it was saved. */
+  function rate(season: number, episode: number, score: number | null, comment: string | null): Promise<string | null> {
+    const on = localDay();
+    return new Promise((resolve) => {
+      startTransition(async () => {
+        addOptimistic({ rate: { season, episode, score, comment, on } });
+        const res = await rateEpisode({ tmdbId, season, episode, score, comment });
+        if (!res.error) afterAction(res);
+        resolve(res.error ?? null);
+      });
     });
   }
 
@@ -132,7 +167,7 @@ export function EpisodeTracker({
     setError(null);
     const on = localDay();
     startTransition(async () => {
-      if (upNext) addOptimistic({ watched: true, from: upNext, to: upNext, on });
+      if (upNext) addOptimistic({ mark: { watched: true, from: upNext, to: upNext, on } });
       afterAction(await tickNextEpisode({ tmdbId, on }));
     });
   }
@@ -219,6 +254,7 @@ export function EpisodeTracker({
             loaded={loaded[season.n]}
             onNeed={need}
             onMark={mark}
+            onRate={rate}
             firstGap={upNext}
           />
         ))}
