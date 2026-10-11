@@ -4,6 +4,7 @@ import type { Decade } from "@/lib/decades";
 import { findGenre, type BrowseGenre } from "@/lib/genres";
 import { interleave } from "@/lib/deck-compose";
 import { seriesFromTmdb, seriesToJson, type RawSeries, type SeriesInfo } from "@/lib/series";
+import { titleExtrasFrom, type RawTitleExtras, type TitleExtras } from "@/lib/title-details";
 import type { MediaType } from "@/lib/types";
 
 /**
@@ -34,6 +35,12 @@ export interface TmdbDetails extends TmdbItem {
   series: SeriesInfo | null;
 }
 
+/** What a title's page shows besides the basics: the cast, who made it, its age rating, its collection and similar titles. */
+export interface TmdbExtras extends TitleExtras {
+  /** TMDB's "if you liked this" titles, with a poster, without the title itself. */
+  similar: TmdbItem[];
+}
+
 export interface TmdbRow {
   title: string;
   items: TmdbItem[];
@@ -52,11 +59,12 @@ interface RawResult {
   vote_average?: number;
 }
 
-interface RawDetails extends RawResult, RawSeries {
+interface RawDetails extends RawResult, RawSeries, RawTitleExtras {
   genres?: { id: number; name: string }[];
   runtime?: number;
   episode_run_time?: number[];
   videos?: { results: { key: string; site: string; type: string }[] };
+  recommendations?: { results?: RawResult[] };
 }
 
 function token(): string {
@@ -417,14 +425,31 @@ export async function getLikeSuggestions(mediaType: MediaType, tmdbId: number): 
   });
 }
 
-/** Full details for a single title, including its trailer. */
+/** How many similar titles a title's page offers. */
+const MAX_SIMILAR = 20;
+
+/**
+ * Full details for a single title, including its trailer. With `extras` the same single TMDB call also brings the
+ * cast and crew, the age rating, the collection and the titles TMDB recommends, for a title's own page; everything
+ * else (saving a title, building a stack of dozens of cards) keeps the light call.
+ */
+export async function getMediaDetails(mediaType: MediaType, tmdbId: number): Promise<TmdbDetails>;
 export async function getMediaDetails(
   mediaType: MediaType,
   tmdbId: number,
-): Promise<TmdbDetails> {
+  options: { extras: true },
+): Promise<TmdbDetails & { extras: TmdbExtras }>;
+export async function getMediaDetails(
+  mediaType: MediaType,
+  tmdbId: number,
+  options: { extras?: boolean } = {},
+): Promise<TmdbDetails & { extras?: TmdbExtras }> {
+  const append = options.extras
+    ? `videos,credits,recommendations,${mediaType === "tv" ? "content_ratings" : "release_dates"}`
+    : "videos";
   const raw = await tmdbFetch<RawDetails>(
     `/${mediaType}/${tmdbId}`,
-    { append_to_response: "videos" },
+    { append_to_response: append },
     // A series gains episodes as it airs, so what is known of it is kept for less time than a movie's.
     mediaType === "tv" ? 3600 : 86_400,
   );
@@ -443,13 +468,28 @@ export async function getMediaDetails(
       ? raw.episode_run_time[0]
       : null);
 
-  return {
+  const details: TmdbDetails = {
     ...base,
     genres: raw.genres?.map((g) => g.name) ?? [],
     runtime,
     trailerKey: trailer?.key ?? null,
     series: mediaType === "tv" ? seriesFromTmdb(raw) : null,
   };
+  if (!options.extras) return details;
+
+  const similar = normalizeMany(raw.recommendations?.results ?? [], mediaType)
+    .filter((item) => item.posterPath && !(item.mediaType === mediaType && item.tmdbId === tmdbId))
+    .slice(0, MAX_SIMILAR);
+  return { ...details, extras: { ...titleExtrasFrom(mediaType, raw), similar } };
+}
+
+/** The films of a collection (a series of films), oldest first, and its name; cached for a day. */
+export async function getCollection(id: number): Promise<{ name: string; items: TmdbItem[] }> {
+  const raw = await tmdbFetch<{ name?: string; parts?: RawResult[] }>(`/collection/${id}`, {}, 86_400);
+  const items = normalizeMany(raw.parts ?? [], "movie")
+    .filter((item) => item.posterPath)
+    .sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999) || a.title.localeCompare(b.title));
+  return { name: raw.name?.trim() || "", items };
 }
 
 /** One episode of a season, as the series page lists it. */
