@@ -11,7 +11,7 @@ import { SortSelect } from "@/components/sort-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { listCategories, matchesCategory } from "@/lib/categories";
 import { ANY_YEAR, listDecades, matchesDecade } from "@/lib/decades";
-import { isToWatch } from "@/lib/list-status";
+import { isToWatch, isWatching } from "@/lib/list-status";
 import { sortCards } from "@/lib/sort";
 import type {
   ListItemCard as Card,
@@ -20,7 +20,7 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "want" | "done" | "all";
+type Tab = "want" | "watching" | "done" | "all";
 
 export function Watchlist({
   cards,
@@ -33,12 +33,7 @@ export function Watchlist({
 }) {
   // Only family lists are given their members.
   const family = members !== undefined;
-  const tabs: { value: Tab; label: string }[] = [
-    { value: "want", label: "To watch" },
-    { value: "done", label: family ? "Watched together" : "Watched" },
-    { value: "all", label: "All" },
-  ];
-  const [tab, setTab] = useState<Tab>("want");
+  const [picked, setTab] = useState<Tab>("want");
   const [decade, setDecade] = useState(ANY_YEAR);
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState<SortKey>("recent");
@@ -65,18 +60,32 @@ export function Watchlist({
     });
   }
 
+  // Series being watched (episodes ticked on My list) have a tab of their own, which is there while there are any.
   const counts = useMemo(() => {
-    const want = cards.filter(isToWatch).length;
-    return { want, done: cards.length - want, all: cards.length };
+    const watching = cards.filter(isWatching).length;
+    const want = cards.filter(isToWatch).length - watching;
+    return { want, watching, done: cards.length - want - watching, all: cards.length };
   }, [cards]);
+  const tabs: { value: Tab; label: string }[] = [
+    { value: "want", label: "To watch" },
+    ...(counts.watching > 0 ? [{ value: "watching" as const, label: "Watching" }] : []),
+    { value: "done", label: family ? "Watched together" : "Watched" },
+    { value: "all", label: "All" },
+  ];
+  const tab = picked === "watching" && counts.watching === 0 ? "want" : picked;
 
-  const inTab = useMemo(
-    () =>
-      tab === "all"
-        ? cards
-        : cards.filter((c) => isToWatch(c) === (tab === "want")),
-    [cards, tab],
-  );
+  const inTab = useMemo(() => {
+    switch (tab) {
+      case "all":
+        return cards;
+      case "watching":
+        return cards.filter(isWatching);
+      case "want":
+        return cards.filter((c) => isToWatch(c) && !isWatching(c));
+      case "done":
+        return cards.filter((c) => !isToWatch(c));
+    }
+  }, [cards, tab]);
   // Filters narrow in order (tab, then release date, then category); one that matches nothing
   // here falls back to showing everything instead of an empty list.
   const decades = useMemo(

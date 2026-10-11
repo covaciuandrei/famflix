@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 
-import { admin, createUser, expect, setSlider, signIn, type TestUser } from "./helpers";
+import { addTo, admin, createUser, expect, listCard, setSlider, signIn, type TestUser } from "./helpers";
 
 // Chernobyl (TMDB 87108): a miniseries that has ended, one season of five episodes.
 const CHERNOBYL = "/app/media/tv/87108";
@@ -200,4 +200,50 @@ test("rate and note an episode: it ticks it and shows on the row, and unticking 
   await panel(5).getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("dialog", { name: "How was Chernobyl?" })).toBeVisible();
   await expect(episodes.getByText("Completed", { exact: true })).toBeVisible();
+});
+
+test("a series on My list shows how far you are, with a button for the next episode and a Watching tab", async ({ page, context }) => {
+  const ana = await createUser("Ana");
+  await signIn(context, ana);
+
+  // Added without ticking anything: it is on To watch, with no progress.
+  await page.goto(CHERNOBYL);
+  await addTo(page, page, "My list");
+  await expect(page.getByRole("img", { name: /On My list/ })).toBeVisible();
+  await page.goto("/app/mine");
+  await expect(page.getByRole("button", { name: /^To watch 1$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Watching/ })).toHaveCount(0);
+  await expect(listCard(page, "Chernobyl").getByRole("progressbar")).toHaveCount(0);
+
+  // The first episode, ticked on its page: now it is Watching, in a tab of its own.
+  await page.goto(CHERNOBYL);
+  const episodes = page.getByRole("region", { name: "Episodes" });
+  await episodes.getByRole("button", { name: "Watched S1E1" }).click();
+  await expect(episodes.getByText("1 of 5 aired episodes watched")).toBeVisible();
+  await page.goto("/app/mine");
+  await expect(page.getByRole("button", { name: /^To watch 0$/ })).toBeVisible();
+  await page.getByRole("button", { name: /^Watching 1$/ }).click();
+  const card = listCard(page, "Chernobyl");
+  await expect(card.getByText("Watching", { exact: true })).toBeVisible();
+  await expect(card.getByText("1 of 5 aired episodes")).toBeVisible();
+  await expect(card.getByRole("progressbar", { name: "Chernobyl progress" })).toBeVisible();
+
+  // One tap for the next episode, again and again.
+  await card.getByRole("button", { name: "Watched S1E2" }).click();
+  await expect(card.getByText("2 of 5 aired episodes")).toBeVisible();
+  await card.getByRole("button", { name: "Watched S1E3" }).click();
+  await expect(card.getByText("3 of 5 aired episodes")).toBeVisible();
+  await card.getByRole("button", { name: "Watched S1E4" }).click();
+  await expect(card.getByText("4 of 5 aired episodes")).toBeVisible();
+
+  // The last one finishes it: we ask how it was, and it moves to Watched.
+  await card.getByRole("button", { name: "Watched S1E5" }).click();
+  const ask = page.getByRole("dialog", { name: "How was Chernobyl?" });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "Later" }).click();
+  await expect(page.getByRole("button", { name: /^Watching/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Watched 1$/ })).toBeVisible();
+  await page.getByRole("button", { name: /^Watched 1$/ }).click();
+  await expect(listCard(page, "Chernobyl").getByRole("progressbar")).toHaveCount(0);
+  expect((await myChernobyl(ana)).status).toBe("watched");
 });

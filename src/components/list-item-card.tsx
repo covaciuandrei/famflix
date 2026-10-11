@@ -9,6 +9,7 @@ import { Avatar } from "@/components/avatar";
 import { MediaPoster } from "@/components/media-poster";
 import { RatingPanel } from "@/components/rating-panel";
 import { ReactionButtons } from "@/components/reaction-buttons";
+import { SeriesCardLine } from "@/components/series/series-card-line";
 import { Badge } from "@/components/ui/badge";
 import { WatchedToggle } from "@/components/watched-toggle";
 import { WatchedTogetherDialog } from "@/components/watched-together-dialog";
@@ -113,6 +114,8 @@ export function ListItemCard({
           {removeError && (
             <p className="text-xs text-destructive">{removeError}</p>
           )}
+
+          <SeriesCardLine card={card} />
 
           <div className="flex flex-wrap items-center gap-2">
             <WatchedToggle

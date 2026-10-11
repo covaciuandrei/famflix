@@ -8,6 +8,7 @@ import { timeAgo } from "@/lib/format";
 import type { ActiveNight, HistoryEntry, NightState } from "@/lib/movie-night";
 import type {
   ActivityEvent,
+  CardSeries,
   Group,
   GroupMemberWithProfile,
   LibraryIndex,
@@ -138,10 +139,40 @@ export async function getListCards(opts: {
   if (error || !data) return [];
 
   const rows = data as unknown as ListItemWithDetails[];
-  const watchedWith = opts.groupId ? new Map<string, WatchedWith>() : await loadWatchedWith(supabase, opts.userId, rows);
+  const [watchedWith, progress] = opts.groupId
+    ? [new Map<string, WatchedWith>(), new Map<string, CardSeries>()]
+    : await Promise.all([loadWatchedWith(supabase, opts.userId, rows), loadSeriesProgress(supabase, rows)]);
   return rows
-    .map((row) => toCard(row, opts.userId, watchedWith.get(row.id) ?? null))
+    .map((row) => toCard(row, opts.userId, watchedWith.get(row.id) ?? null, progress.get(row.id) ?? null))
     .filter((c): c is ListItemCard => c !== null);
+}
+
+/** For the series on My list that have an episode ticked: how many aired episodes are ticked, and which is next. */
+async function loadSeriesProgress(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: ListItemWithDetails[],
+): Promise<Map<string, CardSeries>> {
+  const result = new Map<string, CardSeries>();
+  if (!rows.some((r) => r.media?.media_type === "tv")) return result;
+  const { data, error } = await supabase.rpc("my_series_progress");
+  if (error) {
+    // Logged, not thrown: My list still works, its series just show no progress. (PGRST202: the database doesn't
+    // have the function yet.)
+    if (error.code !== "PGRST202") console.error("Could not load series progress:", error.message);
+    return result;
+  }
+  for (const r of (data ?? []) as {
+    list_item_id: string;
+    watched: number;
+    next_season: number | null;
+    next_episode: number | null;
+  }[]) {
+    result.set(r.list_item_id, {
+      watched: r.watched,
+      next: r.next_season !== null && r.next_episode !== null ? { s: r.next_season, e: r.next_episode } : null,
+    });
+  }
+  return result;
 }
 
 /**
@@ -187,7 +218,12 @@ async function loadWatchedWith(
   return result;
 }
 
-function toCard(row: ListItemWithDetails, userId: string, watchedWith: WatchedWith | null): ListItemCard | null {
+function toCard(
+  row: ListItemWithDetails,
+  userId: string,
+  watchedWith: WatchedWith | null,
+  series: CardSeries | null,
+): ListItemCard | null {
   if (!row.media) return null;
 
   const likeCount = row.reactions.filter((r) => r.value === "like").length;
@@ -229,6 +265,7 @@ function toCard(row: ListItemWithDetails, userId: string, watchedWith: WatchedWi
     myReaction,
     viewers: row.watches,
     watchedWith,
+    series,
   };
 }
 

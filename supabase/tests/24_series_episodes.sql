@@ -188,6 +188,20 @@ select test.expect_eq(test.ep_row(test.v('ep_mini2'), 1, 1), 'none'::text, 'unti
 select test.expect_eq(test.ep_status(test.v('ep_mini2')), 'want'::text, 'and the series is back on To watch');
 select test.expect_eq(test.ep_rows(test.v('ep_mini2')), '1:2,1:3'::text, 'with the others still ticked');
 
+-- ---- Where each series is ---------------------------------------------------------------------------------------------
+-- Ava has ticks on Long (1:1 to 2:3, all that has aired), Mini (all five), and Mini2 (1:2, 1:3); the rest have none.
+select test.expect_eq((select string_agg(coalesce(m.title, '?') || ':' || p.watched || ':' || coalesce(p.next_season::text || 'x' || p.next_episode::text, 'none'), ',' order by m.title)
+  from public.my_series_progress() p join public.list_items li on li.id = p.list_item_id join public.media m on m.id = li.media_id),
+  'EPLong:7:none,EPMini:5:none,EPMini2:2:1x1'::text, 'progress per series: ticked aired episodes, and the next one');
+select test.expect_eq((select count(*) from public.my_series_progress()), 3::bigint, 'only series with a tick are listed');
+-- With gaps in two seasons, the next episode is the first of them.
+select public.mark_episodes(test.v('ep_long'), false, 1, 4, 1, 4);
+select public.mark_episodes(test.v('ep_long'), false, 2, 1, 2, 1);
+select test.expect_eq((select p.watched || ':' || p.next_season || 'x' || p.next_episode from public.my_series_progress() p
+  where p.list_item_id = test.v('ep_long')), '5:1x4'::text, 'the next episode is the first that isn''t ticked, in the earliest season');
+select public.mark_episodes(test.v('ep_long'), true, 1, 4, 2, 1);
+select test.expect_eq(test.ep_rows(test.v('ep_long')), '1:1,1:2,1:3,1:4,2:1,2:2,2:3'::text, 'and ticking them again puts it back');
+
 -- ---- Who sees what ---------------------------------------------------------------------------------------------------
 select test.expect_eq((select string_agg(season_number || ':' || episode_number, ',' order by season_number, episode_number)
   from public.episode_logs where list_item_id = test.v('ep_long')), test.ep_rows(test.v('ep_long')), 'Ava sees her own episodes');
@@ -199,12 +213,15 @@ select test.expect_error($$select public.series_aired_total('{}')$$, 'permission
 select test.expect_error($$select public.episodes_my_item(test.v('ep_mini'))$$, 'permission denied');
 select test.expect_error($$select public.episodes_complete_if_done(test.v('ep_mini'), '{}')$$, 'permission denied');
 :as_bo
+select test.expect_eq((select count(*) from public.my_series_progress()), 1::bigint, 'Bo is told of his own series only');
+select test.expect_eq((select watched || ':' || next_season || 'x' || next_episode from public.my_series_progress()), '4:1x3'::text, 'with his own ticks, and the episode he has yet to tick');
 select test.expect_eq((select count(*) from public.episode_logs where list_item_id = test.v('ep_long')), 0::bigint, 'Bo sees none of Ava''s episodes');
 select test.expect_eq((select count(*) from public.episode_logs where list_item_id = test.v('ep_mini2')), 0::bigint, 'nor her scores and notes');
 select test.expect_eq((select count(*) from public.episode_logs where list_item_id = test.v('ep_bo_mini')), 4::bigint, 'only his own');
 select test.expect_eq((select count(*) from public.episode_logs where list_item_id = test.v('ep_fam_mini')), 0::bigint, 'and nothing on the family''s entry');
 :as_anon
 select test.expect_error($$select count(*) from public.episode_logs$$, 'permission denied');
+select test.expect_error($$select * from public.my_series_progress()$$, 'permission denied');
 
 -- ---- Limits ------------------------------------------------------------------------------------------------------------
 reset role;

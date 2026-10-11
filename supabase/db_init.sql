@@ -1332,6 +1332,37 @@ begin
 end;
 $$;
 
+-- Where the caller is with each series on their My list that has an episode ticked: how many aired episodes are ticked
+-- and which aired episode is next (none when everything that has aired is ticked). For the cards on My list, which
+-- can't be given every tick (the API hands out at most 1000 rows at a time, and a long series has more).
+create function public.my_series_progress()
+returns table (list_item_id uuid, watched integer, next_season integer, next_episode integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select li.id,
+         (select count(*)::integer from public.episode_logs e
+          where e.list_item_id = li.id and e.episode_number <= public.series_aired(m.series, e.season_number)),
+         nx.n, nx.e
+  from public.list_items li
+  join public.media m on m.id = li.media_id and m.series is not null
+  left join lateral (
+    select x.n, g.e
+    from jsonb_to_recordset(m.series -> 'seasons') as x(n integer, episodes integer)
+    cross join lateral generate_series(1, public.series_aired(m.series, x.n)) as g(e)
+    where not exists (
+      select 1 from public.episode_logs l
+      where l.list_item_id = li.id and l.season_number = x.n and l.episode_number = g.e
+    )
+    order by x.n, g.e
+    limit 1
+  ) nx on true
+  where li.group_id is null and li.added_by = auth.uid() and li.deleted_at is null
+    and exists (select 1 from public.episode_logs e where e.list_item_id = li.id);
+$$;
+
 -- Ticks (p_watched) or unticks the episodes from (p_from_season, p_from_episode) to (p_to_season, p_to_episode), both
 -- included, on a series on the caller's My list: one episode, a season (to episode 20000: it stops at the last one), or
 -- everything up to an episode (from 1, 1). Only aired episodes can be ticked. Ticking the last aired episode of a series
@@ -2699,7 +2730,8 @@ grant execute on function
   public.pick_movie_night_title(uuid, uuid, date, jsonb),
   public.mark_episodes(uuid, boolean, integer, integer, integer, integer, date),
   public.mark_next_episode(uuid, date),
-  public.rate_episode(uuid, integer, integer, numeric, text)
+  public.rate_episode(uuid, integer, integer, numeric, text),
+  public.my_series_progress()
   to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.

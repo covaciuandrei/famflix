@@ -27,8 +27,11 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   the series on My list. Each episode also takes your own score (1–10, one
   decimal) and note (250 characters): **Rate / note** under it. Rating an
   episode ticks it, and unticking one that has a score or note asks first,
-  since that deletes them. Your ticks, scores and notes are private, like My
-  list: family lists keep a series as one title, with no episodes.
+  since that deletes them. On My list a series is still one card: once you
+  have ticked an episode it shows where you are, a progress bar and a button for
+  the next episode (**Watched S2E5**), and the series moves to a **Watching** tab
+  (which is there while you have any). Your ticks, scores and notes are private,
+  like My list: family lists keep a series as one title, with no episodes.
 - **Browse and add**: search, browse trending and top rated titles, or pick a
   category (Comedy, Horror, Kids, ...) and decade. Trailers play from YouTube
   only once you press play.

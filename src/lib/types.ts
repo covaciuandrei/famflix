@@ -185,6 +185,14 @@ export interface ListItemWithDetails extends ListItem {
   watches: Watch[];
 }
 
+/** Where the signed-in person is with a series on My list that has an episode ticked (from my_series_progress()). */
+export interface CardSeries {
+  /** Aired episodes that are ticked. */
+  watched: number;
+  /** The first aired episode that isn't ticked; null when everything that has aired is. */
+  next: { s: number; e: number } | null;
+}
+
 /** A list item with derived aggregates, ready for rendering. */
 export interface ListItemCard {
   item: ListItem;
@@ -201,6 +209,8 @@ export interface ListItemCard {
   viewers: Watch[];
   /** Only on My list, for a title a Watched together log put there. */
   watchedWith: WatchedWith | null;
+  /** Only on My list, for a series with an episode ticked. */
+  series: CardSeries | null;
 }
 
 export type SortKey =
