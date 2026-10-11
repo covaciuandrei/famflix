@@ -1979,6 +1979,64 @@ as $$
   group by h.list_item_id;
 $$;
 
+-- How many episodes the caller watched on their My list, for Your year: per series and per month. A viewing is an
+-- episode on one day: the same episode on another day counts again, twice on one day counts once. It is an episode
+-- ticked now (episode_logs), one kept when the series was started again or the episode watched again (episode_history),
+-- or one that a series marked Watched counts as watched without a tick, dated by when it was marked. A title taken off
+-- My list still counts, it was watched. p_year keeps the viewings of one year, null is all time. Returns
+-- {"by_series": {"<My list entry>": episodes}, "by_month": {"YYYY-MM": episodes}}. One value, so the API's cap on rows
+-- doesn't cut it short.
+create function public.my_episode_counts(p_year integer default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+
+  return (
+    with viewed as (
+      select e.list_item_id as item, e.season_number::integer as season, e.episode_number::integer as episode,
+             e.watched_on as day
+      from public.episode_logs e
+      join public.list_items li on li.id = e.list_item_id
+      where li.group_id is null and li.added_by = v_me
+      union
+      select h.list_item_id, h.season_number::integer, h.episode_number::integer, h.watched_on
+      from public.episode_history h
+      join public.list_items li on li.id = h.list_item_id
+      where li.group_id is null and li.added_by = v_me
+      union
+      select li.id, x.n, g.e, li.watched_at::date
+      from public.list_items li
+      join public.media m on m.id = li.media_id and m.series is not null
+      cross join lateral jsonb_to_recordset(m.series -> 'seasons') as x(n integer, episodes integer)
+      cross join lateral generate_series(1, public.series_aired(m.series, x.n)) as g(e)
+      where li.group_id is null and li.added_by = v_me and li.status = 'watched' and li.watched_at is not null
+        and not exists (select 1 from public.episode_logs l
+                        where l.list_item_id = li.id and l.season_number = x.n and l.episode_number = g.e)
+    ),
+    counted as (
+      select v.item, v.day from viewed v
+      where isfinite(v.day) and (p_year is null or extract(year from v.day) = p_year)
+    )
+    select jsonb_build_object(
+      'by_series', coalesce((select jsonb_object_agg(s.item, s.n)
+                             from (select c.item, count(*) as n from counted c group by c.item) s), '{}'::jsonb),
+      'by_month', coalesce((select jsonb_object_agg(s.month, s.n)
+                            from (select to_char(c.day, 'YYYY-MM') as month, count(*) as n
+                                  from counted c group by 1) s), '{}'::jsonb)
+    )
+  );
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 --  Movie nights: stacks of titles to swipe, votes, and the results
 -- ---------------------------------------------------------------------------
@@ -3787,6 +3845,7 @@ grant execute on function
   public.watch_episode_again(uuid, integer, integer, date),
   public.my_series_progress(),
   public.my_series_passes(),
+  public.my_episode_counts(integer),
   public.export_my_data(),
   public.get_movie_night_guest_link(uuid),
   public.replace_movie_night_guest_link(uuid),
