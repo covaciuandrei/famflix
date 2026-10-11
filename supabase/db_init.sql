@@ -174,7 +174,8 @@ create index watch_history_group_idx on public.watch_history (group_id);
 create index watch_history_logged_by_idx on public.watch_history (logged_by);
 
 -- The episodes someone has ticked on a series on their My list, with their own score and note for each. One row per
--- ticked episode, so Not started is no rows. Only mark_episodes(), mark_next_episode() and rate_episode() write it.
+-- ticked episode, so Not started is no rows. Only mark_episodes(), mark_next_episode(), rate_episode(),
+-- watch_series_again() and watch_episode_again() write it.
 create table public.episode_logs (
   list_item_id   uuid not null references public.list_items (id) on delete cascade,
   season_number  smallint not null check (season_number between 1 and 200),
@@ -185,6 +186,23 @@ create table public.episode_logs (
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   primary key (list_item_id, season_number, episode_number)
+);
+
+-- The earlier viewings of the episodes of a series on someone's My list, kept when an episode is watched again or the
+-- series is started again; episode_logs keeps the current one. A viewing is the episode on one day, with the score and
+-- note it had then. `pass` is the time through the series it belonged to (1 for the first time, 2 for the second...), or
+-- null for a viewing of a single episode that was watched again. Only watch_series_again() and watch_episode_again()
+-- write it.
+create table public.episode_history (
+  list_item_id   uuid not null references public.list_items (id) on delete cascade,
+  season_number  smallint not null check (season_number between 1 and 200),
+  episode_number smallint not null check (episode_number between 1 and 20000),
+  watched_on     date not null,
+  score          numeric(3,1) check (score between 1 and 10),
+  comment        text check (char_length(comment) <= 250),
+  pass           smallint check (pass >= 1),
+  created_at     timestamptz not null default now(),
+  primary key (list_item_id, season_number, episode_number, watched_on)
 );
 
 -- Family activity feed. Names and titles are copied in, so history stays readable after people leave.
@@ -502,6 +520,7 @@ alter table public.reactions     enable row level security;
 alter table public.watches       enable row level security;
 alter table public.watch_history enable row level security;
 alter table public.episode_logs  enable row level security;
+alter table public.episode_history enable row level security;
 alter table public.activity      enable row level security;
 alter table public.rate_limits   enable row level security;
 alter table public.movie_nights           enable row level security;
@@ -602,6 +621,13 @@ create policy watches_select on public.watches for select using (
 -- episode_logs: your own episodes on your My list only (nobody else's, and not a family's); no write policies, the
 -- functions below write them.
 create policy episode_logs_select on public.episode_logs for select using (
+  exists (
+    select 1 from public.list_items li
+    where li.id = list_item_id and li.group_id is null and li.added_by = (select auth.uid())
+  )
+);
+-- episode_history: the same, for the viewings before the current one.
+create policy episode_history_select on public.episode_history for select using (
   exists (
     select 1 from public.list_items li
     where li.id = list_item_id and li.group_id is null and li.added_by = (select auth.uid())
@@ -1816,6 +1842,141 @@ begin
   end if;
   return jsonb_build_object('completed', public.episodes_complete_if_done(p_item, v_series));
 end;
+$$;
+
+-- ---------------------------------------------------------------------------
+--  Series: watching it, or one episode, again
+-- ---------------------------------------------------------------------------
+
+-- Starts a series on the caller's My list again, as a new pass: every episode they have watched of it (every aired
+-- episode if it is marked Watched, dated by when it was marked) goes into episode_history as the next pass, with its
+-- day, score and note, the ticks are cleared and the series is back on To watch. The series' own score and note stay,
+-- and an entry that a family's watch put on My list becomes theirs again. Returns {"pass": the number of the pass
+-- that was kept, "episodes": how many episodes it had}.
+create function public.watch_series_again(p_item uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status  text;
+  v_watched timestamptz;
+  v_series  jsonb;
+  v_pass    integer;
+  v_kept    integer;
+begin
+  select m.status, m.watched_at, m.series into v_status, v_watched, v_series from public.episodes_my_item(p_item) as m;
+  perform public.hit_rate_limit(auth.uid(), 'watch_again', 60, 3600);
+
+  if v_status <> 'watched' and not exists (select 1 from public.episode_logs where list_item_id = p_item) then
+    raise exception 'There is nothing to start again: no episode is watched';
+  end if;
+
+  select coalesce(max(h.pass), 0) + 1 into v_pass from public.episode_history h where h.list_item_id = p_item;
+
+  insert into public.episode_history as h (list_item_id, season_number, episode_number, watched_on, score, comment, pass)
+  select p_item, w.season_number, w.episode_number, w.watched_on, w.score, w.comment, v_pass
+  from (
+    select l.season_number::integer as season_number, l.episode_number::integer as episode_number, l.watched_on,
+           l.score, l.comment
+    from public.episode_logs l
+    where l.list_item_id = p_item
+    union all
+    select x.n, g.e, coalesce(v_watched::date, current_date), null::numeric, null::text
+    from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+    cross join lateral generate_series(1, public.series_aired(v_series, x.n)) as g(e)
+    where v_status = 'watched'
+      and not exists (select 1 from public.episode_logs l
+                      where l.list_item_id = p_item and l.season_number = x.n and l.episode_number = g.e)
+  ) w
+  on conflict (list_item_id, season_number, episode_number, watched_on) do update
+    set pass    = coalesce(excluded.pass, h.pass),
+        score   = coalesce(excluded.score, h.score),
+        comment = coalesce(excluded.comment, h.comment);
+  get diagnostics v_kept = row_count;
+
+  delete from public.episode_logs where list_item_id = p_item;
+  update public.list_items
+  set status = 'want', watched_at = null, source_item_id = null, watch_origin = null
+  where id = p_item;
+  return jsonb_build_object('pass', v_pass, 'episodes', v_kept);
+end;
+$$;
+
+-- Logs another viewing of one episode that the caller has watched, of a series on their My list: the day it has now
+-- (with its score and note) goes into episode_history, and the episode gets the new day, keeping its score and note.
+-- A series marked Watched counts every aired episode as watched, dated by when it was marked. The day it already has
+-- is refused.
+create function public.watch_episode_again(p_item uuid, p_season integer, p_episode integer, p_on date default current_date)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status  text;
+  v_watched timestamptz;
+  v_series  jsonb;
+  v_log     public.episode_logs;
+  v_was     date;
+begin
+  select m.status, m.watched_at, m.series into v_status, v_watched, v_series from public.episodes_my_item(p_item) as m;
+  perform public.hit_rate_limit(auth.uid(), 'watch_again', 60, 3600);
+
+  if p_season is null or p_episode is null or p_season < 1 or p_episode < 1 or not exists (
+       select 1 from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+       where x.n = p_season and p_episode <= x.episodes) then
+    raise exception 'That episode is not listed for this series';
+  end if;
+  if p_episode > public.series_aired(v_series, p_season) then
+    raise exception 'That episode has not aired yet';
+  end if;
+  -- One day of slack: the browser's "today" can be ahead of the server's (UTC).
+  if p_on is null or p_on > current_date + 1 then
+    raise exception 'Pick a date that is not in the future';
+  end if;
+
+  select * into v_log from public.episode_logs l
+  where l.list_item_id = p_item and l.season_number = p_season and l.episode_number = p_episode;
+  if found then
+    v_was := v_log.watched_on;
+  elsif v_status = 'watched' then
+    v_was := coalesce(v_watched::date, current_date);
+  else
+    raise exception 'You have not watched this episode yet';
+  end if;
+  if p_on = v_was then
+    raise exception 'The episode already has that day';
+  end if;
+
+  insert into public.episode_history as h (list_item_id, season_number, episode_number, watched_on, score, comment)
+  values (p_item, p_season, p_episode, v_was, v_log.score, v_log.comment)
+  on conflict (list_item_id, season_number, episode_number, watched_on) do update
+    set score   = coalesce(excluded.score, h.score),
+        comment = coalesce(excluded.comment, h.comment);
+
+  insert into public.episode_logs as e (list_item_id, season_number, episode_number, watched_on)
+  values (p_item, p_season, p_episode, p_on)
+  on conflict (list_item_id, season_number, episode_number) do update
+    set watched_on = excluded.watched_on, updated_at = now();
+end;
+$$;
+
+-- How many times through each series on the caller's My list has been kept in the history (a series started again), for
+-- its card. The current pass is the next one.
+create function public.my_series_passes()
+returns table (list_item_id uuid, passes integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select h.list_item_id, max(h.pass)::integer
+  from public.episode_history h
+  join public.list_items li on li.id = h.list_item_id
+  where li.group_id is null and li.added_by = auth.uid() and li.deleted_at is null and h.pass is not null
+  group by h.list_item_id;
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -3351,7 +3512,8 @@ revoke all on all functions in schema public from public, anon, authenticated, s
 -- Signed-in people read what the security rules let them see.
 grant select on
   public.profiles, public.groups, public.group_members, public.media, public.list_items, public.ratings,
-  public.reactions, public.watches, public.watch_history, public.episode_logs, public.activity, public.movie_nights,
+  public.reactions, public.watches, public.watch_history, public.episode_logs, public.episode_history, public.activity,
+  public.movie_nights,
   public.movie_night_stacks, public.movie_night_candidates, public.movie_night_votes, public.movie_night_finishes,
   public.movie_night_members
   to authenticated;
@@ -3414,7 +3576,10 @@ grant execute on function
   public.mark_episodes(uuid, boolean, integer, integer, integer, integer, date),
   public.mark_next_episode(uuid, date),
   public.rate_episode(uuid, integer, integer, numeric, text),
+  public.watch_series_again(uuid),
+  public.watch_episode_again(uuid, integer, integer, date),
   public.my_series_progress(),
+  public.my_series_passes(),
   public.get_movie_night_guest_link(uuid),
   public.replace_movie_night_guest_link(uuid),
   public.turn_off_movie_night_guest_link(uuid),
