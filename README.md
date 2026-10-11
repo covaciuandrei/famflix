@@ -119,6 +119,17 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   10 guests, with names of up to 30 characters.
 - **Activity feed**: see what happened in each family; removed titles can be
   restored for 30 days.
+- **Plan a movie night**: not tonight? **Plan a movie night** on the Movie night
+  page picks a day and a time (written in your own time zone, shown in
+  everyone else's own), with an optional note (100 characters) and a mood. The
+  plan sits at the top of the family's nights with **Going / Maybe / Can't** for
+  each member (press an answer again to take it back), who is coming, **Start
+  now** and **Cancel plan**; anyone in the family can do those. Starting from a
+  plan starts the night with the plan's mood. A family has at most 5 planned, a
+  plan can be up to a year ahead, and one that nobody starts is over a day
+  after its time (a cancelled or passed one stays in the list for a day).
+  Planning and cancelling write a line in the feed. There is no calendar file
+  and no e-mail: everything stays in the app.
 - **Family stats**: the **Stats** tab on a family's page shows what the family
   watched in a year (pick one, or All time): titles and viewings, hours of
   movies (a series adds none), movie nights held, the top 5 by average score,

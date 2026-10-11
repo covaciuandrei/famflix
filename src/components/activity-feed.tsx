@@ -1,9 +1,23 @@
 import type { ReactNode } from "react";
 
 import { Avatar } from "@/components/avatar";
+import { LocalTime } from "@/components/movie-night/local-time";
 import { formatScore, timeAgo } from "@/lib/format";
 import { findGenre } from "@/lib/genres";
 import type { ActivityEvent } from "@/lib/types";
+
+/** " for Sat, Oct 18" from the moment a plan was for (the feed's detail), in the viewer's own time zone; nothing when there is none. */
+function plannedFor(detail: string | null): ReactNode {
+  if (!detail || !/^\d{4}-\d{2}-\d{2}T/.test(detail)) return null;
+  return (
+    <>
+      {" for "}
+      <strong>
+        <LocalTime iso={detail} kind="day" />
+      </strong>
+    </>
+  );
+}
 
 function describe(e: ActivityEvent, currentUserId: string): ReactNode {
   const isMe = e.actor_id === currentUserId;
@@ -104,6 +118,23 @@ function describe(e: ActivityEvent, currentUserId: string): ReactNode {
     }
     case "movie_night_cancelled":
       return <>{who} cancelled the movie night</>;
+    case "movie_night_planned": {
+      // The detail is the moment it is planned for; each person sees it in their own time zone.
+      const when = plannedFor(e.detail);
+      return (
+        <>
+          {who} planned a movie night{when}
+        </>
+      );
+    }
+    case "movie_night_plan_cancelled": {
+      const when = plannedFor(e.detail);
+      return (
+        <>
+          {who} cancelled the movie night planned{when ?? ""}
+        </>
+      );
+    }
     case "movie_night_added": {
       const count = Number(e.detail);
       return (

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
 import { nightPeople, type ActiveNight, type HistoryEntry, type NightState } from "@/lib/movie-night";
+import { parsePlans, type PlannedNight } from "@/lib/movie-night-plans";
 import { earlierByTitle, groupEarlier, type HistoryRow } from "@/lib/rewatch";
 import type { EarlierEpisode } from "@/lib/series";
 import type {
@@ -719,6 +720,22 @@ export async function getActiveMovieNights(): Promise<ActiveNight[]> {
     return [];
   }
   return (data ?? []) as ActiveNight[];
+}
+
+/**
+ * One family's planned movie nights (see planned_movie_nights()): the ones still planned, soonest first, then those
+ * cancelled or passed in the last day. Empty if the lookup fails or the database doesn't have the function yet, so the
+ * Movie night page works either way.
+ */
+export async function getPlannedNights(groupId: string): Promise<PlannedNight[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("planned_movie_nights", { p_group: groupId });
+  if (error) {
+    // PGRST202: the database doesn't have the function yet.
+    if (error.code !== "PGRST202") console.error("Could not load planned movie nights:", error.message);
+    return [];
+  }
+  return parsePlans(data);
 }
 
 /**

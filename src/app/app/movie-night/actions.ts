@@ -16,6 +16,7 @@ import {
   type Vote,
 } from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
+import { MAX_PLAN_NOTE, PLAN_ANSWERS, planTimeProblem, type PlanAnswer } from "@/lib/movie-night-plans";
 import { putOnList } from "@/lib/list-add";
 import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
@@ -39,6 +40,13 @@ function randomSeed(): number {
 /** The database's own message, except for the one case it can't word well (two people starting at once). */
 function friendly(error: { code?: string; message: string }): string {
   return error.code === "23505" ? "This family already has a movie night open." : error.message;
+}
+
+/** The same for plans, which also say plainly when the database hasn't been given the update that adds them yet. */
+function planFriendly(error: { code?: string; message: string }): string {
+  return error.code === "PGRST202"
+    ? "Planning movie nights isn't set up yet: the database update hasn't been run."
+    : friendly(error);
 }
 
 /** Titles the family's last three movie nights already showed, so a new one doesn't repeat them. */
@@ -69,23 +77,51 @@ async function recentTitles(supabase: Supabase, groupId: string): Promise<Set<st
 /**
  * Starts a movie night for a family: builds its first stack (the family's To watch titles that fit the mood, then
  * suggestions; movies only, series are tracked on My list), creates the night and sends the starter to it. Only
- * returns when something is wrong.
+ * returns when something is wrong. With a plan of the family's (`planId`) the night has the plan's mood, whatever else
+ * is passed, and the plan is marked started in the same go.
  */
 export async function startMovieNight(input: {
   groupId: string;
-  genres: string[];
-  count: number;
-  max: number | null;
+  genres?: string[];
+  count?: number;
+  max?: number | null;
+  planId?: string;
 }): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!UUID.test(String(input?.groupId))) return { error: "That isn't one of your families." };
-  const mood = movieNightMood(
-    parseMood({
-      genres: Array.isArray(input.genres) ? input.genres.map(String) : [],
-      count: input.count,
-      max: input.max,
-    }),
-  );
+  if (input.planId !== undefined && !UUID.test(String(input.planId))) return { error: "That isn't one of your plans." };
+
+  let moodInput: { genres: string[]; count?: number | null; max?: number | null } = {
+    genres: Array.isArray(input.genres) ? input.genres.map(String) : [],
+    count: input.count,
+    max: input.max,
+  };
+  if (input.planId) {
+    // The plan's own mood, read from the plan (the database starts the night with it too).
+    const { data: plan } = await supabase
+      .from("movie_night_plans")
+      .select("group_id, status, genres, options")
+      .eq("id", input.planId)
+      .maybeSingle();
+    if (!plan || plan.group_id !== input.groupId) return { error: "That plan isn't available." };
+    if (plan.status !== "planned") {
+      return {
+        error:
+          plan.status === "started"
+            ? "That movie night has already started."
+            : plan.status === "cancelled"
+              ? "That plan was cancelled."
+              : "That plan has passed.",
+      };
+    }
+    const options = (plan.options ?? {}) as { count?: unknown; max?: unknown };
+    moodInput = {
+      genres: Array.isArray(plan.genres) ? plan.genres.map(String) : [],
+      count: Number(options.count),
+      max: typeof options.max === "number" ? options.max : null,
+    };
+  }
+  const mood = movieNightMood(parseMood(moodInput));
 
   const { data: member } = await supabase
     .from("group_members")
@@ -111,10 +147,73 @@ export async function startMovieNight(input: {
     p_genres: mood.genres,
     p_options: { series: false, count: mood.count, max: mood.maxRuntime },
     p_candidates: built.candidates,
+    // Left out when there is no plan, so a start with none works on a database that hasn't had the plans update yet.
+    ...(input.planId ? { p_plan: input.planId } : {}),
   });
   if (error) return { error: friendly(error) };
   revalidatePath("/app", "layout");
   redirect(`/app/movie-night/${data as string}`);
+}
+
+/**
+ * Plans a movie night for a family: a moment (an ISO instant, which the person's own browser worked out from their own
+ * time zone), an optional note and an optional mood, the same as when a night starts. The database checks it all again
+ * (in the future, within a year, at most 5 planned) and says what is wrong.
+ */
+export async function planNight(input: {
+  groupId: string;
+  startsAt: string;
+  note: string;
+  genres: string[];
+  count: number;
+  max: number | null;
+}): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(input?.groupId))) return { error: "That isn't one of your families." };
+  const when = typeof input.startsAt === "string" ? Date.parse(input.startsAt) : Number.NaN;
+  const problem = planTimeProblem(Number.isFinite(when) ? new Date(when).toISOString() : null, Date.now());
+  if (problem) return { error: problem };
+  const note = typeof input.note === "string" ? input.note.trim() : "";
+  if (note.length > MAX_PLAN_NOTE) return { error: `A note can be ${MAX_PLAN_NOTE} characters at most.` };
+  const mood = movieNightMood(
+    parseMood({
+      genres: Array.isArray(input.genres) ? input.genres.map(String) : [],
+      count: input.count,
+      max: input.max,
+    }),
+  );
+
+  const { error } = await supabase.rpc("plan_movie_night", {
+    p_group: input.groupId,
+    p_starts_at: new Date(when).toISOString(),
+    p_note: note || null,
+    p_genres: mood.genres,
+    p_options: { series: false, count: mood.count, max: mood.maxRuntime },
+  });
+  if (error) return { error: planFriendly(error) };
+  revalidatePath("/app", "layout");
+  return {};
+}
+
+/** Answers a plan: Going, Maybe or Can't; null takes the answer back. */
+export async function rsvpPlan(planId: string, answer: PlanAnswer | null): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(planId))) return { error: "That isn't one of your plans." };
+  if (answer !== null && !PLAN_ANSWERS.includes(answer)) return { error: "Answer Going, Maybe or Can't." };
+  const { error } = await supabase.rpc("rsvp_movie_night_plan", { p_plan: planId, p_answer: answer });
+  if (error) return { error: planFriendly(error) };
+  revalidatePath("/app", "layout");
+  return {};
+}
+
+/** Cancels a plan (any member of the family can). */
+export async function cancelPlan(planId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(planId))) return { error: "That isn't one of your plans." };
+  const { error } = await supabase.rpc("cancel_movie_night_plan", { p_plan: planId });
+  if (error) return { error: planFriendly(error) };
+  revalidatePath("/app", "layout");
+  return {};
 }
 
 /** Takes part in a night without voting yet. */

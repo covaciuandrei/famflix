@@ -4,6 +4,7 @@ import {
   expect,
   type Browser,
   type BrowserContext,
+  type BrowserContextOptions,
   type Locator,
   type Page,
   type TestInfo,
@@ -112,7 +113,11 @@ export function firstCard(page: Page, row: string): Locator {
 }
 
 /** A browser context sized like the project's screen (a computer or a phone), with nobody signed in. */
-async function newContext(browser: Browser, project: TestInfo["project"]): Promise<BrowserContext> {
+async function newContext(
+  browser: Browser,
+  project: TestInfo["project"],
+  extra: BrowserContextOptions = {},
+): Promise<BrowserContext> {
   const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, baseURL } =
     project.use;
   return browser.newContext({
@@ -122,16 +127,21 @@ async function newContext(browser: Browser, project: TestInfo["project"]): Promi
     isMobile,
     hasTouch,
     baseURL,
+    ...extra,
   });
 }
 
-/** A browser window for one signed-in person, sized like the project's screen (a computer or a phone). */
+/**
+ * A browser window for one signed-in person, sized like the project's screen (a computer or a phone). `extra` is for
+ * what differs from person to person, such as their time zone.
+ */
 export async function openAs(
   browser: Browser,
   project: TestInfo["project"],
   user: TestUser,
+  extra: BrowserContextOptions = {},
 ): Promise<Page> {
-  const context = await newContext(browser, project);
+  const context = await newContext(browser, project, extra);
   await signIn(context, user);
   return context.newPage();
 }

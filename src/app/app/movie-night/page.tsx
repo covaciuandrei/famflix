@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { Hub } from "@/components/movie-night/hub";
 import { NoFamily } from "@/components/movie-night/no-family";
-import { getActiveMovieNights, getMyGroups, getNightHistory, getSessionProfile } from "@/lib/data";
+import { getActiveMovieNights, getMyGroups, getNightHistory, getPlannedNights, getSessionProfile } from "@/lib/data";
 import { HISTORY_PAGE } from "@/lib/movie-night";
 
 /** Movie night: for a family. Swipe through titles together, and let the votes decide what to watch. */
@@ -22,7 +22,9 @@ export default async function MovieNightPage({
   // Looking at the nights going on also settles those nobody has touched for 12 hours (the layout does it too, but in
   // parallel), so they are in the list below as expired.
   await getActiveMovieNights();
-  const history = family ? await getNightHistory(family.id, 0, HISTORY_PAGE) : null;
+  const [history, plans] = family
+    ? await Promise.all([getNightHistory(family.id, 0, HISTORY_PAGE), getPlannedNights(family.id)])
+    : [null, []];
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,6 +43,8 @@ export default async function MovieNightPage({
           families={groups.map((g) => ({ id: g.id, name: g.name, members: g.memberCount }))}
           selectedId={family.id}
           history={history}
+          plans={plans}
+          meId={user.id}
         />
       ) : (
         <NoFamily />

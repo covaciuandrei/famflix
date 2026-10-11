@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -8,20 +9,27 @@ import { cancelNight, startMovieNight } from "@/app/app/movie-night/actions";
 import { MoodPicker, chip } from "@/components/movie-night/mood-picker";
 import { NightList } from "@/components/movie-night/night-list";
 import { useNightStatus, waitingOnMe } from "@/components/movie-night/night-status";
-import { buttonVariants } from "@/components/ui/button";
+import { PlanDialog } from "@/components/movie-night/plan-dialog";
+import { PlanList } from "@/components/movie-night/plan-list";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { findGenre } from "@/lib/genres";
 import { type HistoryEntry, nightAction } from "@/lib/movie-night";
+import { MAX_PLANNED, type PlannedNight } from "@/lib/movie-night-plans";
 import { cn } from "@/lib/utils";
 
 /**
  * Starts a movie night for a family: the mood, then the stack everyone in the family swipes. With more than one family
  * you pick which (a dot says where a night is waiting for you). A family with a night already going gets that night
- * instead of the form. Beside it (below it on a phone) is the list of that family's movie nights with their status.
+ * instead of the form. A night can also be planned for later: the plans sit at the top, where everyone answers them and
+ * anyone can start the night from one. Beside it all (below it on a phone) is the list of that family's movie nights
+ * with their status.
  */
 export function Hub({
   families,
   selectedId,
   history,
+  plans,
+  meId,
 }: {
   /** Every family I'm in, oldest first. Never empty: without one there is nothing to start. */
   families: { id: string; name: string; members: number }[];
@@ -29,6 +37,10 @@ export function Hub({
   selectedId: string;
   /** The first page of that family's nights that are over. */
   history: { entries: HistoryEntry[]; hasMore: boolean };
+  /** That family's plans: the ones still planned, and those cancelled or passed in the last day. */
+  plans: PlannedNight[];
+  /** Who is looking. */
+  meId: string;
 }) {
   const router = useRouter();
   const family = families.find((f) => f.id === selectedId) ?? families[0];
@@ -37,7 +49,9 @@ export function Hub({
   const openNight = nights.find((n) => n.group_id === family.id) ?? null;
   const waitingIn = new Set(nights.filter(waitingOnMe).map((n) => n.group_id));
   const [error, setError] = useState<string | null>(null);
+  const [planning, setPlanning] = useState(false);
   const [pending, start] = useTransition();
+  const planned = plans.filter((p) => p.status === "planned").length;
 
   function cancelOpenNight() {
     if (!openNight || !window.confirm("Cancel this movie night for everyone? Its votes stay in the history.")) return;
@@ -128,6 +142,19 @@ export function Hub({
           />
         )}
 
+        <div className="flex flex-col items-start gap-2">
+          <Button variant="outline" onClick={() => setPlanning(true)} disabled={planned >= MAX_PLANNED}>
+            <CalendarPlus className="size-4" aria-hidden />
+            Plan a movie night
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            {planned >= MAX_PLANNED
+              ? `${family.name} has ${MAX_PLANNED} planned, the most there can be. Start or cancel one to plan another.`
+              : `Not tonight? Pick a day and a time, and everyone in ${family.name} can say whether they are coming.`}
+          </p>
+        </div>
+        {planning && <PlanDialog groupId={family.id} familyName={family.name} onClose={() => setPlanning(false)} />}
+
         <p className="text-sm text-muted-foreground">
           Rather look through everything on your lists?{" "}
           <Link href="/app/movie-night/list" className="underline underline-offset-2 hover:text-foreground">
@@ -137,13 +164,17 @@ export function Hub({
         </p>
       </div>
 
-      <NightList
-        // Starts over when the first page changes (a night ended, or another family was chosen).
-        key={`${family.id}:${history.entries.map((e) => e.id).join(",")}`}
-        scope={{ groupId: family.id, familyName: family.name }}
-        initial={history.entries}
-        initialHasMore={history.hasMore}
-      />
+      {/* The plans come first on a phone, and sit above the list of nights beside the form on a computer. */}
+      <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-8">
+        <PlanList plans={plans} groupId={family.id} meId={meId} className="order-first lg:order-none" />
+        <NightList
+          // Starts over when the first page changes (a night ended, or another family was chosen).
+          key={`${family.id}:${history.entries.map((e) => e.id).join(",")}`}
+          scope={{ groupId: family.id, familyName: family.name }}
+          initial={history.entries}
+          initialHasMore={history.hasMore}
+        />
+      </div>
     </div>
   );
 }
