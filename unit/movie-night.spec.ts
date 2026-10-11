@@ -7,6 +7,7 @@ import {
   deckOrder,
   DEFAULT_MOOD,
   groupVotes,
+  guestPath,
   isSwipingPath,
   MAX_GENRES,
   moodParams,
@@ -16,6 +17,7 @@ import {
   nightAction,
   nightMood,
   parseMood,
+  personLabel,
   POINTS,
   type NightInfo,
 } from "../src/lib/movie-night";
@@ -186,11 +188,11 @@ test("formatRuntime reads like a film listing", () => {
 
 test.describe("groupVotes", () => {
   const votes = [
-    { user_id: "u-cara", name: "Cara", vote: "yes" as const },
-    { user_id: "u-ana", name: "Ana", vote: "love" as const },
-    { user_id: "u-ben", name: "Ben", vote: "yes" as const },
-    { user_id: "u-dan", name: "Dan", vote: "nope" as const },
-    { user_id: "u-eva", name: "Eva", vote: "yes" as const },
+    { user_id: "u-cara", name: "Cara", guest: false, vote: "yes" as const },
+    { user_id: "u-ana", name: "Ana", guest: false, vote: "love" as const },
+    { user_id: "u-ben", name: "Ben", guest: false, vote: "yes" as const },
+    { user_id: "u-dan", name: "Dan", guest: false, vote: "nope" as const },
+    { user_id: "u-eva", name: "Eva", guest: false, vote: "yes" as const },
   ];
 
   test("goes from the strongest vote down and leaves out votes nobody gave", () => {
@@ -205,6 +207,36 @@ test.describe("groupVotes", () => {
   test("a night nobody voted on has nothing to show", () => {
     expect(groupVotes([], "u-ana")).toEqual([]);
   });
+
+  test("marks the guests, who are told apart from a family member with the same name", () => {
+    const mixed = [
+      ...votes,
+      { user_id: "g-1", name: "Ben", guest: true, vote: "yes" as const },
+      { user_id: "g-2", name: "Zoe", guest: true, vote: "love" as const },
+    ];
+    expect(groupVotes(mixed, "u-zed").find((g) => g.vote === "yes")?.names).toEqual([
+      "Ben",
+      "Ben (guest)",
+      "Cara",
+      "Eva",
+    ]);
+    expect(groupVotes(mixed, "u-zed").find((g) => g.vote === "love")?.names).toEqual(["Ana", "Zoe (guest)"]);
+    // A guest looking at the board is "You" too.
+    expect(groupVotes(mixed, "g-2").find((g) => g.vote === "love")?.names).toEqual(["You", "Ana"]);
+  });
+});
+
+test.describe("personLabel", () => {
+  test("is You for yourself, the name for the family, and the name marked as a guest for a guest", () => {
+    expect(personLabel({ user_id: "u-ana", name: "Ana", guest: false }, "u-ana")).toBe("You");
+    expect(personLabel({ user_id: "u-ben", name: "Ben", guest: false }, "u-ana")).toBe("Ben");
+    expect(personLabel({ user_id: "g-1", name: "Zoe", guest: true }, "u-ana")).toBe("Zoe (guest)");
+    expect(personLabel({ user_id: "g-1", name: "Zoe", guest: true }, "g-1")).toBe("You");
+  });
+});
+
+test("a guest link lives under /guest and holds nothing but the token", () => {
+  expect(guestPath("ab12")).toBe("/guest/ab12");
 });
 
 test.describe("what a night in progress offers", () => {

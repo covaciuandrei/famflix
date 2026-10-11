@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { Avatar } from "@/components/avatar";
 import type { MemberProgress, StackInfo } from "@/lib/movie-night";
@@ -18,19 +18,25 @@ function statusOf(member: MemberProgress, stacks: StackInfo[]): { text: string; 
   return { text: stacks.length > 1 ? `stack ${first.stack.position}: ${label}` : label, done: false };
 }
 
-/** Who is in the night and how far along they are. */
+/**
+ * Who is in the night and how far along they are: the family first, then the guests (marked Guest). With
+ * `onRemoveGuest` a guest has a button to take them out of the night.
+ */
 export function ProgressStrip({
   members,
   stacks,
   meId,
+  onRemoveGuest,
 }: {
   members: MemberProgress[];
   stacks: StackInfo[];
   meId: string;
+  onRemoveGuest?: (guest: MemberProgress) => void;
 }) {
+  const people = [...members].sort((a, b) => Number(a.guest) - Number(b.guest));
   return (
     <ul className="flex flex-wrap gap-2" aria-label="Who is taking part">
-      {members.map((member) => {
+      {people.map((member) => {
         const status = statusOf(member, stacks);
         return (
           <li
@@ -38,16 +44,31 @@ export function ProgressStrip({
             className={cn(
               "flex items-center gap-2 rounded-full border border-border py-1 pr-3 pl-1 text-sm",
               !member.joined && "opacity-60",
+              member.guest && onRemoveGuest && "pr-1",
             )}
           >
             <Avatar name={member.name} url={member.avatar_url} className="size-6" />
             <span className="max-w-28 truncate font-medium">
               {member.user_id === meId ? "You" : member.name}
             </span>
+            {member.guest && (
+              <span className="rounded-full bg-muted px-1.5 text-[11px] leading-4 text-muted-foreground">Guest</span>
+            )}
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               {status.done && <Check className="size-3.5 text-like" aria-hidden />}
               {status.text}
             </span>
+            {member.guest && onRemoveGuest && (
+              <button
+                type="button"
+                onClick={() => onRemoveGuest(member)}
+                aria-label={`Take ${member.name} out of this movie night`}
+                title="Take out of this movie night"
+                className="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            )}
           </li>
         );
       })}
@@ -55,9 +76,9 @@ export function ProgressStrip({
   );
 }
 
-/** Who watched the title a night ended with. */
+/** Who watched the title a night ended with (a guest can't have: only the family logs a watch). */
 export function WatchedBy({ members, meId }: { members: MemberProgress[]; meId: string }) {
-  const people = members.filter((m) => m.watched);
+  const people = members.filter((m) => m.watched && !m.guest);
   if (people.length === 0) return null;
   return (
     <ul className="flex flex-wrap items-center gap-2" aria-label="Who watched it">

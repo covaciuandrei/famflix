@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, EyeIcon, ListOrdered, MoreVertical, Popcorn, Search, XCircle } from "lucide-react";
+import { ArrowLeft, EyeIcon, ListOrdered, MoreVertical, Popcorn, Search, UserPlus, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -9,9 +9,9 @@ import type { NightInfo } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
 
 /**
- * The title of a night and, while it is open, a menu to show the results now, pick a title yourself or cancel it (any
- * member can). `compact` (while swiping) takes less room on a phone, where every pixel goes to the card: the family's
- * name moves up beside the title and the line under it goes.
+ * The title of a night and, while it is open, a menu to show the results now, pick a title yourself, invite a guest
+ * or cancel it (any member can). `compact` (while swiping) takes less room on a phone, where every pixel goes to the
+ * card: the family's name moves up beside the title and the line under it goes.
  */
 export function NightHeader({
   night,
@@ -20,6 +20,7 @@ export function NightHeader({
   onBoard,
   onReveal,
   onPickOther,
+  onInvite,
   onCancel,
 }: {
   night: NightInfo;
@@ -30,6 +31,8 @@ export function NightHeader({
   onReveal: () => void;
   /** Search for any title and end the night with it. */
   onPickOther: () => void;
+  /** Open the window with the night's guest link. */
+  onInvite: () => void;
   onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -126,6 +129,18 @@ export function NightHeader({
                 >
                   <Search className="size-4" />
                   Pick something else
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  onClick={() => {
+                    setOpen(false);
+                    onInvite();
+                  }}
+                >
+                  <UserPlus className="size-4" />
+                  Invite a guest
                 </button>
                 <button
                   type="button"

@@ -13,9 +13,11 @@ import {
   joinNight,
   pickCard,
   pickTitle,
+  removeGuest,
   requestMoreStack,
   revealNight,
 } from "@/app/app/movie-night/actions";
+import { GuestLinkDialog } from "@/components/movie-night/guest-link-dialog";
 import { Leaderboard, type RowActions } from "@/components/movie-night/leaderboard";
 import { NightHeader } from "@/components/movie-night/night-header";
 import { PickDialog } from "@/components/movie-night/pick-dialog";
@@ -36,6 +38,7 @@ import {
   MAX_STACKS,
   type MemberProgress,
   type NightState,
+  personLabel,
   TOP_TITLES,
 } from "@/lib/movie-night";
 
@@ -75,6 +78,7 @@ export function Room({ initial }: { initial: NightState }) {
   // Picking something that isn't one of the cards: first the search window, then the title it gave.
   const [searching, setSearching] = useState(false);
   const [otherTitle, setOtherTitle] = useState<TmdbItem | null>(null);
+  const [inviting, setInviting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -196,7 +200,7 @@ export function Room({ initial }: { initial: NightState }) {
   }
 
   async function reveal() {
-    const waiting = members.filter((m) => !isDone(m, state)).map((m) => (m.user_id === me ? "You" : m.name));
+    const waiting = members.filter((m) => !isDone(m, state)).map((m) => personLabel(m, me));
     const who = waiting.length > 0 ? ` ${waiting.join(", ")} haven't finished, and the cards they haven't swiped count as no vote.` : "";
     if (!window.confirm(`Show the results now?${who}`)) return;
     setMessage(null);
@@ -204,6 +208,15 @@ export function Room({ initial }: { initial: NightState }) {
     const res = await revealNight(night.id);
     if (res.error) setMessage(res.error);
     else await refresh(true);
+  }
+
+  /** Takes a guest out of the night, with their votes. */
+  async function takeOut(guest: MemberProgress) {
+    if (!window.confirm(`Take ${guest.name} out of this movie night? Their votes are removed too.`)) return;
+    setMessage(null);
+    const res = await removeGuest(night.id, guest.user_id);
+    if (res.error) setMessage(res.error);
+    await refresh(true);
   }
 
   async function cancel() {
@@ -280,6 +293,7 @@ export function Room({ initial }: { initial: NightState }) {
         onBoard={swipingStack && stacks.some((s) => s.can_see_results) ? peekAtBoard : undefined}
         onReveal={reveal}
         onPickOther={() => setSearching(true)}
+        onInvite={() => setInviting(true)}
         onCancel={cancel}
       />
 
@@ -344,7 +358,7 @@ export function Room({ initial }: { initial: NightState }) {
             {night.status === "closed" ? (
               <WatchedBy members={members} meId={me} />
             ) : (
-              <ProgressStrip members={members} stacks={stacks} meId={me} />
+              <ProgressStrip members={members} stacks={stacks} meId={me} onRemoveGuest={isOpen ? takeOut : undefined} />
             )}
             {someoneStillSwiping && (
               <button
@@ -420,6 +434,9 @@ export function Room({ initial }: { initial: NightState }) {
           onFailed={() => void refresh(true)}
           onClose={() => setPickId(null)}
         />
+      )}
+      {isOpen && inviting && (
+        <GuestLinkDialog nightId={night.id} groupName={night.group_name} onClose={() => setInviting(false)} />
       )}
       {isOpen && searching && (
         <TitleSearchDialog

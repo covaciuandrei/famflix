@@ -31,6 +31,8 @@ export function PickDialog({
   onFailed: () => void;
   onClose: () => void;
 }) {
+  // Guests have no account, so they can't be among the people who watched.
+  const family = members.filter((m) => !m.guest);
   return (
     <WatchedTogetherModal
       title={title}
@@ -40,8 +42,8 @@ export function PickDialog({
           this movie night.
         </>
       }
-      members={members.map((m) => ({ id: m.user_id, display_name: m.name, avatar_url: m.avatar_url }))}
-      initialChecked={[meId, ...members.filter((m) => m.joined).map((m) => m.user_id)]}
+      members={family.map((m) => ({ id: m.user_id, display_name: m.name, avatar_url: m.avatar_url }))}
+      initialChecked={[meId, ...family.filter((m) => m.joined).map((m) => m.user_id)]}
       ratings={[]}
       currentUserId={meId}
       onSubmit={async (input) => {

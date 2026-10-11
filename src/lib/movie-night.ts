@@ -217,11 +217,13 @@ export interface StackInfo {
   can_see_results: boolean;
 }
 
-/** How far someone is, never what they voted. */
+/** How far someone is, never what they voted. A guest (someone who joined through the night's link) has no account. */
 export interface MemberProgress {
+  /** A guest's id is theirs for this night only. */
   user_id: string;
   name: string;
   avatar_url: string | null;
+  guest: boolean;
   joined: boolean;
   /** Watched the picked title. */
   watched: boolean;
@@ -256,14 +258,17 @@ export interface ResultRow {
   yes: number;
   seen: number;
   nopes: number;
-  votes: { user_id: string; name: string; vote: Vote }[];
+  votes: { user_id: string; name: string; guest: boolean; vote: Vote }[];
   on_family_list: boolean;
   family_item_id: string | null;
   on_my_list: boolean;
 }
 
 export interface NightState {
+  /** A member's own id, or a guest's. */
   me: string;
+  /** Who is looking: a guest is told nothing about the family's lists. */
+  viewer: "member" | "guest";
   night: NightInfo;
   stacks: StackInfo[];
   members: MemberProgress[];
@@ -293,6 +298,12 @@ export interface ActiveNight {
   done_members: number;
 }
 
+/** How someone is named next to what they did: "You", a family member's name, or a guest's name marked as one. */
+export function personLabel(person: { user_id: string; name: string; guest: boolean }, meId: string): string {
+  if (person.user_id === meId) return "You";
+  return person.guest ? `${person.name} (guest)` : person.name;
+}
+
 /** Who voted what on one title: the strongest vote first, and within a vote you first, then by name. */
 export function groupVotes(votes: ResultRow["votes"], meId: string): { vote: Vote; names: string[] }[] {
   const order: Vote[] = ["love", "yes", "seen", "nope"];
@@ -301,11 +312,16 @@ export function groupVotes(votes: ResultRow["votes"], meId: string): { vote: Vot
       vote,
       names: votes
         .filter((v) => v.vote === vote)
-        .map((v) => ({ mine: v.user_id === meId, name: v.name }))
+        .map((v) => ({ mine: v.user_id === meId, name: v.name, label: personLabel(v, meId) }))
         .sort((a, b) => Number(b.mine) - Number(a.mine) || a.name.localeCompare(b.name))
-        .map((v) => (v.mine ? "You" : v.name)),
+        .map((v) => v.label),
     }))
     .filter((group) => group.names.length > 0);
+}
+
+/** Where a night's guest link lives; the token is the secret part. */
+export function guestPath(token: string): string {
+  return `/guest/${token}`;
 }
 
 /** What someone can do next with a night that is going: join it, carry on swiping, or look at how it is going. */

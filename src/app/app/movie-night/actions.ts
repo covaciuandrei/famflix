@@ -178,6 +178,43 @@ export async function cancelNight(nightId: string): Promise<ActionResult> {
   return {};
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+//  Guests: people without an account who vote through the night's link. Any member can make or turn off the link
+//  and take a guest out. The link's token is a secret, so it is only ever handed to a member of the family.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The night's guest link, made if it has none (the secret part of /guest/<token>). */
+export async function getGuestLink(nightId: string): Promise<ActionResult & { token?: string }> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { data, error } = await supabase.rpc("get_movie_night_guest_link", { p_night: nightId });
+  return error ? { error: error.message } : { token: String(data) };
+}
+
+/** A new link: the old one stops working (guests who are in already stay in). */
+export async function newGuestLink(nightId: string): Promise<ActionResult & { token?: string }> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { data, error } = await supabase.rpc("replace_movie_night_guest_link", { p_night: nightId });
+  return error ? { error: error.message } : { token: String(data) };
+}
+
+/** No more guests can join (the ones who are in stay in). */
+export async function turnOffGuestLink(nightId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { error } = await supabase.rpc("turn_off_movie_night_guest_link", { p_night: nightId });
+  return error ? { error: error.message } : {};
+}
+
+/** Takes a guest out of an open night, with their votes. */
+export async function removeGuest(nightId: string, guestId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId)) || !UUID.test(String(guestId))) return { error: "That isn't a guest of this night." };
+  const { error } = await supabase.rpc("remove_movie_night_guest", { p_night: nightId, p_guest: guestId });
+  return error ? { error: error.message } : {};
+}
+
 /**
  * Asks for another stack of suggestions in the same spirit as the night (same genres and options, nothing it or its
  * family's last nights already showed), or, with `likeCandidateId`, titles like one of its cards. `knownStacks` is

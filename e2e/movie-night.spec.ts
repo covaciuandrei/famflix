@@ -1,25 +1,19 @@
-import { test, type Browser, type Page, type TestInfo } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 
 import { admin, createUser, expect, openAs, signIn, startFamily } from "./helpers";
-
-// A stack is built from TMDB, which can take a few seconds (more when it is slow).
-const TMDB = 90_000;
-
-type Kind = "yes" | "nope" | "love" | "seen";
-const KEYS: Record<Kind, string> = { yes: "ArrowRight", nope: "ArrowLeft", love: "ArrowUp", seen: "s" };
-const BUTTONS: Record<Kind, string | RegExp> = { yes: "Yes", nope: "Nope", love: /^Love it/, seen: /^Seen it/ };
-
-/** The card on top of the stack, and the counter above it ("3 / 25"). */
-const topCard = (page: Page) => page.getByRole("group", { name: /, \d+ of \d+$/ });
-const counter = (page: Page) => page.getByText(/^\d+ \/ \d+$/).first();
-
-/** One vote on the top card, by key on a computer and by button on a phone, then waits for the next card. */
-async function vote(page: Page, kind: Kind, keys: boolean) {
-  const [position, total] = (await counter(page).innerText()).split(" / ").map(Number);
-  if (keys) await page.keyboard.press(KEYS[kind]);
-  else await page.getByRole("button", { name: BUTTONS[kind], exact: typeof BUTTONS[kind] === "string" }).click();
-  if (position < total) await expect(counter(page)).toHaveText(`${position + 1} / ${total}`);
-}
+import {
+  acceptConfirms,
+  closeAll,
+  counter,
+  finishStack,
+  makeFamily,
+  openFamilyNight,
+  rows,
+  startNight,
+  TMDB,
+  topCard,
+  vote,
+} from "./night-helpers";
 
 /**
  * On a phone the card is nearly as wide as the screen and tall, leaves room for three or more lines of the
@@ -42,45 +36,7 @@ async function expectRoomyCardOnPhone(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
 }
 
-const leaderboard = (page: Page) => page.getByRole("heading", { name: "Leaderboard" });
-const rows = (page: Page) => page.locator("ol > li");
 const noDialogOpen = (page: Page) => expect(page.locator("dialog[open]")).toHaveCount(0);
-
-/** Everybody confirms the questions the app asks ("Cancel this movie night?"). */
-function acceptConfirms(...pages: Page[]) {
-  for (const page of pages) page.on("dialog", (dialog) => void dialog.accept());
-}
-
-/** People with their own browser windows, and a family made by the first one that the others join. */
-async function makeFamily(browser: Browser, project: TestInfo["project"], name: string, people: string[]) {
-  const users = await Promise.all(people.map((person) => createUser(person)));
-  const pages = await Promise.all(users.map((user) => openAs(browser, project, user)));
-  acceptConfirms(...pages);
-  await startFamily(pages[0], pages.slice(1), name);
-  return { users, pages };
-}
-
-/** Movie night for one family: with several the family is picked with a pill, with one it is already chosen. */
-async function openFamilyNight(page: Page, family: string) {
-  await page.goto("/app/movie-night");
-  const pill = page.getByRole("link", { name: new RegExp(`^${family}`) });
-  if (await pill.count()) await pill.click();
-}
-
-/** The family's open night, started from Movie night; waits for the first card. */
-async function startNight(page: Page, family: string) {
-  await openFamilyNight(page, family);
-  await page.getByRole("button", { name: `Start movie night for ${family}` }).click();
-  await expect(topCard(page)).toBeVisible({ timeout: TMDB });
-  await expect(page).toHaveURL(/\/app\/movie-night\/[0-9a-f-]{36}$/);
-}
-
-async function finishStack(page: Page) {
-  await page.getByRole("button", { name: "Skip the rest" }).click();
-  await expect(leaderboard(page)).toBeVisible();
-}
-
-const closeAll = (pages: Page[]) => Promise.all(pages.map((page) => page.context().close()));
 
 test("Discover, from Browse: swipe a stack with the keyboard or the buttons, and what you like lands on My list", async ({ page, context }, testInfo) => {
   test.setTimeout(180_000);
