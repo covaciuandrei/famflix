@@ -13,7 +13,7 @@ select test.expect_eq((select array_agg(relname::text order by relname::text col
   (select array_agg(x order by x collate "C") from unnest(array['activity', 'episode_logs', 'group_members', 'groups', 'list_items', 'media',
     'movie_night_candidates', 'movie_night_finishes', 'movie_night_guest_finishes', 'movie_night_guest_votes',
     'movie_night_guests', 'movie_night_links', 'movie_night_members', 'movie_night_stacks', 'movie_night_votes',
-    'movie_nights', 'profiles', 'rate_limits', 'ratings', 'reactions', 'watches']) x),
+    'movie_nights', 'profiles', 'rate_limits', 'ratings', 'reactions', 'watch_history', 'watches']) x),
   'the tables are the ones whose grants are pinned here');
 
 -- Visitors who aren't signed in: nothing at all, and nothing that everyone gets by default either.
@@ -39,7 +39,7 @@ select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relnam
     'profiles:select', 'profiles:insert', 'profiles:update',
     'ratings:select', 'ratings:insert', 'ratings:update', 'ratings:delete',
     'reactions:select', 'reactions:insert', 'reactions:update', 'reactions:delete',
-    'watches:select', 'watches:delete']) x),
+    'watch_history:select', 'watches:select', 'watches:delete']) x),
   'signed-in people have exactly these table privileges');
 select test.expect_eq((select array_agg(c.relname || '.' || a.attname || ':' || p order by (c.relname || '.' || a.attname || ':' || p) collate "C")
   from pg_class c
@@ -57,7 +57,7 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname::text
   (select array_agg(x order by x collate "C") from unnest(array[
     'is_group_member', 'shares_group', 'can_see_item', 'can_see_night',
     'create_group', 'join_group', 'refresh_invite_codes', 'rename_group', 'regenerate_invite_code', 'remove_member',
-    'leave_group', 'log_watch', 'pending_rating_requests',
+    'leave_group', 'log_watch', 'watch_again', 'watched_again', 'pending_rating_requests',
     'start_movie_night', 'join_movie_night', 'cast_movie_night_votes', 'finish_movie_night_stack',
     'add_movie_night_stack', 'reveal_movie_night', 'cancel_movie_night', 'movie_night_state', 'active_movie_nights',
     'add_movie_night_top_titles', 'pick_movie_night_card', 'pick_movie_night_title',

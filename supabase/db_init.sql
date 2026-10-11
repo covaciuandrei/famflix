@@ -1,8 +1,9 @@
 -- ============================================================================
 --  FamFlix — the whole database in one script: tables, row-level security,
---  functions and triggers (families and lists, ratings, watched together, series
---  episodes, the activity feed, rate limits, movie nights and their guests) and,
---  at the end, exactly what each Supabase role may do with them.
+--  functions and triggers (families and lists, ratings, watched together and
+--  watching a title again, series episodes, the activity feed, rate limits, movie
+--  nights and their guests) and, at the end, exactly what each Supabase role may
+--  do with them.
 --  For an EMPTY Supabase database only: SQL Editor → paste → Run, once.
 --  All or nothing: if anything fails (say, the tables already exist), nothing changes.
 --  It doesn't count on Supabase's default privileges, so it also works where new
@@ -152,6 +153,25 @@ create table public.watches (
 );
 create index watches_user_idx on public.watches (user_id);
 create index watches_logged_by_idx on public.watches (logged_by);
+
+-- Earlier viewings of a title, kept when it is watched again: one row per person, title and day. What a list shows now (the
+-- current viewing) stays in watches and list_items; watch_again() and the functions next to it move it here. group_id is
+-- the family it was watched with, empty for a viewing on one's own, and once that family is gone. Nobody writes to it
+-- directly: only those functions do.
+create table public.watch_history (
+  -- Own id key (like ratings) so PostgREST doesn't treat this as a profiles <-> media join table.
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  media_id   uuid not null references public.media (id) on delete cascade,
+  watched_on date not null,
+  group_id   uuid references public.groups (id) on delete set null,
+  logged_by  uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (user_id, media_id, watched_on)
+);
+create index watch_history_media_idx on public.watch_history (media_id);
+create index watch_history_group_idx on public.watch_history (group_id);
+create index watch_history_logged_by_idx on public.watch_history (logged_by);
 
 -- The episodes someone has ticked on a series on their My list, with their own score and note for each. One row per
 -- ticked episode, so Not started is no rows. Only mark_episodes(), mark_next_episode() and rate_episode() write it.
@@ -480,6 +500,7 @@ alter table public.list_items    enable row level security;
 alter table public.ratings       enable row level security;
 alter table public.reactions     enable row level security;
 alter table public.watches       enable row level security;
+alter table public.watch_history enable row level security;
 alter table public.episode_logs  enable row level security;
 alter table public.activity      enable row level security;
 alter table public.rate_limits   enable row level security;
@@ -590,6 +611,11 @@ create policy watches_update_own on public.watches for update
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy watches_delete_own on public.watches for delete
   using (user_id = (select auth.uid()));
+-- watch_history: your own viewings, and those of the families you are in; no write policies, the functions write them.
+create policy watch_history_select on public.watch_history for select using (
+  user_id = (select auth.uid())
+  or (group_id is not null and public.is_group_member(group_id, (select auth.uid())))
+);
 
 -- activity: read-only; only the triggers and functions below write it --------
 create policy activity_select on public.activity for select
@@ -1080,7 +1106,8 @@ $$;
 
 -- When the last person leaves a title's watch record ("I wasn't there", or deleting their account), nobody is left
 -- who watched it, so the title goes back to To watch, as if Watched had been unmarked. While anyone else is still
--- on the record it stays watched together.
+-- on the record it stays watched together. (Moving the record into the history is not leaving it: see
+-- archive_family_viewing(), which says so with a setting.)
 create function public.after_watch_delete()
 returns trigger
 language plpgsql
@@ -1088,6 +1115,10 @@ security definer
 set search_path = public
 as $$
 begin
+  if current_setting('famflix.archiving_watch', true) = 'on' then
+    return null;
+  end if;
+
   -- What the watch put on their My list goes off it again.
   perform public.remove_from_my_list_watched(old.list_item_id, old.user_id);
 
@@ -1098,11 +1129,14 @@ begin
   end if;
 
   -- The movie night history follows: that person didn't watch it after all, and a "logged" night nobody is left
-  -- on never happened.
+  -- on never happened. Not the nights of a viewing they have in their history (the title was watched again since):
+  -- they were there, and those stay as they are.
   update public.movie_night_members m
   set watched = false
   from public.movie_nights n
-  where n.id = m.night_id and n.picked_list_item_id = old.list_item_id and m.user_id = old.user_id;
+  where n.id = m.night_id and n.picked_list_item_id = old.list_item_id and m.user_id = old.user_id
+    and not exists (select 1 from public.watch_history h
+                    where h.user_id = old.user_id and h.media_id = n.picked_media_id and h.watched_on = n.happened_on);
   delete from public.movie_nights n
   where n.source = 'logged' and n.picked_list_item_id = old.list_item_id
     and not exists (select 1 from public.movie_night_members m where m.night_id = n.id and m.watched);
@@ -1113,6 +1147,163 @@ $$;
 create trigger watches_after_delete
   after delete on public.watches
   for each row execute function public.after_watch_delete();
+
+-- ---------------------------------------------------------------------------
+--  Watching a title again: the viewing it had goes to the history
+-- ---------------------------------------------------------------------------
+
+-- Moves a family title's current viewing into the history and puts the title back on To watch: every row of its
+-- watch record becomes a viewing of that person on that day, the record is emptied and the title is To watch again.
+-- Its scores, notes, reactions and everyone's My list entry stay as they are. Returns how many viewings were kept.
+-- (A helper for watch_again(), watched_again() and the movie night picks: it is not for the API.)
+create function public.archive_family_viewing(p_item uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group uuid;
+  v_media uuid;
+  v_kept  integer;
+begin
+  select group_id, media_id into v_group, v_media from public.list_items where id = p_item for update;
+  if v_group is null then
+    return 0;
+  end if;
+
+  insert into public.watch_history (user_id, media_id, watched_on, group_id, logged_by)
+  select w.user_id, v_media, w.watched_on, v_group, w.logged_by
+  from public.watches w
+  where w.list_item_id = p_item
+  on conflict (user_id, media_id, watched_on) do update
+    set group_id = coalesce(public.watch_history.group_id, excluded.group_id);
+  get diagnostics v_kept = row_count;
+
+  -- Leaving the record would take the title off people's My list and out of the movie night history: this isn't that.
+  perform set_config('famflix.archiving_watch', 'on', true);
+  delete from public.watches where list_item_id = p_item;
+  perform set_config('famflix.archiving_watch', 'off', true);
+
+  update public.list_items set status = 'want', watched_at = null where id = p_item and status = 'watched';
+  return v_kept;
+end;
+$$;
+
+-- Moves the caller's current viewing of a title on their My list into the history (a viewing a family put there is
+-- remembered as that family's), and makes the entry their own again, on To watch or Watched on the given day. Returns
+-- nothing; the callers check who may do it.
+create function public.archive_my_viewing(p_item uuid, p_status text, p_on date default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  li      public.list_items;
+  v_group uuid;
+begin
+  select * into li from public.list_items where id = p_item;
+  if li.status = 'watched' then
+    select group_id into v_group from public.list_items where id = li.source_item_id;
+    insert into public.watch_history (user_id, media_id, watched_on, group_id)
+    values (li.added_by, li.media_id, (coalesce(li.watched_at, now()) at time zone 'UTC')::date, v_group)
+    on conflict (user_id, media_id, watched_on) do update
+      set group_id = coalesce(public.watch_history.group_id, excluded.group_id);
+  end if;
+  update public.list_items
+  set status = p_status,
+      watched_at = case when p_status = 'watched' then least(now(), p_on::timestamptz + interval '12 hours') end,
+      source_item_id = null,
+      watch_origin = null
+  where id = p_item;
+end;
+$$;
+
+-- Puts a watched title back on To watch, for a movie night or for next time, and keeps the viewing it had in the history.
+-- A family title: any member. A title on My list: its owner (a series with episodes is started again from its page).
+create function public.watch_again(p_item uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  li public.list_items;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in';
+  end if;
+  select * into li from public.list_items where id = p_item and deleted_at is null for update;
+  if not found
+     or (li.group_id is null and li.added_by is distinct from auth.uid())
+     or (li.group_id is not null and not public.is_group_member(li.group_id, auth.uid())) then
+    raise exception 'This title is not on one of your lists';
+  end if;
+  perform public.hit_rate_limit(auth.uid(), 'watch_again', 60, 3600);
+
+  if li.status <> 'watched' then
+    raise exception 'This title is not marked as watched';
+  end if;
+
+  if li.group_id is not null then
+    if not exists (select 1 from public.watches where list_item_id = p_item) then
+      raise exception 'This title is not marked as watched';
+    end if;
+    perform public.archive_family_viewing(p_item);
+    perform public.add_activity(li.group_id, 'watch_again', p_item);
+    return;
+  end if;
+
+  if exists (select 1 from public.media m where m.id = li.media_id and m.series is not null) then
+    raise exception 'Start a series again from its page';
+  end if;
+  perform public.archive_my_viewing(p_item, 'want');
+end;
+$$;
+
+-- Logs a new viewing of a title that was watched before: the viewing it had goes to the history and this one takes its
+-- place. A family title: the same window as Watched together (the day, who watched, their scores). A title on My list:
+-- the day. For a title that isn't watched at the moment (it was put back on To watch) it is simply logged.
+create function public.watched_again(p_item uuid, p_watched_on date, p_viewers jsonb default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  li public.list_items;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in';
+  end if;
+  select * into li from public.list_items where id = p_item and deleted_at is null for update;
+  if not found
+     or (li.group_id is null and li.added_by is distinct from auth.uid())
+     or (li.group_id is not null and not public.is_group_member(li.group_id, auth.uid())) then
+    raise exception 'This title is not on one of your lists';
+  end if;
+  perform public.hit_rate_limit(auth.uid(), 'watch_again', 60, 3600);
+
+  if li.group_id is not null then
+    -- (The day and the people are checked by log_watch, before anything changes.)
+    if exists (select 1 from public.watches where list_item_id = p_item) then
+      perform public.archive_family_viewing(p_item);
+    end if;
+    perform public.log_watch(p_item, p_watched_on, p_viewers);
+    return;
+  end if;
+
+  if exists (select 1 from public.media m where m.id = li.media_id and m.series is not null) then
+    raise exception 'Start a series again from its page';
+  end if;
+  -- One day of slack: the browser's "today" can be ahead of the server's (UTC).
+  if p_watched_on is null or p_watched_on > current_date + 1 then
+    raise exception 'Pick a date that is not in the future';
+  end if;
+  perform public.archive_my_viewing(p_item, 'watched', p_watched_on);
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 --  Watched together also lands on My list
@@ -1200,6 +1391,7 @@ set search_path = public
 as $$
 declare
   v_mine public.list_items;
+  v_prev date;
 begin
   -- A family title that is going away (its family was deleted) takes its watches with it: the entries stay as they are.
   if not exists (select 1 from public.list_items where id = p_family_item) then
@@ -1209,6 +1401,18 @@ begin
   where group_id is null and added_by = p_user and source_item_id = p_family_item;
   if not found then
     return;
+  end if;
+
+  -- They watched it another time too (it is in their history): the entry stays, as of that time, with its score and note.
+  if v_mine.status = 'watched' and v_mine.watch_origin is not null then
+    select max(h.watched_on) into v_prev from public.watch_history h
+    where h.user_id = p_user and h.media_id = v_mine.media_id;
+    if v_prev is not null then
+      update public.list_items
+      set watched_at = least(now(), v_prev::timestamptz + interval '12 hours')
+      where id = v_mine.id;
+      return;
+    end if;
   end if;
 
   if v_mine.status = 'watched' and v_mine.watch_origin = 'created' then
@@ -2515,6 +2719,11 @@ begin
   end if;
   perform set_config('famflix.adding_from_night', 'off', true);
 
+  -- A pick on a later day than the title's current viewing is a new viewing: the earlier one goes to the history.
+  if (select max(w.watched_on) from public.watches w where w.list_item_id = v_item) < p_watched_on then
+    perform public.archive_family_viewing(v_item);
+  end if;
+
   perform public.log_watch(v_item, p_watched_on, p_viewers);
   return v_item;
 end;
@@ -2575,6 +2784,11 @@ begin
     -- Someone else ended it in the meantime: say how, as for any other night that is over.
     perform public.movie_night_require_open(public.movie_night_for_member(p_night));
     raise exception 'This movie night has already ended';
+  end if;
+
+  -- A pick on a later day than the title's current viewing is a new viewing: the earlier one goes to the history.
+  if (select max(w.watched_on) from public.watches w where w.list_item_id = v_item) < p_watched_on then
+    perform public.archive_family_viewing(v_item);
   end if;
 
   perform public.log_watch(v_item, p_watched_on, p_viewers);
@@ -3133,7 +3347,7 @@ revoke all on all functions in schema public from public, anon, authenticated, s
 -- Signed-in people read what the security rules let them see.
 grant select on
   public.profiles, public.groups, public.group_members, public.media, public.list_items, public.ratings,
-  public.reactions, public.watches, public.episode_logs, public.activity, public.movie_nights,
+  public.reactions, public.watches, public.watch_history, public.episode_logs, public.activity, public.movie_nights,
   public.movie_night_stacks, public.movie_night_candidates, public.movie_night_votes, public.movie_night_finishes,
   public.movie_night_members
   to authenticated;
@@ -3178,6 +3392,8 @@ grant execute on function
   public.remove_member(uuid, uuid),
   public.leave_group(uuid),
   public.log_watch(uuid, date, jsonb),
+  public.watch_again(uuid),
+  public.watched_again(uuid, date, jsonb),
   public.pending_rating_requests(),
   public.start_movie_night(uuid, text[], jsonb, jsonb),
   public.join_movie_night(uuid),
