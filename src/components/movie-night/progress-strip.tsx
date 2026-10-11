@@ -1,7 +1,7 @@
 import { Check, X } from "lucide-react";
 
 import { Avatar } from "@/components/avatar";
-import type { MemberProgress, StackInfo } from "@/lib/movie-night";
+import { whoWatched, type MemberProgress, type StackInfo } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
 
 /** What to say about one person: how far they are with the stacks that are still open for voting. Never what they voted. */
@@ -76,9 +76,12 @@ export function ProgressStrip({
   );
 }
 
-/** Who watched the title a night ended with (a guest can't have: only the family logs a watch). */
+/**
+ * Who watched the title a night ended with: the family members its picker ticked, and the night's guests, who can't be
+ * ticked (they have no account) but were there, marked Guest.
+ */
 export function WatchedBy({ members, meId }: { members: MemberProgress[]; meId: string }) {
-  const people = members.filter((m) => m.watched && !m.guest);
+  const people = whoWatched(members);
   if (people.length === 0) return null;
   return (
     <ul className="flex flex-wrap items-center gap-2" aria-label="Who watched it">
@@ -90,6 +93,9 @@ export function WatchedBy({ members, meId }: { members: MemberProgress[]; meId: 
         >
           <Avatar name={member.name} url={member.avatar_url} className="size-6" />
           <span className="max-w-28 truncate font-medium">{member.user_id === meId ? "You" : member.name}</span>
+          {member.guest && (
+            <span className="rounded-full bg-muted px-1.5 text-[11px] leading-4 text-muted-foreground">Guest</span>
+          )}
         </li>
       ))}
     </ul>

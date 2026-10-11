@@ -335,6 +335,34 @@ select test.expect_error($$select public.guest_join(test.t('gu_tok_b'), 'Late')$
 reset role;
 select test.expect_eq((select status from public.movie_nights where id = test.v('gu_b')), 'expired'::text, 'a night nobody touched for 12 hours is over');
 
+-- ---- The guests of nights that are over, for the history ------------------------------------------------------------
+-- Night A (cancelled) still has its nine guests: Guest 3 to Guest 10, and the Yan who joined after the first one was taken out. Night B (expired) belongs to another family and
+-- has Bea. Only a member of a night's family is told its guests, and only by name.
+:as_mia
+select test.expect_eq((select string_agg(name, ',') from public.movie_night_guest_names(array[test.v('gu_a')])),
+  'Guest 10,Guest 3,Guest 4,Guest 5,Guest 6,Guest 7,Guest 8,Guest 9,Yan'::text, 'a member is told who the guests of their family''s night were, by name');
+select test.expect_eq((select count(*) from public.movie_night_guest_names(array[test.v('gu_a'), test.v('gu_b')])), 9::bigint, 'and nothing about another family''s night');
+select test.expect_eq((select count(*) from public.movie_night_guest_names(array[test.v('gu_b')])), 0::bigint, 'which looks the same as a night with no guests');
+select test.expect_eq((select count(*) from public.movie_night_guest_names(array[gen_random_uuid(), test.v('gu_a')])), 9::bigint, 'an id that is not a night is skipped');
+select test.expect_eq((select count(*) from public.movie_night_guest_names(array[test.v('gu_a'), test.v('gu_a')])), 9::bigint, 'and a night asked for twice is told once');
+select test.expect_eq((select count(*) from public.movie_night_guest_names('{}')), 0::bigint, 'no nights, no guests');
+select test.expect_eq((select count(*) from public.movie_night_guest_names(null)), 0::bigint, 'and no list of nights is the same');
+select test.expect_eq((select count(*) from public.movie_night_guest_names(array_fill(test.v('gu_a'), array[50]))), 9::bigint, 'fifty nights at once is fine');
+select test.expect_error($$select * from public.movie_night_guest_names(array_fill(test.v('gu_a'), array[51]))$$, 'too many');
+:as_noa
+select test.expect_eq((select count(*) from public.movie_night_guest_names(array[test.v('gu_a')])), 9::bigint, 'any member of the family is told');
+:as_olu
+select test.expect_eq((select string_agg(name, ',') from public.movie_night_guest_names(array[test.v('gu_a'), test.v('gu_b')])), 'Bea'::text, 'a member of the other family is told only about theirs');
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
+set role authenticated;
+select test.expect_error($$select * from public.movie_night_guest_names(array[test.v('gu_a')])$$, 'signed in');
+:as_anon
+select test.expect_error($$select * from public.movie_night_guest_names(array[test.v('gu_a')])$$, 'permission denied');
+:as_service
+select test.expect_error($$select * from public.movie_night_guest_names(array[test.v('gu_a')])$$, 'permission denied');
+reset role;
+
 -- ---- Going away ---------------------------------------------------------------------------------------------------------
 select test.expect_eq((select count(*) from public.movie_night_links), 2::bigint, 'two nights have links');
 select test.expect_eq((select count(*) from public.movie_night_guests where night_id = test.v('gu_a')) > 0, true, 'night A still has its guests');
@@ -343,6 +371,9 @@ select test.expect_eq((select count(*) from public.movie_night_guests where nigh
 select test.expect_eq((select count(*) from public.movie_night_guest_votes), 0::bigint, 'and their votes');
 select test.expect_eq((select count(*) from public.movie_night_guest_finishes), 0::bigint, 'and what they finished');
 select test.expect_eq((select count(*) from public.movie_night_links where night_id = test.v('gu_a')), 0::bigint, 'and its link');
+:as_mia
+select test.expect_eq((select count(*) from public.movie_night_guest_names(array[test.v('gu_a')])), 0::bigint, 'a night that is gone has no guests to name');
+reset role;
 delete from public.groups where name = 'Other Guest Fam';
 select test.expect_eq((select count(*) from public.movie_night_guests), 0::bigint, 'deleting a family deletes the guests of its nights too');
 select test.expect_eq((select count(*) from public.movie_night_links), 0::bigint, 'and their links');

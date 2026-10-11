@@ -63,7 +63,7 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname::text
     'add_movie_night_top_titles', 'pick_movie_night_card', 'pick_movie_night_title',
     'mark_episodes', 'mark_next_episode', 'rate_episode', 'my_series_progress',
     'get_movie_night_guest_link', 'replace_movie_night_guest_link', 'turn_off_movie_night_guest_link',
-    'remove_movie_night_guest']) x),
+    'remove_movie_night_guest', 'movie_night_guest_names']) x),
   'signed-in people can run exactly these functions');
 
 -- The server (service-role key): reads and writes every table, and runs the functions it calls (counting rate limits, and

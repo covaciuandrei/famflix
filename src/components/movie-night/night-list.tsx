@@ -17,6 +17,7 @@ import {
   NIGHT_STATUS_LABEL,
   type NightStatus,
   nightAction,
+  peopleLabel,
 } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
 
@@ -44,12 +45,17 @@ function People({ entry }: { entry: HistoryEntry }) {
   if (entry.people.length === 0) return null;
   const shown = entry.people.slice(0, MAX_FACES);
   const more = entry.people.length - shown.length;
-  const label = `${entry.status === "closed" ? "Watched by" : "Took part"}: ${entry.people.map((p) => p.name).join(", ")}`;
+  const label = peopleLabel(entry.status, entry.people);
   return (
     <span role="img" aria-label={label} title={label} className="mt-1 flex items-center">
       <span className="flex -space-x-1.5">
         {shown.map((person) => (
-          <Avatar key={person.name} name={person.name} url={person.avatarUrl} className="size-5 text-[9px] ring-2 ring-card" />
+          <Avatar
+            key={`${person.guest ? "guest" : "member"}:${person.name}`}
+            name={person.name}
+            url={person.avatarUrl}
+            className="size-5 text-[9px] ring-2 ring-card"
+          />
         ))}
       </span>
       {more > 0 && <span className="ml-1.5 text-xs text-muted-foreground">+{more}</span>}

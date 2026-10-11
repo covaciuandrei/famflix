@@ -5,7 +5,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
-import type { ActiveNight, HistoryEntry, NightState } from "@/lib/movie-night";
+import { nightPeople, type ActiveNight, type HistoryEntry, type NightState } from "@/lib/movie-night";
 import type {
   ActivityEvent,
   CardSeries,
@@ -625,7 +625,24 @@ export async function getNightHistory(
     for (const person of (people ?? []) as { id: string; display_name: string }[]) names.set(person.id, person.display_name);
   }
 
-  const entries = rows.slice(0, limit).map((r): HistoryEntry => {
+  const shown = rows.slice(0, limit);
+
+  // Guests have no account and no table anyone can read: the database tells the family their names. A night made by
+  // logging Watched together has no guests, so it isn't asked about. If this fails the list is just without them.
+  const guests = new Map<string, string[]>();
+  const swipeNights = shown.filter((r) => r.source === "swipe").map((r) => r.id);
+  if (swipeNights.length > 0) {
+    const { data: found, error: guestError } = await supabase.rpc("movie_night_guest_names", { p_nights: swipeNights });
+    if (guestError) {
+      console.error("Could not load the guests of movie nights:", guestError.message);
+    } else {
+      for (const guest of (found ?? []) as { night_id: string; name: string }[]) {
+        guests.set(guest.night_id, [...(guests.get(guest.night_id) ?? []), guest.name]);
+      }
+    }
+  }
+
+  const entries = shown.map((r): HistoryEntry => {
     const picked = r.status === "closed";
     return {
       id: r.id,
@@ -645,10 +662,13 @@ export async function getNightHistory(
             year: r.picked.release_year,
           }
         : null,
-      people: r.members
-        .filter((m) => m.profile && (picked ? m.watched : true))
-        .map((m) => ({ name: m.profile!.display_name, avatarUrl: m.profile!.avatar_url }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      people: nightPeople({
+        picked,
+        members: r.members
+          .filter((m) => m.profile)
+          .map((m) => ({ name: m.profile!.display_name, avatarUrl: m.profile!.avatar_url, watched: m.watched })),
+        guests: guests.get(r.id) ?? [],
+      }),
       stacks: r.stacks[0]?.count ?? 0,
       cards: r.cards[0]?.count ?? 0,
     };

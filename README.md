@@ -86,8 +86,11 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   anywhere, gives a name, and swipes the same cards and sees the leaderboard;
   they can't pick, cancel, invite or see anything else of FamFlix or the
   family. Guests show in the people list marked Guest (any member can take one
-  out) and their votes count like everyone's. The link stops working when the
-  night is over. A night takes 10 guests, with names of up to 30 characters.
+  out) and their votes count like everyone's. They can't be ticked in "Who
+  watched?" (they have no account to log a watch on), but a night lists them
+  with the family, as having watched it or taken part, on its page and in the
+  family's history. The link stops working when the night is over. A night takes
+  10 guests, with names of up to 30 characters.
 - **Activity feed**: see what happened in each family; removed titles can be
   restored for 30 days.
 - **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can

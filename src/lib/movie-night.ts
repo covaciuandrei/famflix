@@ -398,10 +398,56 @@ export interface HistoryEntry {
   /** Who cancelled it. */
   endedByName: string | null;
   picked: { title: string; posterPath: string | null; tmdbId: number; mediaType: MediaType; year: number | null } | null;
-  /** Who watched the pick, or for a night nobody picked from, who took part. */
-  people: { name: string; avatarUrl: string | null }[];
+  /** Who watched the pick, or for a night nobody picked from, who took part. Guests come after the family. */
+  people: HistoryPerson[];
   stacks: number;
   cards: number;
+}
+
+/** Someone a night lists: a member of the family, or a guest, who has no account and so no picture. */
+export interface HistoryPerson {
+  name: string;
+  avatarUrl: string | null;
+  guest: boolean;
+}
+
+/**
+ * Who a night lists as having taken part. For a night that ended with a pick that is the family members its picker
+ * ticked as having watched; otherwise everyone who joined. The guests of the night are listed too, whichever way it
+ * ended: they can't be ticked (they have no account to log a watch on) but they were there. The family comes first,
+ * then the guests, each by name.
+ */
+export function nightPeople({
+  picked,
+  members,
+  guests,
+}: {
+  /** The night ended with a pick. */
+  picked: boolean;
+  members: { name: string; avatarUrl: string | null; watched: boolean }[];
+  guests: readonly string[];
+}): HistoryPerson[] {
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+  const family = members
+    .filter((m) => !picked || m.watched)
+    .map((m): HistoryPerson => ({ name: m.name, avatarUrl: m.avatarUrl, guest: false }))
+    .sort(byName);
+  const visitors = guests.map((name): HistoryPerson => ({ name, avatarUrl: null, guest: true })).sort(byName);
+  return [...family, ...visitors];
+}
+
+/** What a list of people says to a screen reader or on hover: "Watched by: Ana, Zoe (guest)". */
+export function peopleLabel(status: HistoryEntry["status"], people: readonly HistoryPerson[]): string {
+  const names = people.map((p) => (p.guest ? `${p.name} (guest)` : p.name)).join(", ");
+  return `${status === "closed" ? "Watched by" : "Took part"}: ${names}`;
+}
+
+/**
+ * The people a night that ended with a pick says watched it: the family members its picker ticked, then the guests who
+ * were in the night (they can't be ticked, having no account). Each group keeps the order it came in.
+ */
+export function whoWatched(members: readonly MemberProgress[]): MemberProgress[] {
+  return [...members.filter((m) => !m.guest && m.watched), ...members.filter((m) => m.guest)];
 }
 
 /** A night's card as the swipe stack shows it. */

@@ -2671,6 +2671,31 @@ begin
 end;
 $$;
 
+-- Members: who the guests of some of their family's nights were, for the history (a guest has no account, so there is
+-- only a name). A night of another family, or one that doesn't exist, just has no guests here: nothing says which.
+create function public.movie_night_guest_names(p_nights uuid[])
+returns table (night_id uuid, name text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in';
+  end if;
+  if coalesce(array_length(p_nights, 1), 0) > 50 then
+    raise exception 'That is too many movie nights at once';
+  end if;
+  return query
+    select g.night_id, g.name
+    from public.movie_night_guests g
+    join public.movie_nights n on n.id = g.night_id
+    where g.night_id = any (p_nights)
+      and public.is_group_member(n.group_id, auth.uid())
+    order by g.night_id, lower(g.name), g.name;
+end;
+$$;
+
 -- The night a link is for while that night is open; null for a link that is wrong, replaced or turned off, or whose
 -- night is over. (A helper for the guest functions: it is not for the API.)
 create function public.guest_link_night(p_token text)
@@ -3173,7 +3198,8 @@ grant execute on function
   public.get_movie_night_guest_link(uuid),
   public.replace_movie_night_guest_link(uuid),
   public.turn_off_movie_night_guest_link(uuid),
-  public.remove_movie_night_guest(uuid, uuid)
+  public.remove_movie_night_guest(uuid, uuid),
+  public.movie_night_guest_names(uuid[])
   to authenticated;
 
 -- Let the Supabase API pick up the new tables and functions right away.

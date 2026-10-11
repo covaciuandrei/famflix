@@ -51,8 +51,8 @@ export default function PrivacyPage() {
             <strong className="text-foreground">Guests:</strong> a family can
             invite someone to vote in one movie night with a link, without an
             account. That person gives a name, which is kept with their votes
-            in that night and shown to the family. FamFlix keeps nothing else
-            about them.
+            in that night and shown to the family, also in the list of who
+            took part or watched. FamFlix keeps nothing else about them.
           </li>
           <li>
             <strong className="text-foreground">Counters:</strong> how often

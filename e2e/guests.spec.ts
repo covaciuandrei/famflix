@@ -335,5 +335,59 @@ test("the family keeps control of the link, and a guest hears when the night is 
   await late.goto(link);
   await expect(late.getByRole("heading", { name: "This link isn't working" })).toBeVisible();
 
+  // The night is in the family's history as cancelled, with the guest among the people who took part.
+  await openFamilyNight(anaPage, "Control Crew");
+  const cancelled = anaPage.locator("#movie-nights ul > li").first();
+  await expect(cancelled).toContainText("Cancelled by Ana");
+  await expect(cancelled.getByRole("img", { name: /^Took part: .*Zoe \(guest\)$/ })).toBeVisible();
+
   await closeAll([...pages, cara, zoe, late]);
+});
+
+test("guests can't be ticked as having watched, but a night that ended with a pick lists them, on its page and in the history", async ({ browser }, testInfo) => {
+  test.setTimeout(300_000);
+  const { pages } = await makeFamily(browser, testInfo.project, "Pick Crew", ["Ana", "Ben"]);
+  const [anaPage] = pages;
+  const keys = testInfo.project.name === "desktop";
+  await startNight(anaPage, "Pick Crew");
+  const link = await inviteLink(anaPage);
+
+  // Two guests join the way their page does it. Ben never opens the night, so he isn't among those who were there.
+  for (const name of ["Zoe", "Yan"]) {
+    const joined = await admin.rpc("guest_join", { p_token: tokenOf(link), p_name: name });
+    expect(joined.error).toBeNull();
+  }
+  await vote(anaPage, "yes", keys);
+  await finishStack(anaPage);
+  await expect(personIn(anaPage, "Zoe")).toContainText("Guest", { timeout: 30_000 });
+
+  // Picking: the window offers the family to tick, not the guests, and says why.
+  const top = rows(anaPage).first();
+  const title = (await top.getByRole("button").first().innerText()).trim();
+  await top.getByRole("button").first().click();
+  await top.getByRole("button", { name: "We watched this" }).click();
+  const dialog = anaPage.getByRole("dialog", { name: /^Who watched / });
+  await expect(dialog.getByRole("checkbox")).toHaveCount(2);
+  await expect(dialog.getByRole("checkbox", { name: /Ana/ })).toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: /Ben/ })).not.toBeChecked();
+  await expect(dialog.getByText("Guests (Yan, Zoe) can't be ticked")).toBeVisible();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(anaPage.getByRole("status").filter({ hasText: "picked" })).toContainText(title);
+
+  // The night's page says who watched: Ana, who was ticked, and the two guests, marked, but not Ben.
+  const watched = anaPage.getByRole("list", { name: "Who watched it" }).getByRole("listitem");
+  await expect(watched.filter({ hasText: "You" })).toHaveCount(1);
+  await expect(watched.filter({ hasText: "Zoe" })).toContainText("Guest");
+  await expect(watched.filter({ hasText: "Yan" })).toContainText("Guest");
+  await expect(watched.filter({ hasText: "Ben" })).toHaveCount(0);
+
+  // So does the family's history, where the night is finished: everyone who watched, guests after the family.
+  await openFamilyNight(anaPage, "Pick Crew");
+  const entry = anaPage.locator("#movie-nights ul > li").first();
+  await expect(entry).toContainText(title);
+  await expect(entry).toContainText("Finished");
+  await expect(entry.getByRole("img", { name: "Watched by: Ana, Yan (guest), Zoe (guest)" })).toBeVisible();
+
+  await closeAll(pages);
 });

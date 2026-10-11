@@ -19,11 +19,15 @@ import {
   NIGHT_STATUS_LABEL,
   nightAction,
   nightMood,
+  nightPeople,
   parseMood,
+  peopleLabel,
   personLabel,
   POINTS,
+  type MemberProgress,
   type NightInfo,
   validVotes,
+  whoWatched,
 } from "../src/lib/movie-night";
 
 const movie = (id: number) => ({ mediaType: "movie" as const, tmdbId: id });
@@ -236,6 +240,77 @@ test.describe("personLabel", () => {
     expect(personLabel({ user_id: "u-ben", name: "Ben", guest: false }, "u-ana")).toBe("Ben");
     expect(personLabel({ user_id: "g-1", name: "Zoe", guest: true }, "u-ana")).toBe("Zoe (guest)");
     expect(personLabel({ user_id: "g-1", name: "Zoe", guest: true }, "g-1")).toBe("You");
+  });
+});
+
+test.describe("who a night lists", () => {
+  const ana = { name: "Ana", avatarUrl: "ana.png", watched: true };
+  const ben = { name: "Ben", avatarUrl: null, watched: false };
+  const cara = { name: "Cara", avatarUrl: null, watched: true };
+  const listed = (people: ReturnType<typeof nightPeople>) => people.map((p) => (p.guest ? `${p.name} (guest)` : p.name));
+
+  test("a pick lists the family members who watched, then the guests, each by name", () => {
+    const people = nightPeople({ picked: true, members: [cara, ben, ana], guests: ["Zoe", "Yan"] });
+    expect(listed(people)).toEqual(["Ana", "Cara", "Yan (guest)", "Zoe (guest)"]);
+  });
+
+  test("a night nobody picked from lists everyone who joined, then the guests", () => {
+    const people = nightPeople({ picked: false, members: [cara, ben, ana], guests: ["Zoe"] });
+    expect(listed(people)).toEqual(["Ana", "Ben", "Cara", "Zoe (guest)"]);
+  });
+
+  test("guests are listed even when no family member is ticked, and have no picture", () => {
+    const people = nightPeople({ picked: true, members: [ben], guests: ["Zoe"] });
+    expect(people).toEqual([{ name: "Zoe", avatarUrl: null, guest: true }]);
+  });
+
+  test("a guest with a member's name is a separate person", () => {
+    const people = nightPeople({ picked: true, members: [ana], guests: ["Ana"] });
+    expect(people).toEqual([
+      { name: "Ana", avatarUrl: "ana.png", guest: false },
+      { name: "Ana", avatarUrl: null, guest: true },
+    ]);
+  });
+
+  test("a night with no guests lists just the family, as before", () => {
+    expect(listed(nightPeople({ picked: true, members: [cara, ben, ana], guests: [] }))).toEqual(["Ana", "Cara"]);
+    expect(nightPeople({ picked: true, members: [], guests: [] })).toEqual([]);
+  });
+
+  test("says who watched or who took part, marking the guests", () => {
+    const people = nightPeople({ picked: true, members: [ana], guests: ["Zoe"] });
+    expect(peopleLabel("closed", people)).toBe("Watched by: Ana, Zoe (guest)");
+    expect(peopleLabel("cancelled", people)).toBe("Took part: Ana, Zoe (guest)");
+    expect(peopleLabel("expired", [])).toBe("Took part: ");
+  });
+});
+
+test.describe("whoWatched", () => {
+  const person = (user_id: string, name: string, extra: Partial<MemberProgress> = {}): MemberProgress => ({
+    user_id,
+    name,
+    avatar_url: null,
+    guest: false,
+    joined: true,
+    watched: false,
+    stacks: [],
+    ...extra,
+  });
+
+  test("is the family members who were ticked, then every guest of the night", () => {
+    const members = [
+      person("g-yan", "Yan", { guest: true }),
+      person("u-ana", "Ana", { watched: true }),
+      person("u-ben", "Ben"),
+      person("g-zoe", "Zoe", { guest: true }),
+      person("u-cara", "Cara", { watched: true }),
+    ];
+    expect(whoWatched(members).map((m) => m.name)).toEqual(["Ana", "Cara", "Yan", "Zoe"]);
+  });
+
+  test("is nobody for a night with no ticked members and no guests", () => {
+    expect(whoWatched([person("u-ben", "Ben")])).toEqual([]);
+    expect(whoWatched([])).toEqual([]);
   });
 });
 
