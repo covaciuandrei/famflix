@@ -7,6 +7,7 @@ import { Avatar } from "@/components/avatar";
 import { InviteCode } from "@/components/invite-code";
 import { RemovedItems } from "@/components/removed-items";
 import { FamilyNightLink } from "@/components/movie-night/family-night-link";
+import { FamilyStatsView } from "@/components/stats/family-stats";
 import { buttonVariants } from "@/components/ui/button";
 import { Watchlist } from "@/components/watchlist";
 import {
@@ -18,6 +19,8 @@ import {
   refreshInviteCodes,
 } from "@/lib/data";
 import { timeUntil } from "@/lib/format";
+import { familyStats, periodFromParam, yearsWithData } from "@/lib/stats";
+import { getFamilyStatsInput } from "@/lib/stats-data";
 import { cn } from "@/lib/utils";
 
 export default async function FamilyPage({
@@ -25,11 +28,13 @@ export default async function FamilyPage({
   searchParams,
 }: {
   params: Promise<{ groupId: string }>;
-  searchParams: Promise<{ view?: string | string[] }>;
+  searchParams: Promise<{ view?: string | string[]; year?: string | string[] }>;
 }) {
   const { groupId } = await params;
-  const { view } = await searchParams;
+  const { view, year } = await searchParams;
   const showActivity = view === "activity";
+  const showStats = view === "stats";
+  const showList = !showActivity && !showStats;
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
@@ -50,13 +55,23 @@ export default async function FamilyPage({
     memberSummaries.map((m) => [m.id, m.display_name]),
   );
 
-  const [cards, removed, events] = await Promise.all([
-    showActivity ? [] : getListCards({ groupId, userId: user.id }),
-    showActivity
-      ? []
-      : getRemovedItems({ groupId, userId: user.id, memberNames }),
+  const [cards, removed, events, statsInput] = await Promise.all([
+    showList ? getListCards({ groupId, userId: user.id }) : [],
+    showList
+      ? getRemovedItems({ groupId, userId: user.id, memberNames })
+      : [],
     showActivity ? getActivity({ groupId, limit: 50 }) : [],
+    showStats
+      ? getFamilyStatsInput(
+          groupId,
+          memberSummaries.map((m) => ({ id: m.id, name: m.display_name })),
+        )
+      : null,
   ]);
+  const years = statsInput
+    ? yearsWithData(statsInput.titles.flatMap((t) => t.viewings.map((v) => v.on)))
+    : [];
+  const stats = statsInput ? familyStats(statsInput, periodFromParam(year, years)) : null;
 
   const tabClass = (active: boolean) =>
     cn(
@@ -120,15 +135,27 @@ export default async function FamilyPage({
         </div>
       </div>
 
-      <nav className="inline-flex self-start rounded-lg border border-border bg-card p-1">
-        <Link href={`/app/family/${group.id}`} className={tabClass(!showActivity)}>
+      <nav aria-label="Family sections" className="inline-flex self-start rounded-lg border border-border bg-card p-1">
+        <Link
+          href={`/app/family/${group.id}`}
+          aria-current={showList ? "page" : undefined}
+          className={tabClass(showList)}
+        >
           List
         </Link>
         <Link
           href={`/app/family/${group.id}?view=activity`}
+          aria-current={showActivity ? "page" : undefined}
           className={tabClass(showActivity)}
         >
           Activity
+        </Link>
+        <Link
+          href={`/app/family/${group.id}?view=stats`}
+          aria-current={showStats ? "page" : undefined}
+          className={tabClass(showStats)}
+        >
+          Stats
         </Link>
       </nav>
 
@@ -136,6 +163,14 @@ export default async function FamilyPage({
         <div className="rounded-xl border border-border bg-card px-4 py-2">
           <ActivityFeed events={events} currentUserId={user.id} />
         </div>
+      ) : showStats ? (
+        stats ? (
+          <FamilyStatsView stats={stats} years={years} groupId={group.id} />
+        ) : (
+          <p role="alert" className="rounded-xl border border-border bg-card px-4 py-3 text-sm">
+            Couldn&apos;t load the stats. Please try again in a moment.
+          </p>
+        )
       ) : (
         <>
           <Watchlist

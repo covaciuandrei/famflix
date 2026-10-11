@@ -119,6 +119,16 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   10 guests, with names of up to 30 characters.
 - **Activity feed**: see what happened in each family; removed titles can be
   restored for 30 days.
+- **Family stats**: the **Stats** tab on a family's page shows what the family
+  watched in a year (pick one, or All time): titles and viewings, hours of
+  movies (a series adds none), movie nights held, the top 5 by average score,
+  the most loved and most divisive titles, favourite genres, the busiest month
+  and a chart of the months, what was watched again, who watched how much, and
+  whose taste is closest and most different (how alike two people score the
+  titles they both rated, shown once they have at least 3 in common). Every
+  viewing counts, so a film watched each Christmas counts each year. **Share**
+  sends a short text with the numbers and the top pick, and nobody's name.
+  It only uses what members of the family can already see.
 - **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can
   be added to the home screen. Dark theme by default, or light, or follow the
   device (Settings → Appearance).
@@ -230,20 +240,20 @@ create a family or join one with an invite code.
 ## Tests
 
 - `npm run test:unit`: tests of pure logic in `unit/` (building movie night stacks,
-  moods, genres, counting how often a title was watched, the CSV of a download).
-  No browser, server or database needed.
+  moods, genres, counting how often a title was watched, the CSV of a download,
+  the numbers on the stats screens). No browser, server or database needed.
 - `npm run test:db`: the database tests in `supabase/tests/` (security rules,
   who may use which table and function, families, scores, limits, deleting an
-  account, and that downloading your data has everything of yours and nothing of
+  account, that downloading your data has everything of yours and nothing of
   anyone else's, with an inventory that fails when a new table isn't accounted
-  for). They build a throwaway database from `supabase/db_init.sql`, twice:
+  for, and counting the episodes you watched in a year). They build a throwaway database from `supabase/db_init.sql`, twice:
   with Supabase's older defaults (new tables and functions are handed to the API
   roles) and its newer ones (nothing is), and both must pass. You need
   PostgreSQL 17 installed, or `PGHOST` pointing at a server where they may
   create a database.
 - `npm run test:e2e`: the browser tests in `e2e/` (signing in, adding titles,
   watched together, watching a title again, movie nights from the invite to the pick, guests joining
-  with a link, downloading your data, deleting an account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
+  with a link, downloading your data, a family's stats, deleting an account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
   (`supabase/config.toml`) built from `db_init.sql` the way a new project is (nothing granted by default),
   never the live one.
   `npx supabase stop` shuts it down afterwards.

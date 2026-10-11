@@ -5,6 +5,8 @@
  * viewing into another year.
  */
 
+import { formatMonth, formatRuntime, formatScore, shortMonth } from "./format";
+
 /** A year, or null for all time. */
 export type Period = number | null;
 
@@ -68,6 +70,8 @@ export interface FamilyStats {
   mostDivisive: (ScoredTitle & { low: number; high: number }) | null;
   genres: { genre: string; titles: number }[];
   busiestMonth: { month: string; viewings: number } | null;
+  /** The viewings in each month (`YYYY-MM`), the months in order, for the chart. */
+  byMonth: Record<string, number>;
   rewatched: { title: string; times: number }[];
   people: { id: string; name: string; titles: number; viewings: number }[];
   closest: TastePair | null;
@@ -77,6 +81,17 @@ export interface FamilyStats {
 /** Whether a day (`YYYY-MM-DD`) is in a year, or any is when there is no year. */
 export function inPeriod(day: string, period: Period): boolean {
   return period === null || day.slice(0, 4) === String(period);
+}
+
+/**
+ * The period a page asks for with `?year=`: a year, `all` for all time, and when it says nothing that makes sense (or
+ * nothing), the newest year that has data (`years` is newest first), or all time when there is none.
+ */
+export function periodFromParam(value: string | string[] | undefined, years: readonly number[]): Period {
+  const asked = Array.isArray(value) ? value[0] : value;
+  if (asked === "all") return null;
+  if (asked && /^(19|20)\d{2}$/.test(asked)) return Number(asked);
+  return years[0] ?? null;
 }
 
 /** The years that have a day in them, newest first (the picker's choices, before "All time"). */
@@ -122,15 +137,54 @@ export const MIN_SHARED_FOR_TASTE = 3;
 /** Orders by a number (biggest first), then by title, so ties are always the same. */
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title);
 
-/** The busiest month (`YYYY-MM`) among days, the earlier one when two tie; null when there are none. */
-export function busiestMonth(days: readonly string[]): { month: string; viewings: number } | null {
+/** How many days there are in each month (`YYYY-MM`), the months in order. */
+export function countMonths(days: readonly string[]): Record<string, number> {
   const months = new Map<string, number>();
   for (const day of days) months.set(day.slice(0, 7), (months.get(day.slice(0, 7)) ?? 0) + 1);
+  return Object.fromEntries([...months].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** The busiest month (`YYYY-MM`) among days, the earlier one when two tie; null when there are none. */
+export function busiestMonth(days: readonly string[]): { month: string; viewings: number } | null {
   let best: { month: string; viewings: number } | null = null;
-  for (const [month, viewings] of [...months].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [month, viewings] of Object.entries(countMonths(days))) {
     if (!best || viewings > best.viewings) best = { month, viewings };
   }
   return best;
+}
+
+/** One bar of the chart: what to call it for people who can't see it, what to write under it, and how tall it is. */
+export interface ChartBar {
+  key: string;
+  label: string;
+  short: string;
+  value: number;
+}
+
+/**
+ * The bars of the viewings chart: the twelve months of a year, or each year (the latest twelve) for all time. No bars
+ * when there is nothing to show.
+ */
+export function chartBars(byMonth: Record<string, number>, period: Period): ChartBar[] {
+  const entries = Object.entries(byMonth);
+  if (entries.length === 0) return [];
+  if (period !== null) {
+    return Array.from({ length: 12 }, (_, i) => {
+      const key = `${period}-${String(i + 1).padStart(2, "0")}`;
+      return { key, label: formatMonth(key), short: shortMonth(i + 1), value: byMonth[key] ?? 0 };
+    });
+  }
+  const years = new Map<number, number>();
+  for (const [month, n] of entries) {
+    const year = Number(month.slice(0, 4));
+    if (Number.isInteger(year)) years.set(year, (years.get(year) ?? 0) + n);
+  }
+  if (years.size === 0) return [];
+  const first = Math.min(...years.keys());
+  const last = Math.max(...years.keys());
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i)
+    .slice(-12)
+    .map((year) => ({ key: String(year), label: String(year), short: String(year), value: years.get(year) ?? 0 }));
 }
 
 function topGenres(titles: readonly StatTitle[], limit = 5): { genre: string; titles: number }[] {
@@ -190,9 +244,11 @@ export function familyStats(input: FamilyInput, period: Period): FamilyStats {
   }
   const nameOf = (id: string) => input.members.find((m) => m.id === id)?.name ?? "Someone";
 
-  // Taste: for every pair of members, the titles they both scored (in this period).
+  // Taste: for every pair of members, the titles they both scored (in this period). Someone who has left isn't compared:
+  // there is no name to give them.
   const pairs: TastePair[] = [];
-  const scorers = [...new Set(watched.flatMap(({ t }) => t.scores.map((s) => s.userId)))].sort();
+  const memberIds = new Set(input.members.map((m) => m.id));
+  const scorers = [...new Set(watched.flatMap(({ t }) => t.scores.map((s) => s.userId)))].filter((id) => memberIds.has(id)).sort();
   for (let i = 0; i < scorers.length; i++) {
     for (let j = i + 1; j < scorers.length; j++) {
       const a: number[] = [];
@@ -206,7 +262,9 @@ export function familyStats(input: FamilyInput, period: Period): FamilyStats {
         }
       }
       if (a.length >= MIN_SHARED_FOR_TASTE) {
-        pairs.push({ a: nameOf(scorers[i]), b: nameOf(scorers[j]), match: tasteMatch(a, b), shared: a.length });
+        // The two names in alphabetical order, so a pair always reads the same.
+        const [first, second] = [nameOf(scorers[i]), nameOf(scorers[j])].sort((x, y) => x.localeCompare(y));
+        pairs.push({ a: first, b: second, match: tasteMatch(a, b), shared: a.length });
       }
     }
   }
@@ -225,6 +283,7 @@ export function familyStats(input: FamilyInput, period: Period): FamilyStats {
     mostDivisive: divisive ?? null,
     genres: topGenres(watched.map(({ t }) => t)),
     busiestMonth: busiestMonth(allDays),
+    byMonth: countMonths(allDays),
     rewatched: watched
       .filter(({ viewings }) => viewings.length >= 2)
       .map(({ t, viewings }) => ({ title: t.title, times: viewings.length }))
@@ -269,6 +328,8 @@ export interface PersonalStats {
   genres: { genre: string; titles: number }[];
   top: { title: string; score: number }[];
   busiestMonth: { month: string; viewings: number } | null;
+  /** The viewing days and episodes in each month (`YYYY-MM`), the months in order, for the chart. */
+  byMonth: Record<string, number>;
   rewatched: { title: string; times: number }[];
 }
 
@@ -315,10 +376,41 @@ export function personalStats(input: PersonalInput, period: Period): PersonalSta
       .slice(0, 5)
       .map(({ title, score }) => ({ title, score })),
     busiestMonth: busiestMonth(monthDays),
+    byMonth: countMonths(monthDays),
     rewatched: counted
       .filter(({ days }) => days.length >= 2)
       .map(({ t, days }) => ({ title: t.title, times: days.length }))
       .sort((a, b) => b.times - a.times || byTitle(a, b))
       .slice(0, 5),
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+//  What people share
+// ---------------------------------------------------------------------------------------------------------------
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** A family's year as a short text to send to someone: nothing private, just the numbers and the top pick. */
+export function familyShareText(stats: FamilyStats): string {
+  const parts = [`${plural(stats.titles, "title", "titles")} watched together`];
+  if (stats.minutes > 0) parts.push(`${formatRuntime(stats.minutes)} of movies`);
+  if (stats.nights > 0) parts.push(plural(stats.nights, "movie night", "movie nights"));
+  const pick = stats.top[0];
+  return (
+    `Our ${stats.period === null ? "time" : stats.period} on FamFlix: ${parts.join(", ")}.` +
+    (pick ? ` Our top pick: ${pick.title} (${formatScore(pick.average)}/10).` : "")
+  );
+}
+
+/** A person's year as a short text to send to someone. */
+export function personalShareText(stats: PersonalStats): string {
+  const parts = [plural(stats.titles, "title", "titles")];
+  if (stats.minutes > 0) parts.push(`${formatRuntime(stats.minutes)} watched`);
+  if (stats.episodes > 0) parts.push(plural(stats.episodes, "episode", "episodes"));
+  const pick = stats.top[0];
+  return (
+    `My ${stats.period === null ? "time" : stats.period} on FamFlix: ${parts.join(", ")}.` +
+    (pick ? ` My top pick: ${pick.title} (${formatScore(pick.score)}/10).` : "")
+  );
 }

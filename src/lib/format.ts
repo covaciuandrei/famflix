@@ -20,6 +20,31 @@ export function formatRuntime(minutes: number): string {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** "2026-03" -> "March 2026", identical on server and client. */
+export function formatMonth(month: string): string {
+  const [year, number] = month.split("-").map(Number);
+  return `${MONTH_NAMES[number - 1] ?? "?"} ${year}`;
+}
+
+/** 3 -> "Mar", for the months of a chart. */
+export function shortMonth(number: number): string {
+  return MONTHS[number - 1] ?? "?";
+}
 
 /** "2026-10-03" -> "Oct 3, 2026", identical on server and client (no time-zone or locale shifts). */
 export function formatDay(isoDate: string): string {

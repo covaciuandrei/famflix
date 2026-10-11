@@ -1,10 +1,16 @@
 import { expect, test } from "@playwright/test";
 
+import { formatMonth, shortMonth } from "../src/lib/format";
 import {
   busiestMonth,
+  chartBars,
+  countMonths,
+  familyShareText,
   familyStats,
   inPeriod,
   mergeViewings,
+  periodFromParam,
+  personalShareText,
   personalStats,
   tasteMatch,
   yearsWithData,
@@ -73,6 +79,59 @@ test.describe("years and days", () => {
     expect(busiestMonth(["2026-03-01", "2026-03-20", "2026-05-02"])).toEqual({ month: "2026-03", viewings: 2 });
     expect(busiestMonth(["2026-05-01", "2026-03-01"])).toEqual({ month: "2026-03", viewings: 1 });
     expect(busiestMonth([])).toBeNull();
+  });
+
+  test("days are counted in their months, the months in order", () => {
+    expect(countMonths(["2026-05-02", "2026-03-20", "2025-12-31", "2026-03-01"])).toEqual({
+      "2025-12": 1,
+      "2026-03": 2,
+      "2026-05": 1,
+    });
+    expect(Object.keys(countMonths(["2026-05-02", "2026-03-20", "2025-12-31"]))).toEqual(["2025-12", "2026-03", "2026-05"]);
+    expect(countMonths([])).toEqual({});
+  });
+
+  test("the year in the address is a year, all time, or the newest year that has data", () => {
+    const years = [2026, 2025, 2024];
+    expect(periodFromParam("2025", years)).toBe(2025);
+    expect(periodFromParam("all", years)).toBeNull();
+    expect(periodFromParam(undefined, years)).toBe(2026);
+    expect(periodFromParam(["2024", "2025"], years)).toBe(2024);
+    // A year with no data is still a year to look at.
+    expect(periodFromParam("2019", years)).toBe(2019);
+    // Nonsense falls back, and there is nothing to show with no years at all: all time.
+    for (const nonsense of ["", "abc", "20x6", "-2026", "2026.5", "99999", "0", "202", "All", " 2026", "2026 "]) {
+      expect(periodFromParam(nonsense, years)).toBe(2026);
+    }
+    expect(periodFromParam(undefined, [])).toBeNull();
+    expect(periodFromParam("abc", [])).toBeNull();
+  });
+
+  test("a year's chart has its twelve months, with none left out for having no viewings", () => {
+    const bars = chartBars({ "2026-03": 2, "2026-05": 1 }, 2026);
+    expect(bars).toHaveLength(12);
+    expect(bars.map((b) => b.short)).toEqual(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
+    expect(bars.map((b) => b.value)).toEqual([0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0]);
+    expect(bars[2]).toMatchObject({ key: "2026-03", label: "March 2026" });
+  });
+
+  test("all time's chart has each year between the first and the last, the latest twelve at most", () => {
+    expect(chartBars({ "2023-12": 1, "2025-01": 2, "2025-06": 3 }, null).map((b) => `${b.label}=${b.value}`)).toEqual([
+      "2023=1",
+      "2024=0",
+      "2025=5",
+    ]);
+    const long = Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`${2010 + i}-06`, i + 1]));
+    const bars = chartBars(long, null);
+    expect(bars).toHaveLength(12);
+    expect(bars[0].label).toBe("2013");
+    expect(bars[11].label).toBe("2024");
+  });
+
+  test("there is no chart when there is nothing in it", () => {
+    expect(chartBars({}, 2026)).toEqual([]);
+    expect(chartBars({}, null)).toEqual([]);
+    expect(chartBars({ "not a month": 3 }, null)).toEqual([]);
   });
 });
 
@@ -260,6 +319,44 @@ test.describe("a family's year", () => {
     expect(familyStats(input, null).closest).toMatchObject({ shared: 4 });
   });
 
+  test("someone who has left is not compared: there is no name to give them", () => {
+    const titles = ["A", "B", "C"].map((name) => title(name, { scores: scores([ANA, 8], ["gone", 8], [BEN, 7]) }));
+    const stats = familyStats(family(titles), 2026);
+    expect(stats.closest).toMatchObject({ a: "Ana", b: "Ben" });
+    expect(stats.farthest).toBeNull();
+  });
+
+  test("a pair's names are in alphabetical order, whatever order their accounts are in", () => {
+    const titles = ["A", "B", "C"].map((name) => title(name, { scores: scores(["zed-first-id", 8], ["alpha-last-id", 7]) }));
+    const stats = familyStats(
+      {
+        titles,
+        nights: [],
+        members: [
+          { id: "alpha-last-id", name: "Zoe" },
+          { id: "zed-first-id", name: "Abe" },
+        ],
+      },
+      2026,
+    );
+    expect(stats.closest).toMatchObject({ a: "Abe", b: "Zoe" });
+  });
+
+  test("the viewings of each month are counted, for the chart", () => {
+    const stats = familyStats(
+      family([
+        title("A", { viewings: [{ on: "2026-03-05", userIds: [ANA] }, { on: "2026-03-20", userIds: [ANA] }] }),
+        title("B", { viewings: [{ on: "2026-05-01", userIds: [ANA] }, { on: "2025-12-31", userIds: [ANA] }] }),
+      ]),
+      2026,
+    );
+    expect(stats.byMonth).toEqual({ "2026-03": 2, "2026-05": 1 });
+    expect(familyStats(family([title("A", { viewings: [{ on: "2025-12-31", userIds: [ANA] }, { on: "2026-01-01", userIds: [ANA] }] })]), null).byMonth).toEqual({
+      "2025-12": 1,
+      "2026-01": 1,
+    });
+  });
+
   test("a family with nothing has zeros and empty lists, not errors", () => {
     expect(familyStats(family([]), 2026)).toEqual({
       period: 2026,
@@ -272,6 +369,7 @@ test.describe("a family's year", () => {
       mostDivisive: null,
       genres: [],
       busiestMonth: null,
+      byMonth: {},
       rewatched: [],
       people: [],
       closest: null,
@@ -365,6 +463,16 @@ test.describe("a person's year", () => {
     const series = mine("Chernobyl", { type: "tv", days: [] });
     const stats = personalStats(own([series], { bySeries: { [series.key]: 4 }, byMonth: { "2025-07": 3, "2026-08": 1 } }), 2026);
     expect(stats.busiestMonth).toEqual({ month: "2026-08", viewings: 1 });
+    expect(stats.byMonth).toEqual({ "2026-08": 1 });
+  });
+
+  test("the months for the chart add the days of movies and the episodes of series", () => {
+    const series = mine("Chernobyl", { type: "tv", days: [] });
+    const stats = personalStats(
+      own([series, mine("Dune", { days: ["2026-03-05", "2026-07-20"] })], { bySeries: { [series.key]: 6 }, byMonth: { "2026-07": 5, "2026-08": 1 } }),
+      2026,
+    );
+    expect(stats.byMonth).toEqual({ "2026-03": 1, "2026-07": 6, "2026-08": 1 });
   });
 
   test("rewatches are the titles watched on two days or more, most first", () => {
@@ -413,7 +521,66 @@ test.describe("a person's year", () => {
       genres: [],
       top: [],
       busiestMonth: null,
+      byMonth: {},
       rewatched: [],
     });
+  });
+});
+
+test.describe("what people share", () => {
+  test("a family's year in a few words, with the top pick when there is one", () => {
+    const stats = familyStats(
+      family(
+        [
+          title("Dune", { runtime: 155, scores: scores([ANA, 9], [BEN, 9.5]) }),
+          title("Arrival", { runtime: 116, scores: scores([ANA, 7]) }),
+          title("Chernobyl", { type: "tv", runtime: 60 }),
+        ],
+        ["2026-03-05", "2026-04-04"],
+      ),
+      2026,
+    );
+    expect(familyShareText(stats)).toBe("Our 2026 on FamFlix: 3 titles watched together, 4 h 31 min of movies, 2 movie nights. Our top pick: Dune (9.3/10).");
+  });
+
+  test("it leaves out what there isn't, and says a single title as one", () => {
+    expect(familyShareText(familyStats(family([title("Chernobyl", { type: "tv", runtime: 60 })]), 2026))).toBe(
+      "Our 2026 on FamFlix: 1 title watched together.",
+    );
+    expect(familyShareText(familyStats(family([title("Dune", { runtime: 120, scores: scores([ANA, 8]) })], ["2026-03-05"]), 2026))).toBe(
+      "Our 2026 on FamFlix: 1 title watched together, 2 h of movies, 1 movie night. Our top pick: Dune (8/10).",
+    );
+  });
+
+  test("all time says time, not a year", () => {
+    expect(familyShareText(familyStats(family([title("Dune", { runtime: 100 })]), null))).toBe(
+      "Our time on FamFlix: 1 title watched together, 1 h 40 min of movies.",
+    );
+  });
+
+  test("a person's year in a few words", () => {
+    const series = mine("Chernobyl", { type: "tv", runtime: 60, days: [] });
+    const stats = personalStats(
+      own([mine("Dune", { runtime: 155, score: 9.5 }), mine("Arrival", { runtime: 116, score: 8 }), series], { bySeries: { [series.key]: 5 } }),
+      2026,
+    );
+    expect(personalShareText(stats)).toBe("My 2026 on FamFlix: 3 titles, 9 h 31 min watched, 5 episodes. My top pick: Dune (9.5/10).");
+    expect(personalShareText(personalStats(own([mine("Dune", { runtime: null })]), null))).toBe("My time on FamFlix: 1 title.");
+  });
+
+  test("a share never has anyone's name in it", () => {
+    const stats = familyStats(family([title("Dune", { scores: scores([ANA, 9], [BEN, 9], [CARA, 9]) })]), 2026);
+    for (const name of ["Ana", "Ben", "Cara"]) expect(familyShareText(stats)).not.toContain(name);
+  });
+});
+
+test.describe("month names", () => {
+  test("a month is written the same on the server and in the browser", () => {
+    expect(formatMonth("2026-03")).toBe("March 2026");
+    expect(formatMonth("2025-12")).toBe("December 2025");
+    expect(formatMonth("2026-13")).toBe("? 2026");
+    expect(shortMonth(1)).toBe("Jan");
+    expect(shortMonth(12)).toBe("Dec");
+    expect(shortMonth(13)).toBe("?");
   });
 });

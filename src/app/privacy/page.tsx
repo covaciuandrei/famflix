@@ -76,7 +76,10 @@ export default function PrivacyPage() {
           </li>
           <li>
             Family lists, and your name, picture, scores, notes and reactions on
-            them, are visible to the members of that family.
+            them, are visible to the members of that family. So are the
+            family&apos;s stats (the Stats tab), which only count what members
+            can already see; the Share button sends a few numbers and a title,
+            no names.
           </li>
           <li>
             Your votes in a family movie night stay private while you swipe.
