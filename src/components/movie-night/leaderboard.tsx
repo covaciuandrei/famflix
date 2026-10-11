@@ -74,6 +74,7 @@ function Row({
   const working = (key: string) => busy === key;
   const panelId = useId();
   const groups = groupVotes(row.votes, meId);
+  const watchedBefore = (card.watched_before ?? 0) > 0;
   return (
     <li className="rounded-xl border border-border bg-card">
       {/* The title button stretches over the whole header, so a tap anywhere on it opens the row. */}
@@ -112,8 +113,9 @@ function Row({
             <Stat vote="seen" count={row.seen} />
             <Stat vote="nope" count={row.nopes} />
           </p>
-          {(row.on_family_list || row.on_my_list) && (
+          {(row.on_family_list || row.on_my_list || watchedBefore) && (
             <p className="mt-1 flex flex-wrap gap-1.5">
+              {watchedBefore && <Chip>Watched before</Chip>}
               {row.on_family_list && <Chip>On family list</Chip>}
               {row.on_my_list && <Chip>On My list</Chip>}
             </p>

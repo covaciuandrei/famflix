@@ -30,9 +30,10 @@ function unique<T extends Keyed>(cards: readonly T[], taken: Set<string>): T[] {
 
 /**
  * Builds a stack of `size` cards from the titles on a list and suggestions from TMDB. Up to `size - 5` come from the
- * list (random ones if there are more); suggestions fill the rest, so a short list still gives a full stack with at
- * least 5 suggestions. If the suggestions fall short, leftover list titles top it up. A title on both counts as a
- * list title, and nothing appears twice.
+ * list (random ones if there are more, but the titles in `first` are taken before any other: the ones put back on the
+ * list to watch again); suggestions fill the rest, so a short list still gives a full stack with at least 5
+ * suggestions. If the suggestions fall short, leftover list titles top it up. A title on both counts as a list title,
+ * and nothing appears twice.
  */
 export function composeDeck<T extends Keyed>(input: {
   list: readonly T[];
@@ -40,11 +41,18 @@ export function composeDeck<T extends Keyed>(input: {
   size: number;
   seed: number;
   minSuggestions?: number;
+  /** Titles of `list` that lead the list's share. */
+  first?: readonly Keyed[];
 }): { card: T; origin: "list" | "suggested" }[] {
   const { size, seed } = input;
   const listShare = Math.max(0, size - (input.minSuggestions ?? MIN_SUGGESTIONS));
   const taken = new Set<string>();
-  const listPool = seededShuffle(unique(input.list, taken), seed);
+  const list = unique(input.list, taken);
+  const firstKeys = new Set((input.first ?? []).map(cardKey));
+  const listPool = [
+    ...seededShuffle(list.filter((card) => firstKeys.has(cardKey(card))), seed),
+    ...seededShuffle(list.filter((card) => !firstKeys.has(cardKey(card))), seed),
+  ];
   const suggestionPool = unique(input.suggestions, taken);
 
   const fromList = listPool.slice(0, listShare);

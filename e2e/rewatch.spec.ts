@@ -1,6 +1,7 @@
 import { test } from "@playwright/test";
 
 import { addTo, admin, createUser, expect, listCard, openAs, openFamily, signIn, startFamily } from "./helpers";
+import { closeAll, leaderboard, makeFamily, rows, startNight, topCard, vote } from "./night-helpers";
 
 /** A day `n` days ago the way a date field takes it (YYYY-MM-DD), in this machine's time zone like the browser's. */
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toLocaleDateString("en-CA");
@@ -131,4 +132,73 @@ test("My list: log a title again from its page, then put it back on To watch", a
   await page.goto("/app/mine");
   await expect(listCard(page, "Dune").getByRole("button", { name: "Watch again · seen 2×" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Watched 0" })).toBeVisible();
+});
+
+test("titles put back on the list to watch again lead the next movie night, and say they were watched before", async ({ browser }, testInfo) => {
+  test.setTimeout(300_000);
+  const { users, pages } = await makeFamily(browser, testInfo.project, "Rewatch Crew", ["Ana", "Ben"]);
+  const [ana] = users;
+  const [anaPage] = pages;
+  const keys = testInfo.project.name === "desktop";
+  const { data: family } = await admin.from("groups").select("id").eq("created_by", ana.id).single();
+  const group = family!.id as string;
+
+  // A long To watch list (more than a stack takes from it) with three titles the family has watched before and put
+  // back. Without leading the stack they would be in it one time in two or three.
+  const base = 100_000_000 + (Date.now() % 10_000_000);
+  const titles = [
+    ...Array.from({ length: 45 }, (_, i) => `Plain ${i + 1}`),
+    ...Array.from({ length: 3 }, (_, i) => `Queued ${i + 1}`),
+  ];
+  const { data: media } = await admin
+    .from("media")
+    .insert(titles.map((title, i) => ({ tmdb_id: base + i, media_type: "movie", title, runtime: 100 })))
+    .select("id, title");
+  await admin.from("list_items").insert(media!.map((m) => ({ group_id: group, added_by: ana.id, media_id: m.id })));
+  await admin.from("watch_history").insert(
+    media!
+      .filter((m) => m.title.startsWith("Queued"))
+      .map((m) => ({ user_id: ana.id, media_id: m.id, watched_on: daysAgo(40), group_id: group })),
+  );
+
+  await startNight(anaPage, "Rewatch Crew");
+  const { data: night } = await admin.from("movie_nights").select("id").eq("started_by", ana.id).single();
+  const { data: cards } = await admin
+    .from("movie_night_candidates")
+    .select("origin, media_id, list_item_id")
+    .eq("night_id", night!.id);
+  expect(cards).toHaveLength(25);
+  expect(cards!.filter((c) => c.origin === "list")).toHaveLength(20);
+  const queued = media!.filter((m) => m.title.startsWith("Queued")).map((m) => m.id);
+  expect(cards!.filter((c) => queued.includes(c.media_id)).map((c) => c.origin)).toEqual(["list", "list", "list"]);
+
+  // Their cards say so, and only theirs: yes to those, nope to the rest.
+  for (let i = 0; i < 25; i++) {
+    const label = (await topCard(anaPage).getAttribute("aria-label")) ?? "";
+    if (label.startsWith("Queued")) {
+      await expect(topCard(anaPage).getByText("Watched before")).toBeVisible();
+      await vote(anaPage, "yes", keys);
+    } else {
+      await expect(topCard(anaPage).getByText("Watched before")).toHaveCount(0);
+      await vote(anaPage, "nope", keys);
+    }
+  }
+  await expect(leaderboard(anaPage)).toBeVisible();
+
+  // The leaderboard rows say it too, on those three and no other.
+  const queuedRows = rows(anaPage).filter({ hasText: /Queued \d/ });
+  await expect(queuedRows).toHaveCount(3);
+  await expect(queuedRows.filter({ hasText: "Watched before" })).toHaveCount(3);
+  await expect(rows(anaPage).filter({ hasText: "Watched before" })).toHaveCount(3);
+  // A card that was never watched before adds nothing to its row: no chip, and no loose "0" either.
+  const loose = await rows(anaPage)
+    .filter({ hasNotText: "Watched before" })
+    .first()
+    .locator("div.min-w-0.flex-1")
+    .first()
+    .evaluate((el) =>
+      [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim()).map((n) => n.textContent),
+    );
+  expect(loose).toEqual([]);
+  await closeAll(pages);
 });

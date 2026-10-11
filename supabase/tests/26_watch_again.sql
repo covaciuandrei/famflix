@@ -3,8 +3,9 @@
 -- watch_history and starts a new one. Covered here: putting a family title back on To watch (the viewing goes to the
 -- history, My list entries, scores and the movie night history stay), a new viewing that replaces it, "I wasn't there"
 -- for the later viewing only (a person's earlier one stays on their My list), a movie night pick on a later day,
--- the same day or an earlier one, titles on My list, who may see and do what, the limit, and what happens when a
--- family or an account goes. Titles are called WA<name>: Movie (7101), Personal (7102), Series (7103, with episodes),
+-- the same day or an earlier one, titles on My list, who may see and do what, the limit, what a night's cards say about
+-- the days the family watched them before (and that guests aren't told), and what happens when a family or an account
+-- goes. Titles are called WA<name>: Movie (7101), Personal (7102), Series (7103, with episodes),
 -- Tv (7104, without), Pick (7105), Dev (7106), Flag (7107), Mark (7108) and the cards of a night (7111 to 7117).
 \set as_ada  'reset role; select set_config(''request.jwt.claim.sub'', ''5a5a5a5a-0000-0000-0000-000000000001'', false); set role authenticated;'
 \set as_bea  'reset role; select set_config(''request.jwt.claim.sub'', ''5b5b5b5b-0000-0000-0000-000000000002'', false); set role authenticated;'
@@ -317,6 +318,46 @@ select public.pick_movie_night_title(:'n4'::uuid, (select id from public.media w
 reset role;
 select test.expect_eq(test.wa_now(test.v('wa_pick')), 'watched:Ada@' || :'d5' || ',Bea@' || :'d2', 'a pick on an earlier day adds to the viewing');
 select test.expect_eq(test.wa_hist(:ada, 7105), :'d1' || ',' || :'d3', 'and changes nothing in the history');
+
+-- ---- A night's cards say whether the family watched them before ---------------------------------------------------
+-- The Pick title (7105) has two days with this family in the history (d1 and d3). Card 7111 was watched by Ada on her
+-- own, 7112 on two days with the family, and 7113 by another family: only this family's own days count.
+\set as_service 'reset role; select set_config(''request.jwt.claim.sub'', '''', false); set role service_role;'
+create or replace function test.wa_before(p_state jsonb) returns text language sql immutable as $$
+  select string_agg((c ->> 'tmdb_id') || '=' || coalesce(c ->> 'watched_before', 'null'), ',' order by (c ->> 'tmdb_id')::integer)
+  from jsonb_array_elements(p_state -> 'candidates') c $$;
+grant execute on function test.wa_before(jsonb) to anon, authenticated, service_role;
+reset role;
+insert into public.watch_history (user_id, media_id, watched_on, group_id)
+  select :ada, id, :'d1'::date, null from public.media where tmdb_id = 7111;
+insert into public.watch_history (user_id, media_id, watched_on, group_id)
+  select v.u, m.id, v.d, test.v('wa_fam')
+  from public.media m, (values (:ada::uuid, :'d2'::date), (:bea::uuid, :'d2'::date), (:ada::uuid, :'d4'::date)) v(u, d)
+  where m.tmdb_id = 7112;
+insert into public.watch_history (user_id, media_id, watched_on, group_id)
+  select :dev, id, :'d1'::date, test.v('wa_fam2') from public.media where tmdb_id = 7113;
+:as_ada
+select public.start_movie_night(:fam, '{}', '{}', test.wa_cands()) as n5 \gset
+select test.expect_eq(test.wa_before(public.movie_night_state(:'n5'::uuid, true)),
+  '7105=2,7111=0,7112=2,7113=0,7114=0,7115=0,7116=0,7117=0',
+  'a member is told on how many days the family watched each card before, and only the family''s own days count');
+:as_cal
+select test.expect_eq(test.wa_before(public.movie_night_state(:'n5'::uuid, true)),
+  '7105=2,7111=0,7112=2,7113=0,7114=0,7115=0,7116=0,7117=0', 'any member is');
+select test.expect_eq(public.movie_night_state(:'n5'::uuid, false) -> 'candidates', '[]'::jsonb, 'and the cards are only sent when asked for');
+:as_ada
+select public.get_movie_night_guest_link(:'n5'::uuid) as wa_tok \gset
+:as_service
+select public.guest_join(:'wa_tok', 'Zed') ->> 'secret' as wa_sec \gset
+select test.expect_eq(test.wa_before(public.guest_movie_night_state(:'wa_sec', true)),
+  '7105=null,7111=null,7112=null,7113=null,7114=null,7115=null,7116=null,7117=null',
+  'a guest is told nothing about what the family watched');
+:as_ada
+select public.cancel_movie_night(:'n5'::uuid);
+reset role;
+select test.expect_eq((select count(*) from public.movie_nights where group_id = test.v('wa_fam') and status = 'open'), 0::bigint,
+  'and the night is out of the way');
+delete from public.watch_history where user_id = :dev;
 
 -- ---- The setting that keeps archiving from counting as leaving doesn't outlast it ---------------------------------
 :as_ada

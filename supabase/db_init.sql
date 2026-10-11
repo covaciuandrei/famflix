@@ -2257,7 +2257,8 @@ $$;
 -- Everything the room needs about one night, as one voter may see it, in one go: the night, its stacks, who is taking
 -- part (the family and its guests) and how far they are, the voter's own votes and, for each stack the voter has
 -- finished (or that someone revealed, or once the night is over), the ranked results with who voted what. p_full also
--- sends the cards. The voter is a member or, with p_guest, a guest, who is told nothing about the family's lists. The
+-- sends the cards, each with the number of days its family has watched the title before (a guest isn't told). The
+-- voter is a member or, with p_guest, a guest, who is told nothing about the family's lists. The
 -- callers check that the voter may see the night: movie_night_state() for members, guest_movie_night_state() for guests.
 create function public.movie_night_state_for(p_night uuid, p_full boolean, p_voter uuid, p_guest boolean)
 returns jsonb
@@ -2375,7 +2376,10 @@ begin
         'rating', m.tmdb_rating,
         'runtime', m.runtime,
         'genres', m.genres,
-        'trailer_key', m.trailer_key
+        'trailer_key', m.trailer_key,
+        'watched_before', case when p_guest then null else
+                            (select count(distinct wh.watched_on)::integer from public.watch_history wh
+                             where wh.group_id = n.group_id and wh.media_id = m.id) end
       ) order by s.position, c.position), '[]'::jsonb)
     into v_candidates
     from public.movie_night_candidates c

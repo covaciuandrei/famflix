@@ -104,6 +104,8 @@ export interface DeckCard {
   trailerKey: string | null;
   /** From the family's or the person's list, or suggested by the app. */
   origin: "list" | "suggested";
+  /** On a family night: the family has watched this title before, on this many days. */
+  watchedBefore?: number;
 }
 
 /** A card of a Discover stack: its title is already saved in `media`, so swiping right is one insert on My list. */
@@ -284,6 +286,8 @@ export interface NightCandidate {
   runtime: number | null;
   genres: string[];
   trailer_key: string | null;
+  /** On how many days the family has watched the title before; null for a guest, and missing before the database knows. */
+  watched_before?: number | null;
 }
 
 export interface ResultRow {
@@ -466,6 +470,7 @@ export function candidateToCard(c: NightCandidate): DeckCard {
     genres: c.genres,
     trailerKey: c.trailer_key,
     origin: c.origin,
+    watchedBefore: c.watched_before ?? undefined,
   };
 }
 

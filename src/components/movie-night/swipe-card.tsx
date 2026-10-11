@@ -84,9 +84,16 @@ export function SwipeCardFace({
         </div>
       </div>
 
-      <span className="absolute top-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white">
-        {card.origin === "list" ? listLabel : "Suggested"}
-      </span>
+      <div className="absolute top-3 left-3 flex max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-1.5">
+        <span className="rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white">
+          {card.origin === "list" ? listLabel : "Suggested"}
+        </span>
+        {card.watchedBefore ? (
+          <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
+            Watched before
+          </span>
+        ) : null}
+      </div>
       {onInfo && (
         <button
           type="button"

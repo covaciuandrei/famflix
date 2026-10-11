@@ -178,15 +178,17 @@ interface PoolItem {
   mediaId: string | null;
   listItemId: string | null;
   details: TmdbDetails | null;
+  /** A title that was watched before and is back on the list to watch again. */
+  again?: boolean;
 }
 
 /**
  * The cards of a family night's stack, in order. The first stack takes up to `size - 5` of the family's To watch
- * titles that fit the mood and fills the rest with suggestions; a short list still gives a full stack. A "more
- * suggestions" stack (`suggestionsOnly`) is all suggestions. Suggestions never repeat a title on the family list or
- * in `exclude` (the night's earlier stacks and its recent nights). Suggested titles are saved to the shared `media`
- * table here, since the night stores them by id. A movie night is for movies, so a series on the family list is
- * never a card.
+ * titles that fit the mood (the ones put back on the list to watch again come first) and fills the rest with
+ * suggestions; a short list still gives a full stack. A "more suggestions" stack (`suggestionsOnly`) is all
+ * suggestions. Suggestions never repeat a title on the family list or in `exclude` (the night's earlier stacks and its
+ * recent nights). Suggested titles are saved to the shared `media` table here, since the night stores them by id. A
+ * movie night is for movies, so a series on the family list is never a card.
  */
 export async function buildFamilyCandidates({
   userId,
@@ -223,6 +225,7 @@ export async function buildFamilyCandidates({
             mediaId: card.media.id,
             listItemId: card.item.id,
             details: null,
+            again: card.earlier.length > 0,
           }));
 
     const listShare = Math.max(0, count - MIN_SUGGESTIONS);
@@ -242,7 +245,13 @@ export async function buildFamilyCandidates({
       details,
     }));
 
-    const deck = composeDeck({ list: listPool, suggestions, size: count, seed });
+    const deck = composeDeck({
+      list: listPool,
+      suggestions,
+      size: count,
+      seed,
+      first: listPool.filter((item) => item.again),
+    });
     if (deck.length < MIN_STACK_SIZE) return { error: like ? NOT_ENOUGH_LIKE : NOT_ENOUGH_MOVIES };
 
     const saved = await saveMediaMany(

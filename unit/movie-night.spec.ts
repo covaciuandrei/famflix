@@ -4,6 +4,7 @@ import { composeDeck, interleave } from "../src/lib/deck-compose";
 import { formatDayNumeric, formatRuntime } from "../src/lib/format";
 import { BROWSE_GENRES, matchesAnyGenre, matchesGenreSlug } from "../src/lib/genres";
 import {
+  candidateToCard,
   deckOrder,
   DEFAULT_MOOD,
   groupVotes,
@@ -26,6 +27,7 @@ import {
   POINTS,
   type MemberProgress,
   type NightInfo,
+  type NightCandidate,
   validVotes,
   whoWatched,
 } from "../src/lib/movie-night";
@@ -98,11 +100,79 @@ test.describe("composeDeck", () => {
     expect(ids(composeDeck({ ...args, seed: 7 }))).toEqual(ids(composeDeck({ ...args, seed: 7 })));
     expect(ids(composeDeck({ ...args, seed: 7 }))).not.toEqual(ids(composeDeck({ ...args, seed: 8 })));
   });
+
+  test("titles put back on the list to watch again are always in the stack, however long the list", () => {
+    const list = movies(1, 200);
+    const first = [movie(150), movie(33), movie(7)];
+    for (let seed = 1; seed <= 25; seed++) {
+      const deck = composeDeck({ list, suggestions: movies(1000, 30), size: 25, seed, first });
+      expect(deck).toHaveLength(25);
+      expect(deck.filter((d) => d.origin === "list")).toHaveLength(20);
+      expect(ids(deck)).toEqual(expect.arrayContaining([150, 33, 7]));
+    }
+  });
+
+  test("more of them than the list share are cut to it, and the rest of the share is random list titles", () => {
+    const first = movies(1, 30);
+    const deck = composeDeck({ list: movies(1, 100), suggestions: movies(1000, 30), size: 25, seed: 4, first });
+    const fromList = deck.filter((d) => d.origin === "list").map((d) => d.card.tmdbId);
+    expect(fromList).toHaveLength(20);
+    expect(fromList.every((id) => id <= 30)).toBe(true);
+
+    const some = composeDeck({ list: movies(1, 100), suggestions: movies(1000, 30), size: 25, seed: 4, first: movies(1, 5) });
+    const listIds = some.filter((d) => d.origin === "list").map((d) => d.card.tmdbId);
+    expect(listIds).toEqual(expect.arrayContaining([1, 2, 3, 4, 5]));
+    expect(listIds.filter((id) => id > 5)).toHaveLength(15);
+  });
+
+  test("without titles to lead, the stack is what it always was", () => {
+    const args = { list: movies(1, 60), suggestions: movies(100, 30), size: 25, seed: 9 };
+    expect(ids(composeDeck({ ...args, first: [] }))).toEqual(ids(composeDeck(args)));
+  });
+
+  test("a title that leads but isn't on the list is not added, and one on both lists leads once", () => {
+    const deck = composeDeck({
+      list: movies(1, 10),
+      suggestions: [movie(3), movie(50)],
+      size: 25,
+      seed: 1,
+      first: [movie(3), movie(99)],
+    });
+    expect(ids(deck).filter((id) => id === 3)).toHaveLength(1);
+    expect(ids(deck)).not.toContain(99);
+    expect(deck.find((d) => d.card.tmdbId === 3)?.origin).toBe("list");
+  });
 });
 
 test("interleave alternates between lists and keeps the longer tail", () => {
   expect(interleave([["a1", "a2", "a3"], ["b1"], ["c1", "c2"]])).toEqual(["a1", "b1", "c1", "a2", "c2", "a3"]);
   expect(interleave<string>([])).toEqual([]);
+});
+
+test("a night's card carries how often the family watched the title, and a guest's carries nothing", () => {
+  const card: NightCandidate = {
+    id: "c1",
+    stack_id: "s1",
+    position: 0,
+    origin: "list",
+    list_item_id: null,
+    media_id: "m1",
+    tmdb_id: 1,
+    media_type: "movie",
+    title: "Dune",
+    year: 2021,
+    poster_path: null,
+    backdrop_path: null,
+    overview: null,
+    rating: null,
+    runtime: null,
+    genres: [],
+    trailer_key: null,
+  };
+  expect(candidateToCard({ ...card, watched_before: 2 }).watchedBefore).toBe(2);
+  expect(candidateToCard({ ...card, watched_before: 0 }).watchedBefore).toBe(0);
+  expect(candidateToCard({ ...card, watched_before: null }).watchedBefore).toBeUndefined();
+  expect(candidateToCard(card).watchedBefore).toBeUndefined();
 });
 
 test.describe("deckOrder", () => {

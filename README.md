@@ -73,7 +73,9 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   My list, and one watched together doesn't make a night in the history).
   Can't decide? Start one for a family, pick a mood and everyone in it swipes
   through the same stack (the family's To watch movies plus suggestions from
-  TMDB): ✕ nope (−1 point), ♥ love (+2, three per stack), ✓ yes (+1) or 👁
+  TMDB; titles put back on the list with Watch again come first, and a card
+  or leaderboard row says "Watched before" for a title the family has seen):
+  ✕ nope (−1 point), ♥ love (+2, three per stack), ✓ yes (+1) or 👁
   seen it (0, you've already seen it), with buttons or the arrow keys on a
   computer and swipes on a phone. Everyone gets an invite
   when the night starts and sees the leaderboard once they have finished:
