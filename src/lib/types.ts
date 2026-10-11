@@ -221,6 +221,8 @@ export interface ListItemCard {
   series: CardSeries | null;
   /** The viewings before the current one, newest first: the family's on a family list, your own on My list. */
   earlier: EarlierViewing[];
+  /** Only on My list, for a series with episodes: how many times through it are in the history (0 when never started again). */
+  passes: number;
 }
 
 export type SortKey =

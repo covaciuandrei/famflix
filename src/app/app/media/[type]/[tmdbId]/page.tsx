@@ -13,6 +13,7 @@ import { Trailer } from "@/components/trailer";
 import { Badge } from "@/components/ui/badge";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
 import {
+  getEpisodeHistory,
   getEpisodeLogs,
   getLibraryIndex,
   getMyGroups,
@@ -82,7 +83,9 @@ export default async function MediaDetailPage({
           comment: myRating?.comment ?? null,
         }
       : null;
-    const ticks = entry ? await getEpisodeLogs(entry.id) : [];
+    const [ticks, history] = entry
+      ? await Promise.all([getEpisodeLogs(entry.id), getEpisodeHistory(entry.id)])
+      : [[], []];
     const season = seasonToOpen(
       details.series,
       new Set(ticks.map((t) => episodeKey(t.s, t.e))),
@@ -95,6 +98,8 @@ export default async function MediaDetailPage({
         series={details.series}
         item={entry}
         ticks={ticks}
+        history={history}
+        watchedOn={viewings.current}
         initial={{ season, episodes: await getSeasonEpisodes(id, season).catch(() => null) }}
       />
     );

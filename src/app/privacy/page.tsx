@@ -70,8 +70,9 @@ export default function PrivacyPage() {
       <Section title="Who can see it">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            Your personal list, with the episodes you tick on a series and
-            your scores and notes for them, is visible only to you.
+            Your personal list, with the episodes you tick on a series, the
+            earlier times you watched them, and your scores and notes for them,
+            is visible only to you.
           </li>
           <li>
             Family lists, and your name, picture, scores, notes and reactions on

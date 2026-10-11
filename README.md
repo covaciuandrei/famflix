@@ -32,6 +32,15 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   the next episode (**Watched S2E5**), and the series moves to a **Watching** tab
   (which is there while you have any). Your ticks, scores and notes are private,
   like My list: family lists keep a series as one title, with no episodes.
+- **Watching a series, or an episode, again**: a ticked episode has **Watched
+  again** (the day, today to start with): the day it had is kept in the history
+  and the row says "Watched 3×" with the days. **Start again**, on the series'
+  page and on the card of a series marked Watched, begins a new pass: what you
+  had watched of it, with its days, scores and notes, goes into the history as
+  pass 1, 2, ... and the series is Not started again (the page says "Watching
+  again · pass 2" and the card "Watched 2×" once it is finished again). The
+  series' own score and note stay. A family series is one title and is watched
+  again like a movie.
 - **Browse and add**: search, browse trending and top rated titles, or filter
   them by type (movies or series), decade and category (Comedy, Horror, Kids,
   ...); the filters work together, and only offer the categories the chosen type

@@ -9,6 +9,7 @@ import { Avatar } from "@/components/avatar";
 import { MediaPoster } from "@/components/media-poster";
 import { RatingPanel } from "@/components/rating-panel";
 import { ReactionButtons } from "@/components/reaction-buttons";
+import { StartSeriesAgain } from "@/components/rewatch/start-series-again";
 import { WatchAgain } from "@/components/rewatch/watch-again";
 import { WatchedBefore } from "@/components/rewatch/watched-before";
 import { SeriesCardLine } from "@/components/series/series-card-line";
@@ -18,7 +19,7 @@ import { WatchedTogetherDialog } from "@/components/watched-together-dialog";
 import { mediaTypeLabel } from "@/lib/constants";
 import { formatDay, formatDayNumeric, formatScore } from "@/lib/format";
 import { isWatchedTogether } from "@/lib/list-status";
-import { canWatchAgain, rewatchChip, viewingLines } from "@/lib/rewatch";
+import { canStartSeriesAgain, canWatchAgain, rewatchChip, viewingLines } from "@/lib/rewatch";
 import type { ListItemCard as Card, MemberSummary } from "@/lib/types";
 
 export function ListItemCard({
@@ -165,6 +166,9 @@ export function ListItemCard({
                 title={media.title}
                 mine={{ score: card.myScore, comment: card.myComment }}
               />
+            )}
+            {canStartSeriesAgain(card) && (
+              <StartSeriesAgain itemId={item.id} title={media.title} pass={card.passes + 1} />
             )}
             <ReactionButtons
               itemId={item.id}

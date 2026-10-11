@@ -6,8 +6,11 @@ import {
   airedTotal,
   applyMark,
   applyRating,
+  currentPass,
+  earlierDays,
   episodeKey,
   episodeLabel,
+  episodeViewings,
   episodesBetween,
   isFinished,
   isTicked,
@@ -18,6 +21,7 @@ import {
   seriesProgress,
   seriesStatus,
   seriesToJson,
+  type EarlierEpisode,
   type EpisodeState,
   type SeriesInfo,
 } from "../src/lib/series";
@@ -325,4 +329,52 @@ test.describe("rating an episode, as the page shows it", () => {
       on: "2026-10-11",
     });
   }
+});
+
+test.describe("watching again", () => {
+  const history: EarlierEpisode[] = [
+    { s: 1, e: 1, on: "2026-01-10", pass: 1 },
+    { s: 1, e: 2, on: "2026-01-11", pass: 1 },
+    { s: 1, e: 1, on: "2026-03-05", pass: 2 },
+    { s: 1, e: 1, on: "2026-04-01", pass: null },
+    { s: 1, e: 1, on: "2026-04-01", pass: null },
+  ];
+
+  test("the pass someone is on is one more than the last one kept, and 1 when there is none", () => {
+    expect(currentPass([])).toBe(1);
+    expect(currentPass(history)).toBe(3);
+    // Episodes watched again on their own are no pass.
+    expect(currentPass([{ s: 1, e: 1, on: "2026-04-01", pass: null }])).toBe(1);
+  });
+
+  test("an episode's earlier days are each once, newest first", () => {
+    const days = earlierDays(history);
+    expect(days.get(episodeKey(1, 1))).toEqual(["2026-04-01", "2026-03-05", "2026-01-10"]);
+    expect(days.get(episodeKey(1, 2))).toEqual(["2026-01-11"]);
+    expect(days.get(episodeKey(1, 3))).toBeUndefined();
+  });
+
+  test("an episode ticked now counts its day with the earlier ones", () => {
+    expect(episodeViewings(["2026-03-05", "2026-01-10"], true, "2026-04-20")).toEqual({
+      times: 3,
+      days: ["2026-04-20", "2026-03-05", "2026-01-10"],
+    });
+    expect(episodeViewings([], true, "2026-04-20")).toEqual({ times: 1, days: ["2026-04-20"] });
+  });
+
+  test("a day it has now and had before counts once", () => {
+    expect(episodeViewings(["2026-04-20", "2026-01-10"], true, "2026-04-20")).toEqual({
+      times: 2,
+      days: ["2026-04-20", "2026-01-10"],
+    });
+  });
+
+  test("an episode that isn't ticked counts only its earlier days", () => {
+    expect(episodeViewings(["2026-01-10"], false, null)).toEqual({ times: 1, days: ["2026-01-10"] });
+    expect(episodeViewings([], false, null)).toEqual({ times: 0, days: [] });
+  });
+
+  test("one a series marked Watched counts without a day of its own is still watched once more", () => {
+    expect(episodeViewings(["2026-01-10"], true, null)).toEqual({ times: 2, days: ["2026-01-10"] });
+  });
 });

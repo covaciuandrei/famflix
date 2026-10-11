@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  canStartSeriesAgain,
   canWatchAgain,
   chipText,
   earlierByTitle,
@@ -36,6 +37,9 @@ type Options = {
   watchedAt?: string | null;
   earlier?: { on: string; userIds: string[] }[];
   series?: unknown;
+  /** My list series: how many earlier passes are in the history, and how many aired episodes are ticked. */
+  passes?: number;
+  ticked?: number;
 };
 
 function card(o: Options = {}): ListItemCard {
@@ -82,8 +86,9 @@ function card(o: Options = {}): ListItemCard {
       skipped_at: null,
     })),
     watchedWith: null,
-    series: null,
+    series: o.ticked ? { watched: o.ticked, next: null } : null,
     earlier: o.earlier ?? [],
+    passes: o.passes ?? 0,
   };
 }
 
@@ -193,6 +198,39 @@ test.describe("what can be watched again", () => {
     const family = card({ family: true, status: "watched", viewers: [[ANA, "2026-02-01"]], series: SERIES });
     expect(isEpisodeSeries(family)).toBe(false);
     expect(canWatchAgain(family)).toBe(true);
+  });
+
+  test("a series marked Watched on My list can be started again, and nothing else can", () => {
+    expect(canStartSeriesAgain(card({ status: "watched", watchedAt: "2026-02-01T12:00:00+00:00", series: SERIES }))).toBe(true);
+    expect(canStartSeriesAgain(card({ status: "want", series: SERIES, ticked: 2 }))).toBe(false);
+    expect(canStartSeriesAgain(card({ status: "watched", watchedAt: "2026-02-01T12:00:00+00:00" }))).toBe(false);
+    expect(canStartSeriesAgain(card({ family: true, status: "watched", viewers: [[ANA, "2026-02-01"]], series: SERIES }))).toBe(false);
+  });
+});
+
+test.describe("a series started again", () => {
+  const watched = { status: "watched" as const, watchedAt: "2026-02-01T12:00:00+00:00", series: SERIES };
+
+  test("says nothing until it has been started again", () => {
+    expect(rewatchChip(card({ ...watched }))).toBeNull();
+    expect(rewatchChip(card({ status: "want", series: SERIES, ticked: 2 }))).toBeNull();
+    expect(rewatchChip(card({ status: "want", series: SERIES }))).toBeNull();
+  });
+
+  test("counts the passes: Watched 2× when it is finished again, pass 2 while it is on", () => {
+    expect(rewatchChip(card({ ...watched, passes: 1 }))).toBe("Watched 2×");
+    expect(rewatchChip(card({ ...watched, passes: 2 }))).toBe("Watched 3×");
+    expect(rewatchChip(card({ status: "want", series: SERIES, ticked: 1, passes: 1 }))).toBe("Watching again · pass 2");
+    expect(rewatchChip(card({ status: "want", series: SERIES, ticked: 3, passes: 2 }))).toBe("Watching again · pass 3");
+  });
+
+  test("is back on To watch with how often it was seen before it is started", () => {
+    expect(rewatchChip(card({ status: "want", series: SERIES, passes: 1 }))).toBe("Watch again · seen once");
+    expect(rewatchChip(card({ status: "want", series: SERIES, passes: 3 }))).toBe("Watch again · seen 3×");
+  });
+
+  test("has no days to list on its card: those are by episode, on its page", () => {
+    expect(viewingLines(card({ ...watched, passes: 1 }), ME, nameOf)).toEqual([]);
   });
 });
 

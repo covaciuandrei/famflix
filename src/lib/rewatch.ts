@@ -80,7 +80,20 @@ export function chipText(times: number, watchedNow: boolean): string | null {
 }
 
 export function rewatchChip(card: ListItemCard): string | null {
-  return isEpisodeSeries(card) ? null : chipText(timesWatched(card), isWatchedNow(card));
+  return isEpisodeSeries(card) ? seriesChip(card) : chipText(timesWatched(card), isWatchedNow(card));
+}
+
+/** A series on My list that is followed by episode and has been started again: how many times through it is. */
+function seriesChip(card: ListItemCard): string | null {
+  if (card.passes === 0) return null;
+  if (card.item.status === "watched") return `Watched ${card.passes + 1}×`;
+  if ((card.series?.watched ?? 0) > 0) return `Watching again · pass ${card.passes + 1}`;
+  return chipText(card.passes, false);
+}
+
+/** A series on My list that is marked Watched can be started again, from its card as from its page. */
+export function canStartSeriesAgain(card: ListItemCard): boolean {
+  return isEpisodeSeries(card) && card.item.status === "watched";
 }
 
 /** One line of a title's viewings: the day, and on a family list who watched. */
@@ -96,6 +109,8 @@ export function viewingLines(
   me: string,
   nameOf: (userId: string) => string,
 ): ViewingLine[] {
+  // A series followed by episode has its days by episode, on its page.
+  if (isEpisodeSeries(card)) return [];
   const family = card.item.group_id !== null;
   const days = new Map<string, Set<string>>();
   const add = (on: string, userId: string | null) => {

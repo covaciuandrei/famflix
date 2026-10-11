@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
+import { isUuid } from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { saveMedia } from "@/lib/save-media";
 import { MAX_EPISODES, MAX_SEASON, parseSeriesInfo, sameSeries } from "@/lib/series";
@@ -160,6 +161,45 @@ export async function tickNextEpisode(input: { tmdbId: number; on?: string }): P
   if (error) return { error: failure(error) };
   revalidatePath("/app", "layout");
   return { itemId: mine.itemId ?? undefined, completed: (data as { completed?: boolean } | null)?.completed === true };
+}
+
+/**
+ * Starts a series on My list again, as a new pass: what was watched of it goes into its history and it is Not started
+ * again. The database checks that it is the person's own series.
+ */
+export async function watchSeriesAgain(itemId: string): Promise<EpisodeResult> {
+  const { supabase } = await requireUser();
+  if (!isUuid(itemId)) return { error: "That isn't a valid series." };
+  const { error } = await supabase.rpc("watch_series_again", { p_item: itemId });
+  if (error) return { error: failure(error) };
+  revalidatePath("/app", "layout");
+  return { itemId };
+}
+
+/**
+ * Logs another viewing of an episode the person has watched: the day it had is kept, and it gets `on` (a day, in the
+ * person's own time).
+ */
+export async function watchEpisodeAgain(input: {
+  itemId: string;
+  season: number;
+  episode: number;
+  on: string;
+}): Promise<EpisodeResult> {
+  const { supabase } = await requireUser();
+  if (!isUuid(input?.itemId) || !isRef({ s: input.season, e: input.episode })) {
+    return { error: "That episode isn't valid." };
+  }
+  if (!isDay(input.on)) return { error: "That day isn't valid." };
+  const { error } = await supabase.rpc("watch_episode_again", {
+    p_item: input.itemId,
+    p_season: input.season,
+    p_episode: input.episode,
+    p_on: input.on,
+  });
+  if (error) return { error: failure(error) };
+  revalidatePath("/app", "layout");
+  return { itemId: input.itemId };
 }
 
 /**

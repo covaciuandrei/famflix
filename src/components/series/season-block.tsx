@@ -39,6 +39,9 @@ export function SeasonBlock({
   onNeed,
   onMark,
   onRate,
+  onWatchAgain,
+  earlier,
+  watchedOn,
   firstGap,
 }: {
   info: SeriesInfo;
@@ -53,6 +56,12 @@ export function SeasonBlock({
   onMark: (watched: boolean, from: EpisodeRef, to: EpisodeRef) => void;
   /** Saves a score and/or note for an episode; says what went wrong, or nothing. */
   onRate: (season: number, episode: number, score: number | null, comment: string | null) => Promise<string | null>;
+  /** Logs an episode as watched again on a day; says what went wrong, or nothing. */
+  onWatchAgain: (season: number, episode: number, on: string) => Promise<string | null>;
+  /** The earlier days of each episode (from the history), by episodeKey(). */
+  earlier: ReadonlyMap<string, string[]>;
+  /** The day the series was marked Watched, which an episode it counts without a tick of its own has. */
+  watchedOn: string | null;
   /** The first aired episode that isn't ticked (where "up to here" starts to mean something). */
   firstGap: EpisodeRef | null;
 }) {
@@ -130,15 +139,20 @@ export function SeasonBlock({
                 const afterGap =
                   firstGap !== null &&
                   (season.n > firstGap.s || (season.n === firstGap.s && episode.number > firstGap.e));
+                const key = episodeKey(season.n, episode.number);
+                const log = state.ticks.get(key);
                 return (
                   <EpisodeRow
-                    key={episodeKey(season.n, episode.number)}
+                    key={key}
                     season={season.n}
                     episode={episode}
                     aired={isAired}
                     ticked={isTicked(info, state, season.n, episode.number)}
-                    log={state.ticks.get(episodeKey(season.n, episode.number))}
+                    log={log}
+                    earlier={earlier.get(key) ?? []}
+                    currentOn={log?.on ?? (state.completed ? watchedOn : null)}
                     onRate={(score, comment) => onRate(season.n, episode.number, score, comment)}
+                    onWatchAgain={(on) => onWatchAgain(season.n, episode.number, on)}
                     onTick={(watched) =>
                       onMark(watched, { s: season.n, e: episode.number }, { s: season.n, e: episode.number })
                     }

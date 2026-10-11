@@ -1,9 +1,16 @@
 "use client";
 
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Repeat } from "lucide-react";
 import { useCallback, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 
-import { rateEpisode, tickEpisodes, tickNextEpisode, type EpisodeResult } from "@/app/app/media/series-actions";
+import {
+  rateEpisode,
+  tickEpisodes,
+  tickNextEpisode,
+  watchEpisodeAgain,
+  watchSeriesAgain,
+  type EpisodeResult,
+} from "@/app/app/media/series-actions";
 import { SeasonBlock, type SeasonEpisodes } from "@/components/series/season-block";
 import { ProgressBar, StatusChip } from "@/components/series/series-progress";
 import { Button } from "@/components/ui/button";
@@ -14,6 +21,8 @@ import {
   airedIn,
   applyMark,
   applyRating,
+  currentPass,
+  earlierDays,
   episodeKey,
   episodeLabel,
   episodesBetween,
@@ -23,6 +32,7 @@ import {
   seasonProgress,
   seriesProgress,
   seriesStatus,
+  type EarlierEpisode,
   type EpisodeRef,
   type EpisodeState,
   type SeriesInfo,
@@ -56,6 +66,8 @@ export function EpisodeTracker({
   series,
   item,
   ticks,
+  history,
+  watchedOn,
   initial,
 }: {
   tmdbId: number;
@@ -63,6 +75,10 @@ export function EpisodeTracker({
   series: SeriesInfo;
   item: TrackerItem | null;
   ticks: TickedEpisode[];
+  /** The earlier viewings of its episodes: the passes through the series before this one, and episodes watched again. */
+  history: EarlierEpisode[];
+  /** The day the series was marked Watched, when it is (an episode it counts without a tick of its own has that day). */
+  watchedOn: string | null;
   /** The season shown open at first, with its episodes when the server could get them. */
   initial: { season: number; episodes: TmdbEpisode[] | null };
 }) {
@@ -74,6 +90,8 @@ export function EpisodeTracker({
     }),
     [ticks, item?.watched],
   );
+  const pass = useMemo(() => currentPass(history), [history]);
+  const earlier = useMemo(() => earlierDays(history), [history]);
   const [state, addOptimistic] = useOptimistic(base, (current: EpisodeState, change: Change) =>
     "mark" in change ? applyMark(series, current, change.mark) : applyRating(series, current, change.rate),
   );
@@ -163,6 +181,34 @@ export function EpisodeTracker({
 
   const upNext = nextUp(series, state.ticks, state.completed);
 
+  /** Logs an episode as watched again on a day; resolves to what went wrong, or null when it was saved. */
+  function watchAgain(season: number, episode: number, on: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      startTransition(async () => {
+        const res = item
+          ? await watchEpisodeAgain({ itemId: item.id, season, episode, on })
+          : { error: "Add this series to My list first." };
+        resolve(res.error ?? null);
+      });
+    });
+  }
+
+  function startAgain() {
+    if (!item) return;
+    if (
+      !window.confirm(
+        `Start ${title} again? What you've watched of it goes into its history as pass ${pass}, with your scores and notes, and the series is Not started again.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const res = await watchSeriesAgain(item.id);
+      if (res.error) setError(res.error);
+    });
+  }
+
   function markNext() {
     setError(null);
     const on = localDay();
@@ -191,7 +237,19 @@ export function EpisodeTracker({
           Episodes
         </h2>
         <StatusChip status={status} finished={finished} />
+        {pass > 1 && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap">
+            <Repeat className="size-3 text-muted-foreground" aria-hidden />
+            {status === "completed" ? `Pass ${pass}` : `Watching again · pass ${pass}`}
+          </span>
+        )}
         {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Saving" />}
+        {item && (status === "completed" || progress.watched > 0) && (
+          <Button variant="outline" size="sm" onClick={startAgain} disabled={pending} className="ml-auto">
+            <Repeat className="size-4" aria-hidden />
+            Start again
+          </Button>
+        )}
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4">
@@ -255,6 +313,9 @@ export function EpisodeTracker({
             onNeed={need}
             onMark={mark}
             onRate={rate}
+            onWatchAgain={watchAgain}
+            earlier={earlier}
+            watchedOn={watchedOn}
             firstGap={upNext}
           />
         ))}

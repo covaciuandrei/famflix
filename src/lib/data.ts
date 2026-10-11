@@ -7,6 +7,7 @@ import { libraryKey } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
 import { nightPeople, type ActiveNight, type HistoryEntry, type NightState } from "@/lib/movie-night";
 import { earlierByTitle, groupEarlier, type HistoryRow } from "@/lib/rewatch";
+import type { EarlierEpisode } from "@/lib/series";
 import type {
   ActivityEvent,
   CardSeries,
@@ -142,10 +143,11 @@ export async function getListCards(opts: {
 
   const rows = data as unknown as ListItemWithDetails[];
   if (rows.length === 0) return [];
-  const [watchedWith, progress, earlier] = await Promise.all([
+  const [watchedWith, progress, earlier, passes] = await Promise.all([
     opts.groupId ? new Map<string, WatchedWith>() : loadWatchedWith(supabase, opts.userId, rows),
     opts.groupId ? new Map<string, CardSeries>() : loadSeriesProgress(supabase, rows),
     loadEarlier(supabase, opts),
+    opts.groupId ? new Map<string, number>() : loadSeriesPasses(supabase, rows),
   ]);
   return rows
     .map((row) =>
@@ -155,6 +157,7 @@ export async function getListCards(opts: {
         watchedWith.get(row.id) ?? null,
         progress.get(row.id) ?? null,
         earlier.get(row.media_id) ?? [],
+        passes.get(row.id) ?? 0,
       ),
     )
     .filter((c): c is ListItemCard => c !== null);
@@ -189,6 +192,26 @@ async function loadEarlier(
     if (page.length < 1000) break;
   }
   return earlierByTitle(rows);
+}
+
+/** For the series on My list that were started again: how many times through them are kept in the history. */
+async function loadSeriesPasses(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: ListItemWithDetails[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (!rows.some((r) => r.media?.media_type === "tv")) return result;
+  const { data, error } = await supabase.rpc("my_series_passes");
+  if (error) {
+    // Logged, not thrown: My list still works, its series just show no earlier passes. (PGRST202: the database doesn't
+    // have the function yet.)
+    if (error.code !== "PGRST202") console.error("Could not load series passes:", error.message);
+    return result;
+  }
+  for (const r of (data ?? []) as { list_item_id: string; passes: number }[]) {
+    result.set(r.list_item_id, r.passes);
+  }
+  return result;
 }
 
 /** For the series on My list that have an episode ticked: how many aired episodes are ticked, and which is next. */
@@ -268,6 +291,7 @@ function toCard(
   watchedWith: WatchedWith | null,
   series: CardSeries | null,
   earlier: EarlierViewing[],
+  passes: number,
 ): ListItemCard | null {
   if (!row.media) return null;
 
@@ -312,6 +336,7 @@ function toCard(
     watchedWith,
     series,
     earlier,
+    passes,
   };
 }
 
@@ -411,6 +436,43 @@ export async function getEpisodeLogs(itemId: string): Promise<TickedEpisode[]> {
     }[];
     for (const r of rows) {
       found.push({ s: r.season_number, e: r.episode_number, on: r.watched_on, score: r.score, comment: r.comment });
+    }
+    if (rows.length < 1000) break;
+  }
+  return found;
+}
+
+/**
+ * The earlier viewings of the episodes of one of the signed-in person's My list series (the ones kept when an episode was
+ * watched again or the series started again), for its page.
+ */
+export async function getEpisodeHistory(itemId: string): Promise<EarlierEpisode[]> {
+  const supabase = await createClient();
+  const found: EarlierEpisode[] = [];
+  // The API hands out at most 1000 rows at a time, so a long history is read a page at a time.
+  for (let from = 0; from < 50_000; from += 1000) {
+    const { data, error } = await supabase
+      .from("episode_history")
+      .select("season_number, episode_number, watched_on, pass")
+      .eq("list_item_id", itemId)
+      .order("season_number")
+      .order("episode_number")
+      .order("watched_on")
+      .range(from, from + 999);
+    if (error) {
+      // Logged, not thrown: the page still works, it just shows no earlier viewings. (PGRST205: the database doesn't
+      // have the table yet.)
+      if (error.code !== "PGRST205") console.error("Could not load earlier episodes:", error.message);
+      return [];
+    }
+    const rows = (data ?? []) as {
+      season_number: number;
+      episode_number: number;
+      watched_on: string;
+      pass: number | null;
+    }[];
+    for (const r of rows) {
+      found.push({ s: r.season_number, e: r.episode_number, on: r.watched_on, pass: r.pass });
     }
     if (rows.length < 1000) break;
   }

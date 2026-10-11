@@ -1,11 +1,12 @@
 "use client";
 
-import { MessageSquare, Star } from "lucide-react";
+import { MessageSquare, Repeat, Star } from "lucide-react";
 import { useState } from "react";
 
+import { EpisodeAgainPanel } from "@/components/series/episode-again";
 import { EpisodeRatingPanel } from "@/components/series/episode-rating";
 import { formatDayNumeric, formatRuntime, formatScore } from "@/lib/format";
-import { episodeLabel, type EpisodeLog } from "@/lib/series";
+import { episodeLabel, episodeViewings, type EpisodeLog } from "@/lib/series";
 import type { TmdbEpisode } from "@/lib/tmdb";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +18,8 @@ function airLine(episode: TmdbEpisode, aired: boolean): string {
 
 /**
  * One episode of a season: a tick, its number and name, when it aired and how long it is, and what it is about.
- * Episodes that haven't aired can't be ticked or rated. A button opens the person's own score and note for it.
+ * Episodes that haven't aired can't be ticked or rated. A button opens the person's own score and note for it, and a
+ * ticked episode can be logged as watched again (its days then show: "Watched 2×").
  * `onUpTo` (only given when there is something before it to tick) ticks everything up to this episode.
  */
 export function EpisodeRow({
@@ -26,8 +28,11 @@ export function EpisodeRow({
   aired,
   ticked,
   log,
+  earlier,
+  currentOn,
   onTick,
   onRate,
+  onWatchAgain,
   onUpTo,
 }: {
   season: number;
@@ -36,15 +41,23 @@ export function EpisodeRow({
   ticked: boolean;
   /** The person's own score and note for it, if it has any. */
   log: EpisodeLog | undefined;
+  /** The days it was watched on before the one it has now (from the history), newest first. */
+  earlier: readonly string[];
+  /** The day it is ticked on now; null when it isn't, or when a series marked Watched gives it no day of its own. */
+  currentOn: string | null;
   onTick: (watched: boolean) => void;
   /** Saves a score and/or note; says what went wrong, or nothing. */
   onRate: (score: number | null, comment: string | null) => Promise<string | null>;
+  /** Logs it as watched again on a day; says what went wrong, or nothing. */
+  onWatchAgain: (on: string) => Promise<string | null>;
   onUpTo?: () => void;
 }) {
   const [rating, setRating] = useState(false);
+  const [again, setAgain] = useState(false);
   const label = episodeLabel(season, episode.number);
   const score = log?.score ?? null;
   const note = log?.comment ?? null;
+  const { times, days } = episodeViewings(earlier, ticked, currentOn);
   return (
     <li className={cn("group py-1", !aired && "opacity-60")}>
       <label
@@ -116,9 +129,28 @@ export function EpisodeRow({
               Mark all up to {label}
             </button>
           )}
+          {ticked && (
+            <button
+              type="button"
+              onClick={() => setAgain((open) => !open)}
+              aria-expanded={again}
+              aria-label={`Watched ${label} again`}
+              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            >
+              <Repeat className="size-3.5" aria-hidden />
+              Watched again
+            </button>
+          )}
         </div>
       )}
+      {times >= 2 && (
+        <p className="mb-1 ml-9 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Watched {times}×</span>
+          {days.length > 0 && ` · ${days.map(formatDayNumeric).join(", ")}`}
+        </p>
+      )}
       {note && !rating && <p className="mb-1 ml-9 text-xs break-words text-muted-foreground">“{note}”</p>}
+      {again && <EpisodeAgainPanel label={label} onSave={onWatchAgain} onClose={() => setAgain(false)} />}
       {rating && (
         <EpisodeRatingPanel
           // A new form each time it opens, so it starts from what is saved.

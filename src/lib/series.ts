@@ -308,3 +308,51 @@ export function applyRating(info: SeriesInfo, state: EpisodeState, rating: Episo
   const completed = state.completed || (isFinished(info) && everyAiredTicked(info, ticks));
   return { ticks, completed };
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+//  Watching again: the passes through a series, and the earlier viewings of an episode
+// ---------------------------------------------------------------------------------------------------------------
+
+/** An earlier viewing of an episode, from the history: the day, and the pass it was part of (null: watched again on its own). */
+export interface EarlierEpisode {
+  s: number;
+  e: number;
+  on: string;
+  pass: number | null;
+}
+
+/** The pass someone is on: one more than the last one in the history, so 1 for a series never started again. */
+export function currentPass(history: readonly EarlierEpisode[]): number {
+  return history.reduce((last, h) => Math.max(last, h.pass ?? 0), 0) + 1;
+}
+
+/** The earlier days of each episode by episodeKey(), newest first and each once. */
+export function earlierDays(history: readonly EarlierEpisode[]): Map<string, string[]> {
+  const days = new Map<string, Set<string>>();
+  for (const h of history) {
+    const key = episodeKey(h.s, h.e);
+    const set = days.get(key) ?? new Set<string>();
+    set.add(h.on.slice(0, 10));
+    days.set(key, set);
+  }
+  return new Map([...days].map(([key, set]) => [key, [...set].sort((a, b) => b.localeCompare(a))]));
+}
+
+/**
+ * How many times an episode has been watched and on which days (newest first): the earlier days, plus the day it is
+ * ticked on now. `currentOn` is null for an episode that isn't ticked, or one a series marked Watched counts without a
+ * day of its own and the series' day isn't known; the latter still counts once. A day it has both now and before
+ * counts once.
+ */
+export function episodeViewings(
+  earlier: readonly string[],
+  ticked: boolean,
+  currentOn: string | null,
+): { times: number; days: string[] } {
+  const days = new Set(earlier);
+  if (ticked && currentOn) days.add(currentOn.slice(0, 10));
+  return {
+    times: days.size + (ticked && !currentOn ? 1 : 0),
+    days: [...days].sort((a, b) => b.localeCompare(a)),
+  };
+}

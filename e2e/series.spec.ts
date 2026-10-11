@@ -247,3 +247,84 @@ test("a series on My list shows how far you are, with a button for the next epis
   await expect(listCard(page, "Chernobyl").getByRole("progressbar")).toHaveCount(0);
   expect((await myChernobyl(ana)).status).toBe("watched");
 });
+
+/** A day `n` days ago the way a date field takes it (YYYY-MM-DD), in this machine's time zone like the browser's. */
+const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toLocaleDateString("en-CA");
+/** The same day the way the app writes it: dd.mm.yyyy. */
+const numeric = (iso: string) => iso.split("-").reverse().join(".");
+
+test("start a series again as a new pass, watch an episode again, and finish the new pass", async ({ page, context }) => {
+  const ana = await createUser("Ana");
+  await signIn(context, ana);
+  // "Start Chernobyl again?" is asked first.
+  page.on("dialog", (dialog) => void dialog.accept());
+
+  // The first time through, a month ago: the whole season, which finishes the series.
+  await page.goto(CHERNOBYL);
+  const episodes = page.getByRole("region", { name: "Episodes" });
+  await expect(episodes.getByRole("button", { name: "Start again" })).toHaveCount(0);
+  await episodes.getByRole("button", { name: "Mark season 1 watched" }).click();
+  const ask = page.getByRole("dialog", { name: "How was Chernobyl?" });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "Later" }).click();
+  await expect(episodes.getByText("Completed", { exact: true })).toBeVisible();
+  const { data: item } = await admin.from("list_items").select("id").eq("added_by", ana.id).single();
+  await admin.from("episode_logs").update({ watched_on: daysAgo(30) }).eq("list_item_id", item!.id);
+
+  // Start again: the ticks go to the history as pass 1, and the series is Not started, on pass 2.
+  await page.reload();
+  await episodes.getByRole("button", { name: "Start again" }).click();
+  await expect(episodes.getByText("Not started", { exact: true })).toBeVisible();
+  await expect(episodes.getByText("0 of 5 aired episodes watched")).toBeVisible();
+  await expect(episodes.getByText("Watching again · pass 2")).toBeVisible();
+  await expect(episodes.getByRole("button", { name: "Start again" })).toHaveCount(0);
+  const { data: kept } = await admin.from("episode_history").select("pass, watched_on").eq("list_item_id", item!.id);
+  expect(kept).toHaveLength(5);
+  expect(kept!.every((row) => row.pass === 1 && row.watched_on === daysAgo(30))).toBe(true);
+  expect((await myChernobyl(ana)).ticks).toBe("");
+
+  // On My list it waits on To watch, and says it was seen before.
+  await page.goto("/app/mine");
+  await expect(listCard(page, "Chernobyl").getByText("Watch again · seen once")).toBeVisible();
+
+  // The first episode of the new pass: it has now been watched twice, on these days.
+  await page.goto(CHERNOBYL);
+  await episodes.getByRole("button", { name: "Watched S1E1" }).click();
+  await expect(episodes.getByText("1 of 5 aired episodes watched")).toBeVisible();
+  await expect(episodes.getByText(`Watched 2× · ${numeric(daysAgo(0))}, ${numeric(daysAgo(30))}`)).toBeVisible();
+  await expect(episodes.getByText("Watched 2×")).toHaveCount(1);
+
+  // Watched it again yesterday: three days, and the one it had is in the history.
+  await episodes.getByRole("button", { name: "Watched S1E1 again" }).click();
+  const again = episodes.getByRole("group", { name: "Watched S1E1 again" });
+  await again.getByLabel("The day you watched S1E1 again").fill(daysAgo(1));
+  await again.getByRole("button", { name: "Save" }).click();
+  await expect(again).toBeHidden();
+  await expect(
+    episodes.getByText(`Watched 3× · ${numeric(daysAgo(0))}, ${numeric(daysAgo(1))}, ${numeric(daysAgo(30))}`),
+  ).toBeVisible();
+  // The same day it already has is refused.
+  await episodes.getByRole("button", { name: "Watched S1E1 again" }).click();
+  await again.getByLabel("The day you watched S1E1 again").fill(daysAgo(1));
+  await again.getByRole("button", { name: "Save" }).click();
+  await expect(again.getByRole("alert")).toContainText("already has that day");
+  await again.getByRole("button", { name: "Cancel" }).click();
+
+  // Finishing the new pass completes the series again: pass 2, and it is Watched twice on My list.
+  await episodes.getByRole("button", { name: "Mark season 1 watched" }).click();
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "Later" }).click();
+  await expect(episodes.getByText("Pass 2", { exact: true })).toBeVisible();
+  await page.goto("/app/mine");
+  await page.getByRole("button", { name: /^Watched 1$/ }).click();
+  const card = listCard(page, "Chernobyl");
+  await expect(card.getByText("Watched 2×")).toBeVisible();
+
+  // And from its card it can be started again once more.
+  await card.getByRole("button", { name: "Start again" }).click();
+  await expect(page.getByRole("button", { name: /^To watch 1$/ })).toBeVisible();
+  await page.getByRole("button", { name: /^To watch 1$/ }).click();
+  await expect(listCard(page, "Chernobyl").getByText("Watch again · seen 2×")).toBeVisible();
+  const { data: passes } = await admin.from("episode_history").select("pass").eq("list_item_id", item!.id).not("pass", "is", null);
+  expect(new Set(passes!.map((row) => row.pass))).toEqual(new Set([1, 2]));
+});
