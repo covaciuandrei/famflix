@@ -11,7 +11,8 @@ select test.expect_eq((select count(*) from pg_class where relnamespace = 'publi
   0::bigint, 'public holds only tables and indexes');
 select test.expect_eq((select array_agg(relname::text order by relname::text collate "C") from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'),
   (select array_agg(x order by x collate "C") from unnest(array['activity', 'episode_logs', 'group_members', 'groups', 'list_items', 'media',
-    'movie_night_candidates', 'movie_night_finishes', 'movie_night_members', 'movie_night_stacks', 'movie_night_votes',
+    'movie_night_candidates', 'movie_night_finishes', 'movie_night_guest_finishes', 'movie_night_guest_votes',
+    'movie_night_guests', 'movie_night_links', 'movie_night_members', 'movie_night_stacks', 'movie_night_votes',
     'movie_nights', 'profiles', 'rate_limits', 'ratings', 'reactions', 'watches']) x),
   'the tables are the ones whose grants are pinned here');
 
@@ -60,10 +61,13 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname::text
     'start_movie_night', 'join_movie_night', 'cast_movie_night_votes', 'finish_movie_night_stack',
     'add_movie_night_stack', 'reveal_movie_night', 'cancel_movie_night', 'movie_night_state', 'active_movie_nights',
     'add_movie_night_top_titles', 'pick_movie_night_card', 'pick_movie_night_title',
-    'mark_episodes', 'mark_next_episode', 'rate_episode', 'my_series_progress']) x),
+    'mark_episodes', 'mark_next_episode', 'rate_episode', 'my_series_progress',
+    'get_movie_night_guest_link', 'replace_movie_night_guest_link', 'turn_off_movie_night_guest_link',
+    'remove_movie_night_guest']) x),
   'signed-in people can run exactly these functions');
 
--- The server (service-role key): reads and writes every table, and runs the one function it calls.
+-- The server (service-role key): reads and writes every table, and runs the functions it calls (counting rate limits, and
+-- speaking for the guests of a movie night).
 select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relname || ':' || p) collate "C")
   from pg_class c, unnest(array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']) p
   where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and has_table_privilege('service_role', c.oid, p)),
@@ -73,7 +77,9 @@ select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relnam
   'the server has read and write access to every table, and nothing beyond');
 select test.expect_eq((select array_agg(p.proname::text order by p.proname::text collate "C") from pg_proc p
   where p.pronamespace = 'public'::regnamespace and has_function_privilege('service_role', p.oid, 'execute')),
-  array['hit_rate_limit']::text[], 'the server can run hit_rate_limit and nothing else');
+  (select array_agg(x order by x collate "C") from unnest(array['hit_rate_limit', 'guest_link_info', 'guest_join',
+    'guest_movie_night_state', 'guest_cast_votes', 'guest_finish_stack', 'guest_leave']) x),
+  'the server can run hit_rate_limit and the guest functions, and nothing else');
 
 :as_service
 insert into public.media (tmdb_id, media_type, title) values (9961, 'movie', 'Saved by the server')
