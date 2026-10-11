@@ -3494,6 +3494,213 @@ create trigger ratings_react_to_score
   for each row execute function public.react_to_score();
 
 -- ---------------------------------------------------------------------------
+--  Your data: everything FamFlix keeps about the caller, in one go
+-- ---------------------------------------------------------------------------
+
+-- Everything the caller has put into FamFlix, or that was recorded about them, as one JSON document: the account, the
+-- families, My list (with ticked episodes and earlier viewings), their watch history, their part of each family list
+-- (the titles they added, and their scores, notes, reactions and watches), the movie nights they took part in and the
+-- family feed events they caused. The app turns it into a download and adds the e-mail address, which comes from the
+-- sign-in and is in none of these tables. Only what is theirs: the other people on a family list appear by display name,
+-- where they watched something with the caller and only for a family the caller is still in; their scores, notes,
+-- reactions and e-mail addresses never do, nor do guests, invite codes or the temporary rate-limit counters (the
+-- document lists what it leaves out). A family the caller has left shows what they did there, with no other names.
+-- One value, so the API's cap on rows doesn't cut it short.
+create function public.export_my_data()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  perform public.hit_rate_limit(v_me, 'export', 5, 3600);
+
+  return jsonb_build_object(
+    'exported_at', now(),
+    'account', (
+      select jsonb_build_object('id', p.id, 'display_name', p.display_name, 'avatar_url', p.avatar_url,
+                                'created_at', p.created_at)
+      from public.profiles p
+      where p.id = v_me
+    ),
+    'families', (
+      select coalesce(jsonb_agg(jsonb_build_object('name', g.name, 'role', gm.role, 'joined_at', gm.joined_at)
+                                order by gm.joined_at, g.name), '[]'::jsonb)
+      from public.group_members gm
+      join public.groups g on g.id = gm.group_id
+      where gm.user_id = v_me
+    ),
+    'my_list', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+          'title', m.title,
+          'type', m.media_type,
+          'tmdb_id', m.tmdb_id,
+          'year', m.release_year,
+          'status', li.status,
+          'added_at', li.created_at,
+          'watched_at', li.watched_at,
+          'removed_at', li.deleted_at,
+          'my_score', r.score,
+          'my_note', r.comment,
+          'my_reaction', x.value,
+          'watched_with', case when wf.family is null then null
+                               else jsonb_build_object('family', wf.family, 'people', wf.people) end,
+          'episodes', (select coalesce(jsonb_agg(jsonb_build_object(
+                                 'season', e.season_number, 'episode', e.episode_number, 'watched_on', e.watched_on,
+                                 'score', e.score, 'note', e.comment) order by e.season_number, e.episode_number),
+                               '[]'::jsonb)
+                       from public.episode_logs e where e.list_item_id = li.id),
+          'earlier_episode_viewings', (select coalesce(jsonb_agg(jsonb_build_object(
+                                 'season', h.season_number, 'episode', h.episode_number, 'watched_on', h.watched_on,
+                                 'pass', h.pass, 'score', h.score, 'note', h.comment)
+                               order by h.season_number, h.episode_number, h.watched_on), '[]'::jsonb)
+                       from public.episode_history h where h.list_item_id = li.id)
+        ) order by li.created_at, m.title), '[]'::jsonb)
+      from public.list_items li
+      join public.media m on m.id = li.media_id
+      left join public.ratings r on r.list_item_id = li.id and r.user_id = v_me
+      left join public.reactions x on x.list_item_id = li.id and x.user_id = v_me
+      left join lateral (
+        select g.name as family,
+               coalesce(jsonb_agg(p.display_name order by p.display_name) filter (where p.id is not null),
+                        '[]'::jsonb) as people
+        from public.list_items fi
+        join public.groups g on g.id = fi.group_id
+        left join public.watches w on w.list_item_id = fi.id and w.user_id <> v_me
+        left join public.profiles p on p.id = w.user_id
+        where fi.id = li.source_item_id and public.is_group_member(fi.group_id, v_me)
+        group by g.name
+      ) wf on true
+      where li.group_id is null and li.added_by = v_me
+    ),
+    'watch_history', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+          'title', m.title,
+          'type', m.media_type,
+          'tmdb_id', m.tmdb_id,
+          'year', m.release_year,
+          'watched_on', h.watched_on,
+          'family', case when public.is_group_member(h.group_id, v_me) then g.name end
+        ) order by h.watched_on, m.title), '[]'::jsonb)
+      from public.watch_history h
+      join public.media m on m.id = h.media_id
+      left join public.groups g on g.id = h.group_id
+      where h.user_id = v_me
+    ),
+    'family_lists', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+          'family', g.name,
+          'still_a_member', public.is_group_member(g.id, v_me),
+          'titles', (
+            select coalesce(jsonb_agg(jsonb_build_object(
+                'title', m.title,
+                'type', m.media_type,
+                'tmdb_id', m.tmdb_id,
+                'year', m.release_year,
+                'added_by_me', li.added_by = v_me,
+                'added_at', li.created_at,
+                'status', li.status,
+                'removed_at', li.deleted_at,
+                'my_score', r.score,
+                'my_note', r.comment,
+                'score_entered_by', case when r.id is null then null
+                                         when r.rated_by = v_me then 'me'
+                                         when public.is_group_member(g.id, v_me) then coalesce(rb.display_name, 'someone')
+                                         else 'someone' end,
+                'my_reaction', x.value,
+                'i_watched_on', w.watched_on,
+                'rating_request_skipped', case when w.list_item_id is null then null else w.skipped_at is not null end,
+                'watch_logged_by', case when w.list_item_id is null then null
+                                        when w.logged_by = v_me then 'me'
+                                        when public.is_group_member(g.id, v_me) then coalesce(lb.display_name, 'someone')
+                                        else 'someone' end
+              ) order by li.created_at, m.title), '[]'::jsonb)
+            from public.list_items li
+            join public.media m on m.id = li.media_id
+            left join public.ratings r on r.list_item_id = li.id and r.user_id = v_me
+            left join public.profiles rb on rb.id = r.rated_by and r.rated_by <> v_me
+            left join public.reactions x on x.list_item_id = li.id and x.user_id = v_me
+            left join public.watches w on w.list_item_id = li.id and w.user_id = v_me
+            left join public.profiles lb on lb.id = w.logged_by and w.logged_by <> v_me
+            where li.group_id = g.id
+              and (li.added_by = v_me or r.id is not null or x.list_item_id is not null or w.list_item_id is not null)
+          )
+        ) order by g.name), '[]'::jsonb)
+      from public.groups g
+      where g.id in (
+        select gm.group_id from public.group_members gm where gm.user_id = v_me
+        union select li.group_id from public.list_items li where li.group_id is not null and li.added_by = v_me
+        union select li.group_id from public.list_items li join public.ratings r2 on r2.list_item_id = li.id
+              where li.group_id is not null and r2.user_id = v_me
+        union select li.group_id from public.list_items li join public.reactions x2 on x2.list_item_id = li.id
+              where li.group_id is not null and x2.user_id = v_me
+        union select li.group_id from public.list_items li join public.watches w2 on w2.list_item_id = li.id
+              where li.group_id is not null and w2.user_id = v_me
+      )
+    ),
+    'movie_nights', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+          'family', g.name,
+          'started_at', n.created_at,
+          'started_by_me', n.started_by = v_me,
+          'source', n.source,
+          'status', n.status,
+          'mood', to_jsonb(n.genres),
+          'happened_on', n.happened_on,
+          'picked_title', pm.title,
+          'i_joined_at', mm.joined_at,
+          'i_watched_it', mm.watched,
+          'stacks_i_finished', (select count(*) from public.movie_night_finishes f
+                                join public.movie_night_stacks s on s.id = f.stack_id
+                                where s.night_id = n.id and f.user_id = v_me),
+          'my_votes', (select coalesce(jsonb_agg(jsonb_build_object('title', vm.title, 'vote', v.vote, 'voted_at', v.voted_at)
+                                                 order by v.voted_at, vm.title), '[]'::jsonb)
+                       from public.movie_night_votes v
+                       join public.movie_night_candidates c on c.id = v.candidate_id
+                       join public.media vm on vm.id = c.media_id
+                       where c.night_id = n.id and v.user_id = v_me)
+        ) order by n.created_at), '[]'::jsonb)
+      from public.movie_nights n
+      join public.groups g on g.id = n.group_id
+      left join public.movie_night_members mm on mm.night_id = n.id and mm.user_id = v_me
+      left join public.media pm on pm.id = n.picked_media_id
+      where mm.user_id is not null
+         or n.started_by = v_me
+         or exists (select 1 from public.movie_night_votes v2
+                    join public.movie_night_candidates c2 on c2.id = v2.candidate_id
+                    where c2.night_id = n.id and v2.user_id = v_me)
+    ),
+    'feed_events', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+          'family', g.name,
+          'kind', a.kind,
+          'title', a.media_title,
+          'at', a.created_at,
+          'score', a.score,
+          'detail', case when public.is_group_member(a.group_id, v_me) then a.detail end,
+          'about', case when public.is_group_member(a.group_id, v_me) then a.subject_name end
+        ) order by a.created_at, a.id), '[]'::jsonb)
+      from public.activity a
+      join public.groups g on g.id = a.group_id
+      where a.actor_id = v_me
+    ),
+    'not_included', jsonb_build_array(
+      'Other people''s scores, notes, reactions and e-mail addresses.',
+      'The guests of movie nights, and the links used to invite them.',
+      'Invite codes, and anything else that gives access to a family.',
+      'The temporary counters that limit how fast the app can be used.',
+      'The details of titles (posters, descriptions, cast): they come from TMDB and are shared by everyone.'
+    )
+  );
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 --  Grants: what each Supabase role may do, stated outright
 -- ---------------------------------------------------------------------------
 
@@ -3580,6 +3787,7 @@ grant execute on function
   public.watch_episode_again(uuid, integer, integer, date),
   public.my_series_progress(),
   public.my_series_passes(),
+  public.export_my_data(),
   public.get_movie_night_guest_link(uuid),
   public.replace_movie_night_guest_link(uuid),
   public.turn_off_movie_night_guest_link(uuid),
