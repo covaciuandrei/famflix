@@ -129,7 +129,11 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   plan can be up to a year ahead, and one that nobody starts is over a day
   after its time (a cancelled or passed one stays in the list for a day).
   Planning and cancelling write a line in the feed. There is no calendar file
-  and no e-mail: everything stays in the app.
+  and no e-mail: everything stays in the app, where FamFlix reminds the family
+  of a plan from an hour before its time to three hours after: a dot on the
+  Movie night menu and a banner on the Movie night page, for everyone who
+  hasn't answered Can't, and an invite that opens by itself once, 15 minutes
+  before (not while someone is swiping or already in Movie night).
 - **Family stats**: the **Stats** tab on a family's page shows what the family
   watched in a year (pick one, or All time): titles and viewings, hours of
   movies (a series adds none), movie nights held, the top 5 by average score,

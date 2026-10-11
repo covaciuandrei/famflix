@@ -12,10 +12,16 @@ import {
   peopleByAnswer,
   planBounds,
   planTimeProblem,
+  planToInvite,
+  plansInWindow,
+  readShownPlans,
+  rememberShownPlan,
   rsvpSummary,
   tally,
   timeHasCome,
   toLocalInput,
+  whenWords,
+  type DuePlan,
   type PlanPerson,
 } from "../src/lib/movie-night-plans";
 
@@ -142,6 +148,85 @@ test.describe("the windows", () => {
     expect(endedLabel("expired")).toBe("Passed");
     expect(endedLabel("planned")).toBeNull();
     expect(endedLabel("started")).toBeNull();
+  });
+});
+
+test.describe("the reminders", () => {
+  const start = "2026-10-18T17:00:00Z";
+  const minutes = (n: number, from = start) => at(from) + n * 60_000;
+  const plan = (id: string, startsAt: string, my_answer: DuePlan["my_answer"] = null): DuePlan => ({
+    id,
+    group_id: "g",
+    group_name: "Fam",
+    starts_at: startsAt,
+    note: null,
+    my_answer,
+    going: 0,
+  });
+
+  test("say when it is in words", () => {
+    expect(whenWords(start, minutes(-25))).toBe("Starts in 25 minutes");
+    expect(whenWords(start, minutes(-1))).toBe("Starts in 1 minute");
+    expect(whenWords(start, minutes(-60))).toBe("Starts in 1 h");
+    expect(whenWords(start, minutes(-90))).toBe("Starts in 1 h 30 min");
+    expect(whenWords(start, minutes(0))).toBe("Starting now");
+    expect(whenWords(start, minutes(0) + 20_000)).toBe("Starting now");
+    expect(whenWords(start, minutes(20))).toBe("Started 20 minutes ago");
+    expect(whenWords(start, minutes(1))).toBe("Started 1 minute ago");
+    expect(whenWords(start, minutes(150))).toBe("Started 2 h 30 min ago");
+    expect(whenWords("not a time", minutes(0))).toBe("Starting now");
+  });
+
+  test("are for the plans in their window that the person can come to, soonest first", () => {
+    const now = minutes(0);
+    const plans = [
+      plan("late", "2026-10-18T14:30:00Z"),
+      plan("soon", "2026-10-18T17:30:00Z"),
+      plan("later", "2026-10-18T19:00:00Z"),
+      plan("too-late", "2026-10-18T13:59:00Z"),
+      plan("cant", "2026-10-18T17:10:00Z", "no"),
+      plan("maybe", "2026-10-18T17:20:00Z", "maybe"),
+      plan("going", "2026-10-18T17:20:00Z", "going"),
+    ];
+    // "later" is 2 hours off, beyond the hour before; "too-late" is over 3 hours back; "cant" is one they can't come to.
+    expect(plansInWindow(plans, now).map((p) => p.id)).toEqual(["late", "going", "maybe", "soon"]);
+    expect(plansInWindow([], now)).toEqual([]);
+    expect(plansInWindow(plans, now - 3 * 3_600_000).map((p) => p.id)).toEqual(["too-late", "late"]);
+  });
+
+  test("open an invite from 15 minutes before, once for each plan", () => {
+    const soon = plan("soon", "2026-10-18T17:30:00Z");
+    const near = plan("near", "2026-10-18T17:10:00Z");
+    const now = minutes(0);
+    // 30 minutes off: the dot and the banner, not yet the invite. 10 minutes off: the invite too.
+    expect(planToInvite([soon], now, new Set())).toBeNull();
+    expect(planToInvite([soon, near], now, new Set())?.id).toBe("near");
+    expect(planToInvite([soon, near], now, new Set(["near"]))).toBeNull();
+    expect(planToInvite([soon, near], minutes(16, "2026-10-18T17:00:00Z"), new Set(["near"]))?.id).toBe("soon");
+    expect(planToInvite([near], now, new Set(["other"]))?.id).toBe("near");
+    // Not for one they can't come to, nor once the window after the time is over.
+    expect(planToInvite([plan("no", "2026-10-18T17:10:00Z", "no")], now, new Set())).toBeNull();
+    expect(planToInvite([near], at("2026-10-18T20:11:00Z"), new Set())).toBeNull();
+    expect(planToInvite([near], at("2026-10-18T20:09:00Z"), new Set())?.id).toBe("near");
+  });
+
+  test("are remembered by the browser, a few dozen at most, whatever it has kept", () => {
+    expect([...readShownPlans(null)]).toEqual([]);
+    expect([...readShownPlans("not json")]).toEqual([]);
+    expect([...readShownPlans('{"a": 1}')]).toEqual([]);
+    expect([...readShownPlans('["a", 3, null, "b", ""]')]).toEqual(["a", "b"]);
+    const once = rememberShownPlan(null, "a");
+    expect(once).toBe('["a"]');
+    expect(rememberShownPlan(once, "b")).toBe('["a","b"]');
+    // Remembering one again doesn't repeat it, and puts it last.
+    expect(rememberShownPlan('["a","b"]', "a")).toBe('["b","a"]');
+    expect(rememberShownPlan("garbage", "z")).toBe('["z"]');
+    let stored: string | null = null;
+    for (let i = 0; i < 60; i++) stored = rememberShownPlan(stored, `p${i}`);
+    const kept = [...readShownPlans(stored)];
+    expect(kept).toHaveLength(50);
+    expect(kept[0]).toBe("p10");
+    expect(kept[49]).toBe("p59");
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CalendarClock,
   ChartColumn,
   ChevronLeft,
   Layers,
@@ -52,6 +53,11 @@ const STEPS: Step[] = [
     icon: Popcorn,
     title: "Movie night",
     text: "Can't decide? Start a movie night with your family: everyone swipes through titles that fit your mood, the leaderboard shows what you all like, and the pick is logged as watched together. Friends without an account can join with a link.",
+  },
+  {
+    icon: CalendarClock,
+    title: "Plan a movie night",
+    text: "Not tonight? On Movie night, plan one for a day and time. Everyone answers Going, Maybe or Can't, and FamFlix reminds the family an hour before, right here in the app. Anyone can start it from the plan when the time comes.",
   },
   {
     icon: ChartColumn,

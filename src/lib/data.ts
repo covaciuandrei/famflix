@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
 import { nightPeople, type ActiveNight, type HistoryEntry, type NightState } from "@/lib/movie-night";
-import { parsePlans, type PlannedNight } from "@/lib/movie-night-plans";
+import { parseDuePlans, parsePlans, type DuePlan, type PlannedNight } from "@/lib/movie-night-plans";
 import { earlierByTitle, groupEarlier, type HistoryRow } from "@/lib/rewatch";
 import type { EarlierEpisode } from "@/lib/series";
 import type {
@@ -736,6 +736,22 @@ export async function getPlannedNights(groupId: string): Promise<PlannedNight[]>
     return [];
   }
   return parsePlans(data);
+}
+
+/**
+ * The planned movie nights to remind the signed-in user of, across their families (see due_movie_night_plans()): from an
+ * hour before to three hours after, not those they can't come to. Empty if the lookup fails or the database doesn't have
+ * the function yet, so no page is held up by it.
+ */
+export async function getDuePlans(): Promise<DuePlan[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("due_movie_night_plans");
+  if (error) {
+    // PGRST202: the database doesn't have the function yet.
+    if (error.code !== "PGRST202") console.error("Could not load planned movie nights to remind of:", error.message);
+    return [];
+  }
+  return parseDuePlans(data);
 }
 
 /**

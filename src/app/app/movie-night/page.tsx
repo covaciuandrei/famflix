@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { Hub } from "@/components/movie-night/hub";
 import { NoFamily } from "@/components/movie-night/no-family";
+import { PlanBanner } from "@/components/movie-night/plan-banner";
 import { getActiveMovieNights, getMyGroups, getNightHistory, getPlannedNights, getSessionProfile } from "@/lib/data";
 import { HISTORY_PAGE } from "@/lib/movie-night";
 
@@ -38,6 +39,7 @@ export default async function MovieNightPage({
           votes decide.
         </p>
       </div>
+      <PlanBanner />
       {family && history ? (
         <Hub
           families={groups.map((g) => ({ id: g.id, name: g.name, members: g.memberCount }))}

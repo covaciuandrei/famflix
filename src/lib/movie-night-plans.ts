@@ -166,6 +166,53 @@ export function inPopupWindow(startsAt: string, now: number): boolean {
   return Number.isFinite(at) && now >= at - POPUP_BEFORE_MINUTES * MINUTE && now <= at + REMIND_AFTER_HOURS * HOUR;
 }
 
+/** What the reminders say about when it is: "Starts in 25 minutes", "Starting now", "Started 20 minutes ago". */
+export function whenWords(startsAt: string, now: number): string {
+  const diff = Date.parse(startsAt) - now;
+  const minutes = Math.round(Math.abs(diff) / MINUTE);
+  if (!Number.isFinite(minutes) || minutes < 1) return "Starting now";
+  const span =
+    minutes >= 60
+      ? `${Math.floor(minutes / 60)} h${minutes % 60 > 0 ? ` ${minutes % 60} min` : ""}`
+      : `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  return diff > 0 ? `Starts in ${span}` : `Started ${span} ago`;
+}
+
+/**
+ * The plans the dot on the menu and the banner are for: within the window (an hour before to three hours after) and
+ * not ones the person can't come to, soonest first. The server only lists what was due when it answered, so this keeps
+ * the list right between two checks.
+ */
+export function plansInWindow(plans: readonly DuePlan[], now: number): DuePlan[] {
+  return plans
+    .filter((p) => p.my_answer !== "no" && inReminderWindow(p.starts_at, now))
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id));
+}
+
+/** The plan the invite window opens for now: the first one in its window (from 15 minutes before) that wasn't shown before. */
+export function planToInvite(plans: readonly DuePlan[], now: number, shown: ReadonlySet<string>): DuePlan | null {
+  return plansInWindow(plans, now).find((p) => inPopupWindow(p.starts_at, now) && !shown.has(p.id)) ?? null;
+}
+
+/** How many plans the browser remembers having shown (the oldest go first). */
+const REMEMBERED_PLANS = 50;
+
+/** The plans whose invite window was already shown, from what the browser kept (anything unreadable is nothing). */
+export function readShownPlans(stored: string | null): Set<string> {
+  try {
+    const value: unknown = JSON.parse(stored ?? "[]");
+    return new Set(Array.isArray(value) ? value.filter(isString) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** What the browser keeps after one more plan has been shown. */
+export function rememberShownPlan(stored: string | null, planId: string): string {
+  const kept = [...readShownPlans(stored)].filter((id) => id !== planId);
+  return JSON.stringify([...kept, planId].slice(-REMEMBERED_PLANS));
+}
+
 /** What a plan that is over is called on the page; null for one still planned (or started, which leaves the list). */
 export function endedLabel(status: PlanStatus): string | null {
   if (status === "cancelled") return "Cancelled";

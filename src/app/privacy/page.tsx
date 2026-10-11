@@ -49,6 +49,17 @@ export default function PrivacyPage() {
             list.
           </li>
           <li>
+            <strong className="text-foreground">Planned movie nights:</strong>{" "}
+            when a family plans a movie night, its time, the note (if any) and
+            the mood, who planned it, and whether each person answered Going,
+            Maybe or Can&apos;t. They stay with the family: a plan that was
+            cancelled or has passed is hidden after a day but kept, a person&apos;s
+            answers go when they leave the family or delete their account, and
+            the note goes when the person who wrote it deletes their account.
+            The reminders are only shown in the app; FamFlix sends no e-mails
+            and no calendar files.
+          </li>
+          <li>
             <strong className="text-foreground">Guests:</strong> a family can
             invite someone to vote in one movie night with a link, without an
             account. That person gives a name, which is kept with their votes
@@ -136,9 +147,10 @@ export default function PrivacyPage() {
           FamFlix only uses the cookies needed to keep you signed in, so it
           doesn&apos;t ask for cookie consent. A guest of a movie night, who
           has no account, gets one cookie that only lets them back into that
-          night, for up to a day. Your browser also remembers two settings for
-          FamFlix: your theme and whether you&apos;ve seen the welcome tour.
-          These stay on your device.
+          night, for up to a day. Your browser also remembers a few things for
+          FamFlix: your theme, whether you&apos;ve seen the welcome tour, and
+          which movie night invites it has already shown you. These stay on your
+          device.
         </p>
       </Section>
 
@@ -156,7 +168,9 @@ export default function PrivacyPage() {
           episodes you ticked), your watch history, and your scores, notes, likes and dislikes. Families you shared keep the
           titles you added to their lists, without your name, and your name is
           removed from their activity history. Your votes in movie nights go
-          too; the nights themselves stay in the family&apos;s history. If
+          too; the nights themselves stay in the family&apos;s history. Your
+          answers to planned movie nights go as well, and the plans you made
+          stay with the family without your name and without your note. If
           database backups are kept, deleted data drops out of them within 7
           days.
         </p>

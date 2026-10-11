@@ -14,11 +14,13 @@ import { useId, useRef } from "react";
 
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/avatar";
-import { useNightStatus, waitingOnMe } from "@/components/movie-night/night-status";
+import { useDuePlans, useNightStatus, waitingOnMe } from "@/components/movie-night/night-status";
 import { RatingRequests } from "@/components/rating-requests";
 import { APP_HOME } from "@/lib/constants";
+import { plansInWindow } from "@/lib/movie-night-plans";
 import { placePopover } from "@/lib/popover";
 import type { PendingRating } from "@/lib/types";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -50,11 +52,11 @@ const LINKS = [
 ];
 
 /** Says a movie night is waiting: a dot on the icon, and the same in words for screen readers. */
-function NightDot() {
+function NightDot({ label }: { label: string }) {
   return (
     <>
       <span aria-hidden className="absolute -top-0.5 -right-1 size-2 rounded-full bg-primary ring-2 ring-background" />
-      <span className="sr-only">(a movie night is waiting for you)</span>
+      <span className="sr-only">({label})</span>
     </>
   );
 }
@@ -71,8 +73,18 @@ export function AppNav({
   pending: PendingRating[];
 }) {
   const pathname = usePathname();
-  // A night that is waiting on me, unless I'm already in Movie night (where it is right there).
-  const nightWaiting = useNightStatus().some(waitingOnMe) && !pathname.startsWith("/app/movie-night");
+  const now = useNow();
+  const duePlans = useDuePlans();
+  // A night that is waiting on me, or a planned one that is about to start (or just has), unless I'm already in Movie
+  // night (where it is right there).
+  const inMovieNight = pathname.startsWith("/app/movie-night");
+  const nightWaiting = useNightStatus().some(waitingOnMe) && !inMovieNight;
+  const planDue = !inMovieNight && now !== null && plansInWindow(duePlans, now).length > 0;
+  const dot = nightWaiting
+    ? "a movie night is waiting for you"
+    : planDue
+      ? "a planned movie night is about to start"
+      : null;
   const menuId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -102,7 +114,7 @@ export function AppNav({
                 >
                   <span className="relative">
                     <l.icon className="size-4" />
-                    {l.href === "/app/movie-night" && nightWaiting && <NightDot />}
+                    {l.href === "/app/movie-night" && dot && <NightDot label={dot} />}
                   </span>
                   {l.label}
                 </Link>
@@ -178,7 +190,7 @@ export function AppNav({
             >
               <span className="relative">
                 <l.icon className="size-5" />
-                {l.href === "/app/movie-night" && nightWaiting && <NightDot />}
+                {l.href === "/app/movie-night" && dot && <NightDot label={dot} />}
               </span>
               {l.label}
             </Link>
