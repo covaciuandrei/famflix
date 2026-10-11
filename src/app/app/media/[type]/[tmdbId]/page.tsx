@@ -6,6 +6,8 @@ import { AddToListButton } from "@/components/add-to-list-button";
 import { ListBadges, SeenBy } from "@/components/library-badges";
 import { MarkWatchedButton } from "@/components/mark-watched-button";
 import { MediaPoster } from "@/components/media-poster";
+import { WatchAgain } from "@/components/rewatch/watch-again";
+import { WatchedBefore } from "@/components/rewatch/watched-before";
 import { EpisodeTracker } from "@/components/series/episode-tracker";
 import { Trailer } from "@/components/trailer";
 import { Badge } from "@/components/ui/badge";
@@ -15,9 +17,11 @@ import {
   getLibraryIndex,
   getMyGroups,
   getMyRating,
+  getMyViewings,
   getSessionProfile,
 } from "@/lib/data";
 import { tmdbImage } from "@/lib/images";
+import { myViewings } from "@/lib/rewatch";
 import { episodeKey, seasonToOpen } from "@/lib/series";
 import { getMediaDetails, getSeasonEpisodes, TmdbError } from "@/lib/tmdb";
 import type { MediaType } from "@/lib/types";
@@ -45,7 +49,15 @@ export default async function MediaDetailPage({
     libraryKey(mediaType, id)
   ];
   const onMyList = library?.lists.find((l) => l.listId === null);
-  const myRating = onMyList ? await getMyRating(onMyList.itemId, user.id) : null;
+  const [myRating, viewings] = await Promise.all([
+    onMyList ? getMyRating(onMyList.itemId, user.id) : null,
+    getMyViewings({
+      userId: user.id,
+      mediaType,
+      tmdbId: id,
+      item: onMyList ? { id: onMyList.itemId, watched: onMyList.watched } : null,
+    }),
+  ]);
 
   // Only a TMDB 404 means "no such title"; anything else goes to the error page.
   const details = await getMediaDetails(mediaType, id).catch((e) => {
@@ -53,6 +65,9 @@ export default async function MediaDetailPage({
     throw e;
   });
   if (!details) notFound();
+
+  // A series is watched again by episode (its tracker below), so only a movie, or a series without episodes, gets this.
+  const again = details.series ? null : myViewings(viewings.current, viewings.earlier);
 
   const backdrop = tmdbImage(details.backdropPath, "w1280");
 
@@ -167,6 +182,14 @@ export default async function MediaDetailPage({
                     : null
                 }
               />
+              {onMyList?.watched && !details.series && (
+                <WatchAgain
+                  itemId={onMyList.itemId}
+                  title={details.title}
+                  mine={{ score: myRating?.score ?? null, comment: myRating?.comment ?? null }}
+                  size="default"
+                />
+              )}
               <AddToListButton
                 tmdbId={details.tmdbId}
                 mediaType={mediaType}
@@ -177,6 +200,7 @@ export default async function MediaDetailPage({
               />
               <SeenBy names={library?.seenBy} />
             </div>
+            {again?.chip && <WatchedBefore chip={again.chip} lines={again.lines} />}
           </div>
         </div>
       </div>

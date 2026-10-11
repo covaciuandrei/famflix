@@ -52,6 +52,16 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   "Watched with Ben, Cara on 09.10.2026". Their score there follows the
   family's until they change it on My list, and "I wasn't there" takes the title
   off their My list again.
+- **Watch again**: a watched title has a Watch again button, on its card (a
+  family's Watched together tab, My list's Watched tab) and on its page. **Put
+  back on To watch** brings it back to the list, for a movie night or for next
+  time; **We watched it again** logs a new viewing (a family gets the Watched
+  together window, My list asks for the day). The viewing the title had is kept
+  in the watch history, so nothing is lost: the card says "Watched 3×" and
+  tapping it lists the days (a family's with who was there), and a title put
+  back on To watch says "Watch again · seen 2×". Several viewings on one day
+  count once. There is still one score and note per person per title (watching
+  it again asks to update them).
 - **Discover**: on Browse, pick a mood and swipe through a stack of suggestions
   on your own: ✓ yes or ♥ love puts the title on My list the moment you swipe
   it (the stack's titles are saved up front, so it is a quick insert), ✕ nope
@@ -197,7 +207,7 @@ create a family or join one with an invite code.
 ## Tests
 
 - `npm run test:unit`: tests of pure logic in `unit/` (building movie night stacks,
-  moods, genres). No browser, server or database needed.
+  moods, genres, counting how often a title was watched). No browser, server or database needed.
 - `npm run test:db`: the database tests in `supabase/tests/` (security rules,
   who may use which table and function, families, scores, limits, deleting an
   account). They build a throwaway database from `supabase/db_init.sql`, twice:
@@ -206,7 +216,7 @@ create a family or join one with an invite code.
   PostgreSQL 17 installed, or `PGHOST` pointing at a server where they may
   create a database.
 - `npm run test:e2e`: the browser tests in `e2e/` (signing in, adding titles,
-  watched together, movie nights from the invite to the pick, guests joining
+  watched together, watching a title again, movie nights from the invite to the pick, guests joining
   with a link, deleting an account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
   (`supabase/config.toml`) built from `db_init.sql` the way a new project is (nothing granted by default),
   never the live one.

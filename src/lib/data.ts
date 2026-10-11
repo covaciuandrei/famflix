@@ -6,9 +6,11 @@ import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
 import { nightPeople, type ActiveNight, type HistoryEntry, type NightState } from "@/lib/movie-night";
+import { earlierByTitle, groupEarlier, type HistoryRow } from "@/lib/rewatch";
 import type {
   ActivityEvent,
   CardSeries,
+  EarlierViewing,
   Group,
   GroupMemberWithProfile,
   LibraryIndex,
@@ -139,12 +141,54 @@ export async function getListCards(opts: {
   if (error || !data) return [];
 
   const rows = data as unknown as ListItemWithDetails[];
-  const [watchedWith, progress] = opts.groupId
-    ? [new Map<string, WatchedWith>(), new Map<string, CardSeries>()]
-    : await Promise.all([loadWatchedWith(supabase, opts.userId, rows), loadSeriesProgress(supabase, rows)]);
+  if (rows.length === 0) return [];
+  const [watchedWith, progress, earlier] = await Promise.all([
+    opts.groupId ? new Map<string, WatchedWith>() : loadWatchedWith(supabase, opts.userId, rows),
+    opts.groupId ? new Map<string, CardSeries>() : loadSeriesProgress(supabase, rows),
+    loadEarlier(supabase, opts),
+  ]);
   return rows
-    .map((row) => toCard(row, opts.userId, watchedWith.get(row.id) ?? null, progress.get(row.id) ?? null))
+    .map((row) =>
+      toCard(
+        row,
+        opts.userId,
+        watchedWith.get(row.id) ?? null,
+        progress.get(row.id) ?? null,
+        earlier.get(row.media_id) ?? [],
+      ),
+    )
     .filter((c): c is ListItemCard => c !== null);
+}
+
+/**
+ * The viewings before the current one, by title: a family's own (everyone who watched with it) or the signed-in
+ * person's (every viewing of theirs, whoever it was with).
+ */
+async function loadEarlier(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: { groupId?: string | null; userId: string },
+): Promise<Map<string, EarlierViewing[]>> {
+  const rows: HistoryRow[] = [];
+  // The API hands out at most 1000 rows at a time, so a long history is read a page at a time.
+  for (let from = 0; from < 20_000; from += 1000) {
+    const query = supabase
+      .from("watch_history")
+      .select("user_id, media_id, watched_on")
+      .order("watched_on", { ascending: false })
+      .order("id")
+      .range(from, from + 999);
+    const { data, error } = await (opts.groupId ? query.eq("group_id", opts.groupId) : query.eq("user_id", opts.userId));
+    if (error) {
+      // Logged, not thrown: the list still works, it just shows no earlier viewings. (PGRST205: the database doesn't
+      // have the table yet.)
+      if (error.code !== "PGRST205") console.error("Could not load earlier viewings:", error.message);
+      return new Map();
+    }
+    const page = (data ?? []) as HistoryRow[];
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  return earlierByTitle(rows);
 }
 
 /** For the series on My list that have an episode ticked: how many aired episodes are ticked, and which is next. */
@@ -223,6 +267,7 @@ function toCard(
   userId: string,
   watchedWith: WatchedWith | null,
   series: CardSeries | null,
+  earlier: EarlierViewing[],
 ): ListItemCard | null {
   if (!row.media) return null;
 
@@ -266,6 +311,7 @@ function toCard(
     viewers: row.watches,
     watchedWith,
     series,
+    earlier,
   };
 }
 
@@ -283,6 +329,50 @@ export async function getMyRating(
     .eq("user_id", userId)
     .maybeSingle();
   return (data as { score: number | null; comment: string | null } | null) ?? null;
+}
+
+/**
+ * The signed-in person's viewings of one title, for its page: the day it is watched on their My list now (when it
+ * is), and the days before that.
+ */
+export async function getMyViewings(opts: {
+  userId: string;
+  mediaType: MediaType;
+  tmdbId: number;
+  /** The My list entry, if the title is on it. */
+  item: { id: string; watched: boolean } | null;
+}): Promise<{ current: string | null; earlier: EarlierViewing[] }> {
+  const supabase = await createClient();
+  const [entry, history] = await Promise.all([
+    opts.item?.watched
+      ? supabase.from("list_items").select("watched_at, created_at").eq("id", opts.item.id).maybeSingle()
+      : null,
+    supabase
+      .from("watch_history")
+      .select("watched_on, media!inner(media_type, tmdb_id)")
+      .eq("user_id", opts.userId)
+      .eq("media.media_type", opts.mediaType)
+      .eq("media.tmdb_id", opts.tmdbId)
+      .order("watched_on", { ascending: false })
+      .limit(500),
+  ]);
+
+  let earlier: EarlierViewing[] = [];
+  if (history.error) {
+    // Logged, not thrown: the page still works, it just shows no earlier viewings. (PGRST205: the database doesn't
+    // have the table yet.)
+    if (history.error.code !== "PGRST205") console.error("Could not load earlier viewings:", history.error.message);
+  } else {
+    earlier = groupEarlier(
+      ((history.data ?? []) as unknown as { watched_on: string }[]).map((r) => ({
+        user_id: opts.userId,
+        watched_on: r.watched_on,
+      })),
+    );
+  }
+
+  const row = entry?.data as { watched_at: string | null; created_at: string } | null | undefined;
+  return { current: row ? (row.watched_at ?? row.created_at).slice(0, 10) : null, earlier };
 }
 
 /** An episode someone ticked on a series, as the series page gets it. */

@@ -9,6 +9,8 @@ import { Avatar } from "@/components/avatar";
 import { MediaPoster } from "@/components/media-poster";
 import { RatingPanel } from "@/components/rating-panel";
 import { ReactionButtons } from "@/components/reaction-buttons";
+import { WatchAgain } from "@/components/rewatch/watch-again";
+import { WatchedBefore } from "@/components/rewatch/watched-before";
 import { SeriesCardLine } from "@/components/series/series-card-line";
 import { Badge } from "@/components/ui/badge";
 import { WatchedToggle } from "@/components/watched-toggle";
@@ -16,6 +18,7 @@ import { WatchedTogetherDialog } from "@/components/watched-together-dialog";
 import { mediaTypeLabel } from "@/lib/constants";
 import { formatDay, formatDayNumeric, formatScore } from "@/lib/format";
 import { isWatchedTogether } from "@/lib/list-status";
+import { canWatchAgain, rewatchChip, viewingLines } from "@/lib/rewatch";
 import type { ListItemCard as Card, MemberSummary } from "@/lib/types";
 
 export function ListItemCard({
@@ -40,6 +43,7 @@ export function ListItemCard({
   const waitingFor = card.viewers.filter(
     (v) => !answered.has(v.user_id) && !v.skipped_at,
   );
+  const chip = rewatchChip(card);
 
   function remove() {
     setRemoveError(null);
@@ -99,6 +103,18 @@ export function ListItemCard({
                   </span>
                 </p>
               )}
+              {chip && (
+                <div className="mt-1.5">
+                  <WatchedBefore
+                    chip={chip}
+                    lines={viewingLines(
+                      card,
+                      currentUserId,
+                      (id) => memberById.get(id)?.display_name ?? "Someone",
+                    )}
+                  />
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -134,6 +150,20 @@ export function ListItemCard({
                 ratings={card.ratings}
                 currentUserId={currentUserId}
                 done={isWatchedTogether(card)}
+              />
+            )}
+            {canWatchAgain(card) && members && item.group_id && (
+              <WatchAgain
+                itemId={item.id}
+                title={media.title}
+                family={{ members, viewers: card.viewers, ratings: card.ratings, currentUserId }}
+              />
+            )}
+            {canWatchAgain(card) && !item.group_id && (
+              <WatchAgain
+                itemId={item.id}
+                title={media.title}
+                mine={{ score: card.myScore, comment: card.myComment }}
               />
             )}
             <ReactionButtons

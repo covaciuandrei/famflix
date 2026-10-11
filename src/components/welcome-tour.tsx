@@ -45,7 +45,7 @@ const STEPS: Step[] = [
   {
     icon: UsersRound,
     title: "Watched together",
-    text: "Log who watched a title with you. It goes on each of their My lists as watched, and FamFlix asks everyone else for their score, so nobody forgets.",
+    text: "Log who watched a title with you. It goes on each of their My lists as watched, and FamFlix asks everyone else for their score, so nobody forgets. A favourite you watch every year? Press Watch again to log another viewing or put it back on To watch.",
   },
   {
     icon: Popcorn,

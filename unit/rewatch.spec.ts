@@ -1,0 +1,292 @@
+import { expect, test } from "@playwright/test";
+
+import {
+  canWatchAgain,
+  chipText,
+  earlierByTitle,
+  groupEarlier,
+  isEpisodeSeries,
+  myViewings,
+  rewatchChip,
+  timesWatched,
+  viewingLines,
+} from "../src/lib/rewatch";
+import type { ListItemCard } from "../src/lib/types";
+
+const ME = "me";
+const ANA = "ana";
+const BEA = "bea";
+const names: Record<string, string> = { [ME]: "Me", [ANA]: "Ana", [BEA]: "Bea" };
+const nameOf = (id: string) => names[id] ?? "Someone";
+
+/** A series TMDB lists one regular season of three episodes for, as `media.series` holds it. */
+const SERIES = {
+  status: "Ended",
+  seasons: [{ n: 1, episodes: 3 }],
+  lastAired: { s: 1, e: 3 },
+  nextAir: null,
+};
+
+type Options = {
+  family?: boolean;
+  status?: "want" | "watched";
+  /** Family: who the title is logged as watched by, with their day. */
+  viewers?: [string, string][];
+  /** My list: when the entry was marked watched. */
+  watchedAt?: string | null;
+  earlier?: { on: string; userIds: string[] }[];
+  series?: unknown;
+};
+
+function card(o: Options = {}): ListItemCard {
+  return {
+    item: {
+      id: "item",
+      group_id: o.family ? "group" : null,
+      added_by: ME,
+      media_id: "media",
+      status: o.status ?? "want",
+      created_at: "2026-01-01T10:00:00+00:00",
+      watched_at: o.watchedAt ?? null,
+      source_item_id: null,
+    },
+    media: {
+      id: "media",
+      tmdb_id: 1,
+      media_type: o.series ? "tv" : "movie",
+      title: "Dune",
+      release_year: 2021,
+      poster_path: null,
+      backdrop_path: null,
+      overview: null,
+      tmdb_rating: null,
+      runtime: null,
+      genres: [],
+      trailer_key: null,
+      series: o.series ?? null,
+      updated_at: "2026-01-01T10:00:00+00:00",
+    },
+    addedBy: null,
+    ratings: [],
+    likeCount: 0,
+    dislikeCount: 0,
+    avgScore: null,
+    ratingCount: 0,
+    myScore: null,
+    myComment: null,
+    myReaction: null,
+    viewers: (o.viewers ?? []).map(([user_id, watched_on]) => ({
+      user_id,
+      watched_on,
+      logged_by: null,
+      skipped_at: null,
+    })),
+    watchedWith: null,
+    series: null,
+    earlier: o.earlier ?? [],
+  };
+}
+
+test.describe("groupEarlier", () => {
+  test("one viewing per day, newest first, with everyone who watched that day", () => {
+    expect(
+      groupEarlier([
+        { user_id: BEA, watched_on: "2025-03-01" },
+        { user_id: ANA, watched_on: "2025-12-24" },
+        { user_id: ANA, watched_on: "2025-03-01" },
+        { user_id: ANA, watched_on: "2025-03-01" },
+      ]),
+    ).toEqual([
+      { on: "2025-12-24", userIds: [ANA] },
+      { on: "2025-03-01", userIds: [ANA, BEA] },
+    ]);
+  });
+
+  test("reads the day of a full timestamp, and nothing gives nothing", () => {
+    expect(groupEarlier([{ user_id: ANA, watched_on: "2025-03-01T00:00:00+00:00" }])).toEqual([
+      { on: "2025-03-01", userIds: [ANA] },
+    ]);
+    expect(groupEarlier([])).toEqual([]);
+  });
+
+  test("earlierByTitle keeps each title's days to itself", () => {
+    const byTitle = earlierByTitle([
+      { media_id: "a", user_id: ME, watched_on: "2025-03-01" },
+      { media_id: "b", user_id: ME, watched_on: "2025-04-01" },
+      { media_id: "a", user_id: ME, watched_on: "2025-05-01" },
+    ]);
+    expect(byTitle.get("a")?.map((e) => e.on)).toEqual(["2025-05-01", "2025-03-01"]);
+    expect(byTitle.get("b")?.map((e) => e.on)).toEqual(["2025-04-01"]);
+    expect(byTitle.get("c")).toBeUndefined();
+  });
+});
+
+test.describe("how many times a title was watched", () => {
+  test("a title never watched is 0, and one watched once is 1", () => {
+    expect(timesWatched(card())).toBe(0);
+    expect(timesWatched(card({ status: "watched", watchedAt: "2026-02-01T12:00:00+00:00" }))).toBe(1);
+  });
+
+  test("My list: the current viewing and the earlier days", () => {
+    const watched = card({
+      status: "watched",
+      watchedAt: "2026-02-01T12:00:00+00:00",
+      earlier: [
+        { on: "2025-12-24", userIds: [ME] },
+        { on: "2025-03-01", userIds: [ME] },
+      ],
+    });
+    expect(timesWatched(watched)).toBe(3);
+  });
+
+  test("a viewing that is both current and in the history counts once", () => {
+    // A family viewing mirrored onto My list stays there after the family watches it again.
+    const mirrored = card({
+      status: "watched",
+      watchedAt: "2026-02-01T12:00:00+00:00",
+      earlier: [{ on: "2026-02-01", userIds: [ME] }],
+    });
+    expect(timesWatched(mirrored)).toBe(1);
+  });
+
+  test("a title put back on To watch counts only its earlier days", () => {
+    expect(timesWatched(card({ earlier: [{ on: "2025-03-01", userIds: [ME] }] }))).toBe(1);
+  });
+
+  test("family: people logged on different days of one viewing are different days", () => {
+    const family = card({
+      family: true,
+      status: "watched",
+      viewers: [
+        [ANA, "2026-02-01"],
+        [BEA, "2026-02-01"],
+        [ME, "2026-02-03"],
+      ],
+      earlier: [{ on: "2025-03-01", userIds: [ANA, BEA] }],
+    });
+    expect(timesWatched(family)).toBe(3);
+  });
+
+  test("a family title marked Watched without a log has no current viewing", () => {
+    expect(timesWatched(card({ family: true, status: "watched" }))).toBe(0);
+  });
+});
+
+test.describe("what can be watched again", () => {
+  test("a title watched together, and one on My list marked Watched", () => {
+    expect(canWatchAgain(card({ family: true, status: "watched", viewers: [[ANA, "2026-02-01"]] }))).toBe(true);
+    expect(canWatchAgain(card({ status: "watched", watchedAt: "2026-02-01T12:00:00+00:00" }))).toBe(true);
+  });
+
+  test("not a title still to watch, nor a family title nobody logged", () => {
+    expect(canWatchAgain(card())).toBe(false);
+    expect(canWatchAgain(card({ family: true }))).toBe(false);
+    expect(canWatchAgain(card({ family: true, status: "watched" }))).toBe(false);
+  });
+
+  test("a series followed by episode on My list is watched again by episode; a family series is like a movie", () => {
+    const mine = card({ status: "watched", watchedAt: "2026-02-01T12:00:00+00:00", series: SERIES });
+    expect(isEpisodeSeries(mine)).toBe(true);
+    expect(canWatchAgain(mine)).toBe(false);
+    expect(rewatchChip(mine)).toBeNull();
+
+    const family = card({ family: true, status: "watched", viewers: [[ANA, "2026-02-01"]], series: SERIES });
+    expect(isEpisodeSeries(family)).toBe(false);
+    expect(canWatchAgain(family)).toBe(true);
+  });
+});
+
+test.describe("the chip", () => {
+  test("says Watched N× once a watched title has been watched more than once", () => {
+    expect(chipText(1, true)).toBeNull();
+    expect(chipText(2, true)).toBe("Watched 2×");
+    expect(chipText(7, true)).toBe("Watched 7×");
+  });
+
+  test("says Watch again on a title put back on To watch", () => {
+    expect(chipText(0, false)).toBeNull();
+    expect(chipText(1, false)).toBe("Watch again · seen once");
+    expect(chipText(3, false)).toBe("Watch again · seen 3×");
+  });
+
+  test("is worked out for a card", () => {
+    const back = card({ earlier: [{ on: "2025-03-01", userIds: [ME] }] });
+    expect(rewatchChip(back)).toBe("Watch again · seen once");
+    const twice = card({
+      status: "watched",
+      watchedAt: "2026-02-01T12:00:00+00:00",
+      earlier: [{ on: "2025-03-01", userIds: [ME] }],
+    });
+    expect(rewatchChip(twice)).toBe("Watched 2×");
+    expect(rewatchChip(card())).toBeNull();
+  });
+});
+
+test.describe("the viewings a chip lists", () => {
+  test("family: newest first, with who was there, you first", () => {
+    const family = card({
+      family: true,
+      status: "watched",
+      viewers: [
+        [BEA, "2026-02-01"],
+        [ME, "2026-02-01"],
+        [ANA, "2026-02-01"],
+      ],
+      earlier: [
+        { on: "2025-03-01", userIds: [BEA, ANA] },
+        { on: "2025-12-24", userIds: [ME] },
+      ],
+    });
+    expect(viewingLines(family, ME, nameOf)).toEqual([
+      { on: "2026-02-01", who: ["You", "Ana", "Bea"] },
+      { on: "2025-12-24", who: ["You"] },
+      { on: "2025-03-01", who: ["Ana", "Bea"] },
+    ]);
+  });
+
+  test("a day that is both current and earlier lists its people once", () => {
+    const family = card({
+      family: true,
+      status: "watched",
+      viewers: [[ANA, "2026-02-01"]],
+      earlier: [{ on: "2026-02-01", userIds: [ANA, BEA] }],
+    });
+    expect(viewingLines(family, ME, nameOf)).toEqual([{ on: "2026-02-01", who: ["Ana", "Bea"] }]);
+  });
+
+  test("My list: only the days", () => {
+    const mine = card({
+      status: "watched",
+      watchedAt: "2026-02-01T12:00:00+00:00",
+      earlier: [{ on: "2025-03-01", userIds: [ME] }],
+    });
+    expect(viewingLines(mine, ME, nameOf)).toEqual([
+      { on: "2026-02-01", who: [] },
+      { on: "2025-03-01", who: [] },
+    ]);
+  });
+});
+
+test.describe("a title's page", () => {
+  test("lists the days you watched it, and the chip follows what the list says now", () => {
+    const earlier = [
+      { on: "2025-12-24", userIds: [ME] },
+      { on: "2025-03-01", userIds: [ME] },
+    ];
+    expect(myViewings("2026-02-01", earlier)).toEqual({
+      chip: "Watched 3×",
+      lines: [
+        { on: "2026-02-01", who: [] },
+        { on: "2025-12-24", who: [] },
+        { on: "2025-03-01", who: [] },
+      ],
+    });
+    expect(myViewings(null, earlier).chip).toBe("Watch again · seen 2×");
+    expect(myViewings(null, []).chip).toBeNull();
+    expect(myViewings("2026-02-01", []).chip).toBeNull();
+  });
+
+  test("the day it is watched now is not counted twice", () => {
+    expect(myViewings("2026-02-01", [{ on: "2026-02-01", userIds: [ME] }]).chip).toBeNull();
+  });
+});

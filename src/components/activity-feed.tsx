@@ -58,6 +58,12 @@ function describe(e: ActivityEvent, currentUserId: string): ReactNode {
           {who} logged {title}: watched together by {e.detail}
         </>
       );
+    case "watch_again":
+      return (
+        <>
+          {who} put {title} back on the list to watch again
+        </>
+      );
     case "rated": {
       const forWhom =
         e.subject_id && e.subject_id !== e.actor_id ? ` for ${subject}` : "";

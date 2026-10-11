@@ -215,24 +215,58 @@ export async function logWatchTogether(input: {
   /** The signed-in user's own note, when they're among the viewers and changed it. */
   note?: string;
 }): Promise<ActionResult> {
+  return logViewing("log_watch", input);
+}
+
+/**
+ * Logs a new viewing of a title that was watched before: the one it had goes to the history. A family title takes
+ * the same input as Watched together; a title on My list only needs the day.
+ */
+export async function watchedAgain(input: {
+  itemId: string;
+  watchedOn: string;
+  viewers?: { userId: string; score: number | null }[];
+  note?: string;
+}): Promise<ActionResult> {
+  return logViewing("watched_again", input);
+}
+
+/** Puts a watched title back on To watch (for a movie night, or next time); the viewing it had is kept in its history. */
+export async function watchAgain(itemId: string): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("watch_again", { p_item: itemId });
+  if (error) return { error: error.message };
+  revalidateApp();
+  return {};
+}
+
+async function logViewing(
+  fn: "log_watch" | "watched_again",
+  input: {
+    itemId: string;
+    watchedOn: string;
+    viewers?: { userId: string; score: number | null }[];
+    note?: string;
+  },
+): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
-  const viewers = input.viewers.map((v) => ({
+  const viewers = input.viewers?.map((v) => ({
     user_id: v.userId,
     score: cleanScore(v.score),
   }));
-  if (viewers.some((v) => v.score === undefined)) {
+  if (viewers?.some((v) => v.score === undefined)) {
     return { error: "Scores must be between 1 and 10." };
   }
-  // log_watch() checks membership, the date and the scores.
-  const { error } = await supabase.rpc("log_watch", {
+  // The database checks membership, the date and the scores.
+  const { error } = await supabase.rpc(fn, {
     p_item: input.itemId,
     p_watched_on: input.watchedOn,
-    p_viewers: viewers,
+    p_viewers: viewers ?? null,
   });
   if (error) return { error: error.message };
 
   // Only your own note: nobody writes notes for the others, they add theirs when they're asked to rate.
-  if (input.note !== undefined && input.viewers.some((v) => v.userId === user.id)) {
+  if (input.note !== undefined && input.viewers?.some((v) => v.userId === user.id)) {
     const res = await saveOwnNote(supabase, input.itemId, user.id, input.note);
     if (res.error) return res;
   }

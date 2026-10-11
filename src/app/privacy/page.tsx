@@ -34,7 +34,8 @@ export default function PrivacyPage() {
             with you is also added to your personal list, which only you can
             see), the episodes you tick on a series (with your own score and
             note for each, kept on your personal list), your scores, notes,
-            likes and dislikes, who watched what and when, the families you
+            likes and dislikes, who watched what and when (and, for a title
+            you watched again, each day you watched it before), the families you
             belong to, and a history of
             family activity (for example &ldquo;Ana added Dune&rdquo;; each
             family keeps its latest 500 events).
@@ -147,7 +148,7 @@ export default function PrivacyPage() {
             Settings → Account → Delete account
           </strong>{" "}
           deletes your account right away, with your personal list (and the
-          episodes you ticked) and your scores, notes, likes and dislikes. Families you shared keep the
+          episodes you ticked), your watch history, and your scores, notes, likes and dislikes. Families you shared keep the
           titles you added to their lists, without your name, and your name is
           removed from their activity history. Your votes in movie nights go
           too; the nights themselves stay in the family&apos;s history. If

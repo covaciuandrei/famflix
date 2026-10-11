@@ -71,6 +71,13 @@ export interface WatchedWith {
   on: string;
 }
 
+/** An earlier viewing of a title: the day, and who watched it that day (everyone on a family list, you on My list). */
+export interface EarlierViewing {
+  /** The day, as YYYY-MM-DD. */
+  on: string;
+  userIds: string[];
+}
+
 export interface Rating {
   id: string;
   list_item_id: string;
@@ -142,6 +149,7 @@ export type ActivityKind =
   | "added"
   | "watched"
   | "watched_together"
+  | "watch_again"
   | "rated"
   | "removed"
   | "restored"
@@ -211,6 +219,8 @@ export interface ListItemCard {
   watchedWith: WatchedWith | null;
   /** Only on My list, for a series with an episode ticked. */
   series: CardSeries | null;
+  /** The viewings before the current one, newest first: the family's on a family list, your own on My list. */
+  earlier: EarlierViewing[];
 }
 
 export type SortKey =
