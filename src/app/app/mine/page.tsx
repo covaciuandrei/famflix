@@ -1,6 +1,9 @@
+import { ChartColumn } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { RemovedItems } from "@/components/removed-items";
+import { buttonVariants } from "@/components/ui/button";
 import { Watchlist } from "@/components/watchlist";
 import { getListCards, getRemovedItems, getSessionProfile } from "@/lib/data";
 
@@ -23,11 +26,20 @@ export default async function MinePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">My list</h1>
-        <p className="text-muted-foreground">
-          Your personal watchlist — only you can see this.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">My list</h1>
+          <p className="text-muted-foreground">
+            Your personal watchlist — only you can see this.
+          </p>
+        </div>
+        <Link
+          href="/app/mine/stats"
+          className={buttonVariants({ size: "sm", variant: "outline" })}
+        >
+          <ChartColumn className="size-4" aria-hidden />
+          Your year
+        </Link>
       </div>
       {addedCount > 0 && addedCount <= 1000 && (
         <p role="status" className="rounded-lg border border-border bg-card px-4 py-2 text-sm">

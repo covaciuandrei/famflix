@@ -129,6 +129,15 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   viewing counts, so a film watched each Christmas counts each year. **Share**
   sends a short text with the numbers and the top pick, and nobody's name.
   It only uses what members of the family can already see.
+- **Your year**: **Your year** on My list (`/app/mine/stats`) is the same for
+  you alone, and private: titles and viewings, episodes of series, hours (a
+  movie's length for each time you watched it, an episode's length for each
+  episode), your average, lowest and highest score and your top 5, favourite
+  genres, the busiest month with a chart, and what you watched again. It counts
+  what is on your My list (the titles you took off it too), the times you
+  watched something before, and what you watched with a family; your own score
+  wins over the family's. **Share** sends a short text without anything
+  private in it.
 - **Made for phones**: bottom navigation, sheets instead of pop-ups, and it can
   be added to the home screen. Dark theme by default, or light, or follow the
   device (Settings → Appearance).

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChartColumn,
   ChevronLeft,
   Layers,
   Popcorn,
@@ -51,6 +52,11 @@ const STEPS: Step[] = [
     icon: Popcorn,
     title: "Movie night",
     text: "Can't decide? Start a movie night with your family: everyone swipes through titles that fit your mood, the leaderboard shows what you all like, and the pick is logged as watched together. Friends without an account can join with a link.",
+  },
+  {
+    icon: ChartColumn,
+    title: "Your year",
+    text: "See what you watched in a year: titles, hours, episodes, your favourites and what you watched again, under Your year on My list. Your family's Stats tab adds who watched what and whose taste is closest. Share either as a short text.",
   },
 ];
 

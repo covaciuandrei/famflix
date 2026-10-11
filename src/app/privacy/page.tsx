@@ -72,7 +72,8 @@ export default function PrivacyPage() {
           <li>
             Your personal list, with the episodes you tick on a series, the
             earlier times you watched them, and your scores and notes for them,
-            is visible only to you.
+            is visible only to you. So is Your year, which is worked out from
+            them.
           </li>
           <li>
             Family lists, and your name, picture, scores, notes and reactions on

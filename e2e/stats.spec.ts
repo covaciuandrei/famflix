@@ -1,21 +1,11 @@
-import { test, type Page } from "@playwright/test";
+import { test } from "@playwright/test";
 
 import { admin, createUser, expect, openAnonymous, openAs, openFamily, startFamily } from "./helpers";
+import { fact, noSideways, region, tile, year } from "./stats-page";
 import { seedStatsFamily, seedTitles } from "./stats-seed";
 
 // The numbers are worked out in unit/stats.spec.ts; these tests are about what the page shows, to whom, and that it
 // holds together on a phone. The family is built in the database, dated to the day (see seedStatsFamily).
-
-const region = (page: Page, name: string) => page.getByRole("region", { name, exact: true });
-/** A number at the top of the page, by what it counts (a label can carry a hint after it, so it is matched by its start). */
-const tile = (page: Page, label: string) => page.locator("dl > div", { hasText: label }).first().locator("dd");
-const fact = (page: Page, card: string, label: string) =>
-  region(page, card).locator("dl > div", { hasText: label });
-const year = (page: Page, label: string) => page.getByRole("navigation", { name: "Year" }).getByRole("link", { name: label, exact: true });
-
-async function noSideways(page: Page) {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
-}
 
 test("family stats: the year's numbers, favourites, who watched what and taste, for the family only", async ({ browser }, testInfo) => {
   test.setTimeout(240_000);
