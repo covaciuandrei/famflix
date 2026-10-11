@@ -41,6 +41,13 @@ export function DeleteAccount() {
           them are deleted.
         </li>
         <li>Your name is removed from your families&apos; activity.</li>
+        <li>
+          Want a copy first?{" "}
+          <a href="#download-data" onClick={() => setOpen(false)} className="underline hover:text-foreground">
+            Download your data
+          </a>{" "}
+          above, before you delete.
+        </li>
         <li>This can&apos;t be undone.</li>
       </ul>
       <label className="flex flex-col gap-1.5 text-sm">

@@ -119,7 +119,14 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   device (Settings → Appearance).
 - **Private by design**: sign-in is with Google only. Every list is protected in
   the database with row-level security, so only you or your family members can
-  read it. **Settings → Delete account** deletes your account and data; your
+  read it. **Settings → Account → Download my data** gives you everything
+  FamFlix keeps about you: one JSON file (your account, families, My list with
+  the episodes you ticked and the times you watched things again, your part of
+  every family list, your movie nights and votes, the feed events you caused)
+  or a CSV of your watch history, one row for every time you watched something.
+  Other people's scores, notes and e-mail addresses are never in it; the
+  download is only for you, from FamFlix itself, up to five times an hour.
+  **Settings → Delete account** deletes your account and data; your
   families keep the titles you added, without your name.
 - **Limits against abuse**: names and notes are at most 250 characters. Each
   person can add 30 titles and search 60 times a minute, try 10 invite codes
@@ -218,17 +225,20 @@ create a family or join one with an invite code.
 ## Tests
 
 - `npm run test:unit`: tests of pure logic in `unit/` (building movie night stacks,
-  moods, genres, counting how often a title was watched). No browser, server or database needed.
+  moods, genres, counting how often a title was watched, the CSV of a download).
+  No browser, server or database needed.
 - `npm run test:db`: the database tests in `supabase/tests/` (security rules,
   who may use which table and function, families, scores, limits, deleting an
-  account). They build a throwaway database from `supabase/db_init.sql`, twice:
+  account, and that downloading your data has everything of yours and nothing of
+  anyone else's, with an inventory that fails when a new table isn't accounted
+  for). They build a throwaway database from `supabase/db_init.sql`, twice:
   with Supabase's older defaults (new tables and functions are handed to the API
   roles) and its newer ones (nothing is), and both must pass. You need
   PostgreSQL 17 installed, or `PGHOST` pointing at a server where they may
   create a database.
 - `npm run test:e2e`: the browser tests in `e2e/` (signing in, adding titles,
   watched together, watching a title again, movie nights from the invite to the pick, guests joining
-  with a link, deleting an account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
+  with a link, downloading your data, deleting an account), on a computer-sized and a phone-sized screen. You need Docker: they run against a local Supabase
   (`supabase/config.toml`) built from `db_init.sql` the way a new project is (nothing granted by default),
   never the live one.
   `npx supabase stop` shuts it down afterwards.

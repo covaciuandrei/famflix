@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/login/actions";
 import { DeleteAccount } from "@/components/delete-account";
+import { DownloadData } from "@/components/download-data";
 import { ProfileForm } from "@/components/profile-form";
 import { ThemePicker } from "@/components/theme";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ export default async function SettingsPage() {
           <CardTitle>Account</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <DownloadData />
           <form action={signOut}>
             <Button variant="outline" type="submit">
               <LogOut className="size-4" />

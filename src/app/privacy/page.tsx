@@ -169,8 +169,15 @@ export default function PrivacyPage() {
 
       <Section title="Your rights">
         <p>
-          You can ask for a copy of your data, or have it corrected or
-          deleted, by writing to <ContactLink />. You can also complain to your
+          You can download a copy of your data yourself, any time:{" "}
+          <strong className="text-foreground">
+            Settings → Account → Download my data
+          </strong>{" "}
+          gives you one file with everything FamFlix keeps about you, and
+          another with your watch history for a spreadsheet. They hold nothing
+          of other people&apos;s apart from their names where you watched
+          something together. You can ask for your data to be corrected or
+          deleted by writing to <ContactLink />. You can also complain to your
           data protection authority (in Romania, the ANSPDCP).
         </p>
       </Section>
