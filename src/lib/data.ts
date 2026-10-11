@@ -489,8 +489,8 @@ export interface SuggestionSeed {
   fromFamily: boolean;
 }
 
-/** The user's best-loved titles: an average score of 7+ or more likes than dislikes. */
-export async function getSuggestionSeeds(limit: number): Promise<SuggestionSeed[]> {
+/** The user's best-loved titles: an average score of 7+ or more likes than dislikes. `mediaType` keeps only movies or series. */
+export async function getSuggestionSeeds(limit: number, mediaType: MediaType | null = null): Promise<SuggestionSeed[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("list_items")
@@ -516,7 +516,7 @@ export async function getSuggestionSeeds(limit: number): Promise<SuggestionSeed[
   >();
 
   for (const row of (data ?? []) as unknown as Row[]) {
-    if (!row.media) continue;
+    if (!row.media || (mediaType && row.media.media_type !== mediaType)) continue;
     const scores = row.ratings
       .map((r) => r.score)
       .filter((s): s is number => s !== null);

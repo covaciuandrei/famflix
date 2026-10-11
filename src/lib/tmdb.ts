@@ -171,8 +171,22 @@ export async function searchMedia(query: string, only?: MediaType): Promise<Tmdb
   return normalizeMany(data.results, only);
 }
 
-/** Curated browse rows for the discover page. */
-export async function getBrowseRows(): Promise<TmdbRow[]> {
+/** Curated browse rows for the discover page, or with a type only that kind of title. */
+export async function getBrowseRows(type: MediaType | null = null): Promise<TmdbRow[]> {
+  if (type) {
+    const [trending, popular, topRated] = await Promise.all([
+      tmdbFetch<{ results: RawResult[] }>(`/trending/${type}/week`, {}, 3600),
+      tmdbFetch<{ results: RawResult[] }>(`/${type}/popular`, {}, 3600),
+      tmdbFetch<{ results: RawResult[] }>(`/${type}/top_rated`, {}, 3600),
+    ]);
+    const kind = type === "movie" ? "movies" : "series";
+    return [
+      { title: `Trending ${kind} this week`, items: normalizeMany(trending.results, type) },
+      { title: `Popular ${kind}`, items: normalizeMany(popular.results, type) },
+      { title: `Top rated ${kind}`, items: normalizeMany(topRated.results, type) },
+    ];
+  }
+
   const [trending, popularMovies, popularTv, topMovies, topTv] =
     await Promise.all([
       tmdbFetch<{ results: RawResult[] }>("/trending/all/week", {}, 3600),
@@ -197,13 +211,18 @@ export async function getBrowseRows(): Promise<TmdbRow[]> {
   ];
 }
 
-/** Popular and top rated movies and series in a Browse category, release decade, or both. */
+/**
+ * Popular and top rated movies and series in a Browse category, release decade, or both; with a type, only that kind
+ * of title.
+ */
 export async function getDiscoverRows({
   genre,
   decade,
+  type = null,
 }: {
   genre: BrowseGenre | null;
   decade: Decade | null;
+  type?: MediaType | null;
 }): Promise<TmdbRow[]> {
   const what = genre ? `${genre.label.toLowerCase()} ` : "";
   const when = !decade
@@ -238,8 +257,8 @@ export async function getDiscoverRows({
     "vote_count.gte": String(minVotes),
   });
 
-  const movies = !genre || genre.movie !== null;
-  const series = !genre || genre.tv !== null;
+  const movies = type !== "tv" && (!genre || genre.movie !== null);
+  const series = type !== "movie" && (!genre || genre.tv !== null);
   const rows: { title: string; items: Promise<TmdbItem[]> }[] = [];
   if (movies) {
     rows.push({

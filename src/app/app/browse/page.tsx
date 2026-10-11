@@ -12,18 +12,22 @@ import {
   getSessionProfile,
   getSuggestionSeeds,
 } from "@/lib/data";
-import { DECADES, findDecade } from "@/lib/decades";
-import { BROWSE_GENRES } from "@/lib/genres";
+import { BROWSE_TYPES, browseHref, genresFor, parseBrowseFilters } from "@/lib/browse-filters";
+import { DECADES } from "@/lib/decades";
 import {
   getBrowseRows,
   getDiscoverRows,
   getRecommendations,
   type TmdbRow,
 } from "@/lib/tmdb";
+import type { MediaType } from "@/lib/types";
 
-/** "Because your family liked X" rows. Titles already on a list stay, so adding one doesn't make it vanish. */
-async function getSuggestionRows(): Promise<TmdbRow[]> {
-  const seeds = await getSuggestionSeeds(3);
+/**
+ * "Because your family liked X" rows (of movies or series only, with a type chosen). Titles already on a list stay, so
+ * adding one doesn't make it vanish.
+ */
+async function getSuggestionRows(type: MediaType | null): Promise<TmdbRow[]> {
+  const seeds = await getSuggestionSeeds(3, type);
   const results = await Promise.allSettled(
     seeds.map((s) => getRecommendations(s.mediaType, s.tmdbId)),
   );
@@ -45,6 +49,7 @@ export default async function BrowsePage({
   searchParams,
 }: {
   searchParams: Promise<{
+    type?: string | string[];
     genre?: string | string[];
     decade?: string | string[];
   }>;
@@ -52,10 +57,7 @@ export default async function BrowsePage({
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
-  const params = await searchParams;
-  const genre = BROWSE_GENRES.find((g) => g.slug === params.genre) ?? null;
-  const decade =
-    typeof params.decade === "string" ? findDecade(params.decade) : null;
+  const { type, genre, decade } = parseBrowseFilters(await searchParams);
   const groups = await getMyGroups();
   const targets = [
     { id: null, label: "My list" },
@@ -69,19 +71,14 @@ export default async function BrowsePage({
   try {
     [rows, suggestions] =
       genre || decade
-        ? [await getDiscoverRows({ genre, decade }), []]
-        : await Promise.all([getBrowseRows(), getSuggestionRows()]);
+        ? [await getDiscoverRows({ genre, decade, type }), []]
+        : await Promise.all([getBrowseRows(type), getSuggestionRows(type)]);
   } catch (e) {
     console.error("Browse rows failed:", e);
     error = true;
   }
 
-  const browseHref = (genreSlug?: string, decadeValue?: string) => {
-    const query = new URLSearchParams();
-    if (genreSlug) query.set("genre", genreSlug);
-    if (decadeValue) query.set("decade", decadeValue);
-    return query.size ? `/app/browse?${query}` : "/app/browse";
-  };
+  const allRows = [...suggestions, ...rows];
 
   return (
     <div className="flex flex-col gap-6">
@@ -106,17 +103,39 @@ export default async function BrowsePage({
 
       <div className="flex flex-col gap-3">
         <CategoryLinks
+          label="Type"
+          aria-label="Type"
+          links={[
+            {
+              label: "All",
+              href: browseHref({ genre: genre?.slug, decade: decade?.value }),
+              active: type === null,
+            },
+            ...BROWSE_TYPES.map((t) => ({
+              label: t.label,
+              // A category the other type doesn't have (Horror series, Kids movies) is left behind, so the chip never
+              // leads to a page with nothing on it.
+              href: browseHref({
+                type: t.value,
+                genre: genre && genre[t.value] !== null ? genre.slug : null,
+                decade: decade?.value,
+              }),
+              active: t.value === type,
+            })),
+          ]}
+        />
+        <CategoryLinks
           label="Released"
           aria-label="Release date"
           links={[
             {
               label: "Any year",
-              href: browseHref(genre?.slug),
+              href: browseHref({ type, genre: genre?.slug }),
               active: decade === null,
             },
             ...DECADES.map((d) => ({
               label: d.label,
-              href: browseHref(genre?.slug, d.value),
+              href: browseHref({ type, genre: genre?.slug, decade: d.value }),
               active: d === decade,
             })),
           ]}
@@ -125,12 +144,12 @@ export default async function BrowsePage({
           links={[
             {
               label: "All",
-              href: browseHref(undefined, decade?.value),
+              href: browseHref({ type, decade: decade?.value }),
               active: genre === null,
             },
-            ...BROWSE_GENRES.map((g) => ({
+            ...genresFor(type).map((g) => ({
               label: g.label,
-              href: browseHref(g.slug, decade?.value),
+              href: browseHref({ type, genre: g.slug, decade: decade?.value }),
               active: g === genre,
             })),
           ]}
@@ -142,9 +161,13 @@ export default async function BrowsePage({
           Couldn&apos;t load movies and series right now. Search still might
           work; otherwise try again in a minute.
         </div>
+      ) : allRows.every((r) => r.items.length === 0) ? (
+        <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+          Nothing matched these filters. Try another category or year.
+        </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {[...suggestions, ...rows].map((r) => (
+          {allRows.map((r) => (
             <MediaRow
               key={r.title}
               title={r.title}

@@ -32,9 +32,10 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   the next episode (**Watched S2E5**), and the series moves to a **Watching** tab
   (which is there while you have any). Your ticks, scores and notes are private,
   like My list: family lists keep a series as one title, with no episodes.
-- **Browse and add**: search, browse trending and top rated titles, or pick a
-  category (Comedy, Horror, Kids, ...) and decade. Trailers play from YouTube
-  only once you press play.
+- **Browse and add**: search, browse trending and top rated titles, or filter
+  them by type (movies or series), decade and category (Comedy, Horror, Kids,
+  ...); the filters work together, and only offer the categories the chosen type
+  has. Trailers play from YouTube only once you press play.
 - **Scores and reactions**: rate 1–10 with one decimal (8.5) using a slider,
   and add a note. Marking a title watched asks for both right away. A score
   over 7 also likes the title and under 6 dislikes it; you can still change the
