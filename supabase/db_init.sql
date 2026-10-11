@@ -365,6 +365,42 @@ create table public.movie_night_guest_finishes (
 );
 create index movie_night_guest_finishes_guest_idx on public.movie_night_guest_finishes (guest_id);
 
+-- A movie night planned ahead: a family picks a day and a time (and perhaps a mood, as when a night starts), and its
+-- members answer Going, Maybe or Can't. Starting a night from a plan links the two (night_id). A plan nobody starts is
+-- over 24 hours after its time. There is no calendar file, no e-mail: the reminders are in the app. Only the planning
+-- functions write these two tables.
+create table public.movie_night_plans (
+  id         uuid primary key default gen_random_uuid(),
+  group_id   uuid not null references public.groups (id) on delete cascade,
+  created_by uuid references public.profiles (id) on delete set null,
+  starts_at  timestamptz not null,
+  note       text check (char_length(note) <= 100),
+  -- The mood the night starts with: browse category slugs (at most 5) and options, as on movie_nights.
+  genres     text[] not null default '{}' check (cardinality(genres) <= 5),
+  options    jsonb not null default '{}'::jsonb,
+  status     text not null default 'planned' check (status in ('planned', 'started', 'cancelled', 'expired')),
+  -- The night that was started from it.
+  night_id   uuid references public.movie_nights (id) on delete set null,
+  created_at timestamptz not null default now(),
+  -- When it stopped being planned (started, cancelled or expired), and who started or cancelled it.
+  ended_at   timestamptz,
+  ended_by   uuid references public.profiles (id) on delete set null
+);
+create index movie_night_plans_group_idx on public.movie_night_plans (group_id, starts_at);
+create index movie_night_plans_created_by_idx on public.movie_night_plans (created_by);
+create index movie_night_plans_ended_by_idx on public.movie_night_plans (ended_by);
+create index movie_night_plans_night_idx on public.movie_night_plans (night_id);
+
+-- Who answered what: Going, Maybe or Can't (no). One answer each; taking it back deletes the row.
+create table public.movie_night_plan_rsvps (
+  plan_id    uuid not null references public.movie_night_plans (id) on delete cascade,
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  answer     text not null check (answer in ('going', 'maybe', 'no')),
+  updated_at timestamptz not null default now(),
+  primary key (plan_id, user_id)
+);
+create index movie_night_plan_rsvps_user_idx on public.movie_night_plan_rsvps (user_id);
+
 -- ---------------------------------------------------------------------------
 --  Helper functions
 -- ---------------------------------------------------------------------------
@@ -533,6 +569,8 @@ alter table public.movie_night_links          enable row level security;
 alter table public.movie_night_guests         enable row level security;
 alter table public.movie_night_guest_votes    enable row level security;
 alter table public.movie_night_guest_finishes enable row level security;
+alter table public.movie_night_plans          enable row level security;
+alter table public.movie_night_plan_rsvps     enable row level security;
 
 -- profiles ------------------------------------------------------------------
 create policy profiles_select on public.profiles for select
@@ -664,6 +702,14 @@ create policy movie_night_finishes_select on public.movie_night_finishes for sel
   ));
 create policy movie_night_votes_select on public.movie_night_votes for select
   using (user_id = (select auth.uid()));
+-- planned movie nights: the family reads its plans and everybody's answers; all changes go through the planning functions.
+create policy movie_night_plans_select on public.movie_night_plans for select
+  using (public.is_group_member(group_id, (select auth.uid())));
+create policy movie_night_plan_rsvps_select on public.movie_night_plan_rsvps for select
+  using (exists (
+    select 1 from public.movie_night_plans p
+    where p.id = plan_id and public.is_group_member(p.group_id, (select auth.uid()))
+  ));
 
 -- ---------------------------------------------------------------------------
 --  New users
@@ -2157,34 +2203,19 @@ begin
 end;
 $$;
 
--- Starts a movie night for a family with its first stack. Any member can; one night at a time per family.
--- p_genres: up to 5 browse category slugs. p_options: {"count": 8-40, "max": minutes or null} (movie nights are for
--- movies, so "series" is false or left out; it is kept in the saved options for the nights made before that).
-create function public.start_movie_night(
-  p_group      uuid,
-  p_genres     text[],
-  p_options    jsonb,
-  p_candidates jsonb
-)
-returns uuid
+-- Checks the mood of a night (or of a plan): up to 5 browse category slugs and {"count": 8-40, "max": minutes or null}
+-- (movie nights are for movies, so "series" is false or left out; it is kept in the saved options for the nights made
+-- before that). Returns {"genres": [...], "options": {...}} as it is saved, or says what is wrong.
+create function public.movie_night_mood(p_genres text[], p_options jsonb)
+returns jsonb
 language plpgsql
-security definer
+stable
 set search_path = public
 as $$
 declare
   v_genres  text[] := coalesce(p_genres, '{}');
   v_options jsonb;
-  v_night   uuid;
-  v_stack   uuid;
 begin
-  if auth.uid() is null then
-    raise exception 'You must be signed in';
-  end if;
-  if not public.is_group_member(p_group, auth.uid()) then
-    raise exception 'You are not in this family';
-  end if;
-  perform public.hit_rate_limit(auth.uid(), 'start_movie_night', 6, 3600);
-
   if cardinality(v_genres) > 5
      or exists (select 1 from unnest(v_genres) as g where g is null or g = '' or char_length(g) > 40) then
     raise exception 'Pick up to 5 genres';
@@ -2202,6 +2233,56 @@ begin
   );
   if (v_options ->> 'count')::integer not between 8 and 40 then
     raise exception 'A stack has 8 to 40 titles';
+  end if;
+  return jsonb_build_object('genres', to_jsonb(v_genres), 'options', v_options);
+end;
+$$;
+
+-- Starts a movie night for a family with its first stack. Any member can; one night at a time per family.
+-- p_genres and p_options: the mood (see movie_night_mood). p_plan: a plan of the family's that this night comes from; the
+-- night then has the plan's mood (what is passed for it is ignored), and the plan is marked started and linked to it in
+-- the same go, so a night that can't start leaves the plan as it was.
+create function public.start_movie_night(
+  p_group      uuid,
+  p_genres     text[],
+  p_options    jsonb,
+  p_candidates jsonb,
+  p_plan       uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_genres  text[];
+  v_options jsonb;
+  v_mood    jsonb;
+  v_plan    public.movie_night_plans;
+  v_night   uuid;
+  v_stack   uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in';
+  end if;
+  if not public.is_group_member(p_group, auth.uid()) then
+    raise exception 'You are not in this family';
+  end if;
+  perform public.hit_rate_limit(auth.uid(), 'start_movie_night', 6, 3600);
+
+  if p_plan is null then
+    v_mood := public.movie_night_mood(p_genres, p_options);
+    v_genres := array(select jsonb_array_elements_text(v_mood -> 'genres'));
+    v_options := v_mood -> 'options';
+  else
+    perform public.settle_movie_night_plans(p_group);
+    select * into v_plan from public.movie_night_plans where id = p_plan and group_id = p_group for update;
+    if not found then
+      raise exception 'This movie night plan is not available';
+    end if;
+    perform public.movie_night_plan_require_planned(v_plan);
+    v_genres := v_plan.genres;
+    v_options := v_plan.options;
   end if;
 
   -- A night that went quiet is over; one that is still going blocks a new one.
@@ -2225,6 +2306,12 @@ begin
   select v_night, v_stack, (e.elem ->> 'media_id')::uuid, (e.elem ->> 'list_item_id')::uuid,
          e.elem ->> 'origin', e.pos::smallint
   from jsonb_array_elements(p_candidates) with ordinality as e(elem, pos);
+
+  if p_plan is not null then
+    update public.movie_night_plans
+    set status = 'started', night_id = v_night, ended_at = now(), ended_by = auth.uid()
+    where id = p_plan;
+  end if;
 
   perform public.add_activity(
     p_group, 'movie_night_started', null, null, null,
@@ -2771,6 +2858,288 @@ $$;
 create trigger group_members_movie_night
   after delete on public.group_members
   for each row execute function public.movie_night_member_left();
+
+-- ---------------------------------------------------------------------------
+--  Planning a movie night: a day and a time, and who is coming
+-- ---------------------------------------------------------------------------
+
+-- A plan nobody started is over 24 hours after its time. Everything that reads or changes a family's plans calls this
+-- first.
+create function public.settle_movie_night_plans(p_group uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.movie_night_plans
+  set status = 'expired', ended_at = now()
+  where group_id = p_group and status = 'planned' and starts_at < now() - interval '24 hours';
+$$;
+
+-- Stops with a plain message unless the plan is still planned.
+create function public.movie_night_plan_require_planned(p public.movie_night_plans)
+returns void
+language plpgsql
+set search_path = public
+as $$
+begin
+  if p.status = 'planned' then
+    return;
+  elsif p.status = 'started' then
+    raise exception 'This movie night has already started';
+  elsif p.status = 'cancelled' then
+    raise exception 'This movie night plan was cancelled';
+  end if;
+  raise exception 'This movie night plan has passed';
+end;
+$$;
+
+-- Plans a movie night for a family: any member can. It must be in the future and within a year, a family has at most 5
+-- planned, and the note (optional) is at most 100 characters. The mood (p_genres, p_options) is the one a night starts
+-- with. The person who plans it is Going. Writes a line in the family's feed. Returns the plan's id.
+create function public.plan_movie_night(
+  p_group     uuid,
+  p_starts_at timestamptz,
+  p_note      text default null,
+  p_genres    text[] default null,
+  p_options   jsonb default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me   uuid := auth.uid();
+  v_note text := nullif(btrim(coalesce(p_note, ''), E' \t\r\n'), '');
+  v_mood jsonb;
+  v_plan uuid;
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  if not public.is_group_member(p_group, v_me) then
+    raise exception 'You are not in this family';
+  end if;
+  perform public.hit_rate_limit(v_me, 'plan_night', 10, 3600);
+
+  if p_starts_at is null or p_starts_at <= now() then
+    raise exception 'Pick a time in the future';
+  end if;
+  if p_starts_at > now() + interval '1 year' then
+    raise exception 'Plan a movie night within the next year';
+  end if;
+  if char_length(v_note) > 100 then
+    raise exception 'A note can be 100 characters at most';
+  end if;
+  v_mood := public.movie_night_mood(p_genres, p_options);
+
+  -- One at a time for a family, so two members can't both take the last of the 5.
+  perform pg_advisory_xact_lock(hashtextextended('movie_night_plans:' || p_group::text, 0));
+  perform public.settle_movie_night_plans(p_group);
+  if (select count(*) from public.movie_night_plans where group_id = p_group and status = 'planned') >= 5 then
+    raise exception 'This family already has 5 movie nights planned';
+  end if;
+
+  insert into public.movie_night_plans (group_id, created_by, starts_at, note, genres, options)
+  values (p_group, v_me, p_starts_at, v_note, array(select jsonb_array_elements_text(v_mood -> 'genres')), v_mood -> 'options')
+  returning id into v_plan;
+  insert into public.movie_night_plan_rsvps (plan_id, user_id, answer) values (v_plan, v_me, 'going');
+
+  perform public.add_activity(
+    p_group, 'movie_night_planned', null, null, null,
+    to_char(p_starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+  );
+  return v_plan;
+end;
+$$;
+
+-- Answers a plan of the caller's family: 'going', 'maybe' or 'no', or null to take the answer back. Only while the plan
+-- is still planned.
+create function public.rsvp_movie_night_plan(p_plan uuid, p_answer text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me   uuid := auth.uid();
+  v_plan public.movie_night_plans;
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  select * into v_plan from public.movie_night_plans where id = p_plan;
+  if not found or not public.is_group_member(v_plan.group_id, v_me) then
+    raise exception 'This movie night plan is not available';
+  end if;
+  perform public.hit_rate_limit(v_me, 'plan_rsvp', 60, 3600);
+  perform public.settle_movie_night_plans(v_plan.group_id);
+  select * into v_plan from public.movie_night_plans where id = p_plan;
+  perform public.movie_night_plan_require_planned(v_plan);
+
+  if p_answer is null then
+    delete from public.movie_night_plan_rsvps where plan_id = p_plan and user_id = v_me;
+    return;
+  end if;
+  if p_answer not in ('going', 'maybe', 'no') then
+    raise exception 'Answer Going, Maybe or Can''t';
+  end if;
+  insert into public.movie_night_plan_rsvps (plan_id, user_id, answer)
+  values (p_plan, v_me, p_answer)
+  on conflict (plan_id, user_id) do update set answer = excluded.answer, updated_at = now();
+end;
+$$;
+
+-- Cancels a plan of the caller's family: any member can, while it is still planned. Writes a line in the family's feed.
+create function public.cancel_movie_night_plan(p_plan uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me   uuid := auth.uid();
+  v_plan public.movie_night_plans;
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  select * into v_plan from public.movie_night_plans where id = p_plan for update;
+  if not found or not public.is_group_member(v_plan.group_id, v_me) then
+    raise exception 'This movie night plan is not available';
+  end if;
+  perform public.settle_movie_night_plans(v_plan.group_id);
+  select * into v_plan from public.movie_night_plans where id = p_plan;
+  perform public.movie_night_plan_require_planned(v_plan);
+
+  update public.movie_night_plans set status = 'cancelled', ended_at = now(), ended_by = v_me where id = p_plan;
+  perform public.add_activity(
+    v_plan.group_id, 'movie_night_plan_cancelled', null, null, null,
+    to_char(v_plan.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+  );
+end;
+$$;
+
+-- A family's plans for the Movie night page, as one value: the ones still planned, soonest first, then the ones that were
+-- cancelled or passed in the last day. Each has its note, mood, who planned it, everybody's answers and the caller's.
+create function public.planned_movie_nights(p_group uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  if not public.is_group_member(p_group, v_me) then
+    raise exception 'You are not in this family';
+  end if;
+  perform public.settle_movie_night_plans(p_group);
+
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+        'id', p.id,
+        'starts_at', p.starts_at,
+        'note', p.note,
+        'genres', to_jsonb(p.genres),
+        'options', p.options,
+        'status', p.status,
+        'created_by', p.created_by,
+        'created_by_name', (select pr.display_name from public.profiles pr where pr.id = p.created_by),
+        'ended_at', p.ended_at,
+        'my_answer', (select r.answer from public.movie_night_plan_rsvps r where r.plan_id = p.id and r.user_id = v_me),
+        'answers', coalesce((
+          select jsonb_agg(jsonb_build_object('user_id', r.user_id, 'name', pr.display_name, 'answer', r.answer)
+                           order by r.updated_at, r.user_id)
+          from public.movie_night_plan_rsvps r
+          join public.profiles pr on pr.id = r.user_id
+          where r.plan_id = p.id
+        ), '[]'::jsonb)
+      ) order by (p.status = 'planned') desc, case when p.status = 'planned' then p.starts_at end, p.ended_at desc, p.id)
+    from public.movie_night_plans p
+    where p.group_id = p_group
+      and (p.status = 'planned' or (p.status in ('cancelled', 'expired') and p.ended_at > now() - interval '1 day'))
+  ), '[]'::jsonb);
+end;
+$$;
+
+-- The plans to remind the caller of, across their families: still planned, from 60 minutes before their time to 3 hours
+-- after, and not ones the caller answered Can't. As one value; each has the family, the time, the note, the caller's
+-- answer and how many are going.
+create function public.due_movie_night_plans()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+        'id', p.id,
+        'group_id', p.group_id,
+        'group_name', g.name,
+        'starts_at', p.starts_at,
+        'note', p.note,
+        'my_answer', r.answer,
+        'going', (select count(*) from public.movie_night_plan_rsvps x where x.plan_id = p.id and x.answer = 'going')
+      ) order by p.starts_at, p.id)
+    from public.movie_night_plans p
+    join public.groups g on g.id = p.group_id
+    left join public.movie_night_plan_rsvps r on r.plan_id = p.id and r.user_id = v_me
+    where p.status = 'planned'
+      and public.is_group_member(p.group_id, v_me)
+      and p.starts_at between now() - interval '3 hours' and now() + interval '60 minutes'
+      and r.answer is distinct from 'no'
+  ), '[]'::jsonb);
+end;
+$$;
+
+-- Someone who leaves a family takes their answers off its plans (the plans stay).
+create function public.movie_night_plan_member_left()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.movie_night_plan_rsvps r
+  using public.movie_night_plans p
+  where r.plan_id = p.id and p.group_id = old.group_id and r.user_id = old.user_id;
+  return null;
+end;
+$$;
+
+create trigger group_members_movie_night_plan
+  after delete on public.group_members
+  for each row execute function public.movie_night_plan_member_left();
+
+-- Whoever plans a movie night can delete their account without taking the plan from the family, but the note they wrote
+-- goes with them (the plan, with its answers, stays without their name).
+create function public.movie_night_plan_creator_gone()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.movie_night_plans set note = null where created_by = old.id and note is not null;
+  return old;
+end;
+$$;
+
+create trigger profiles_before_delete_plans
+  before delete on public.profiles
+  for each row execute function public.movie_night_plan_creator_gone();
 
 -- Puts a night's best titles on the family list: the first 7 by rank (as in movie_night_state) among those with more than
 -- 0 points, skipping what is already on the list and bringing back what was removed. Writes one "added N titles"
@@ -3557,8 +3926,9 @@ create trigger ratings_react_to_score
 
 -- Everything the caller has put into FamFlix, or that was recorded about them, as one JSON document: the account, the
 -- families, My list (with ticked episodes and earlier viewings), their watch history, their part of each family list
--- (the titles they added, and their scores, notes, reactions and watches), the movie nights they took part in and the
--- family feed events they caused. The app turns it into a download and adds the e-mail address, which comes from the
+-- (the titles they added, and their scores, notes, reactions and watches), the movie nights they took part in, the movie
+-- nights they planned or answered (their own answer, and the note only where it is theirs) and the family feed events
+-- they caused. The app turns it into a download and adds the e-mail address, which comes from the
 -- sign-in and is in none of these tables. Only what is theirs: the other people on a family list appear by display name,
 -- where they watched something with the caller and only for a family the caller is still in; their scores, notes,
 -- reactions and e-mail addresses never do, nor do guests, invite codes or the temporary rate-limit counters (the
@@ -3733,6 +4103,22 @@ begin
                     join public.movie_night_candidates c2 on c2.id = v2.candidate_id
                     where c2.night_id = n.id and v2.user_id = v_me)
     ),
+    'movie_night_plans', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+          'family', g.name,
+          'starts_at', p.starts_at,
+          'status', p.status,
+          'mood', to_jsonb(p.genres),
+          'planned_by_me', p.created_by is not distinct from v_me,
+          'note', case when p.created_by = v_me then p.note end,
+          'my_answer', r.answer,
+          'answered_at', r.updated_at
+        ) order by p.starts_at, p.id), '[]'::jsonb)
+      from public.movie_night_plans p
+      join public.groups g on g.id = p.group_id
+      left join public.movie_night_plan_rsvps r on r.plan_id = p.id and r.user_id = v_me
+      where p.created_by = v_me or r.user_id is not null
+    ),
     'feed_events', (
       select coalesce(jsonb_agg(jsonb_build_object(
           'family', g.name,
@@ -3780,7 +4166,7 @@ grant select on
   public.reactions, public.watches, public.watch_history, public.episode_logs, public.episode_history, public.activity,
   public.movie_nights,
   public.movie_night_stacks, public.movie_night_candidates, public.movie_night_votes, public.movie_night_finishes,
-  public.movie_night_members
+  public.movie_night_members, public.movie_night_plans, public.movie_night_plan_rsvps
   to authenticated;
 -- They write straight to a table only where the security rules allow it (their own rows); everything else goes
 -- through the functions below, so the feed, the movie nights and the rate limits can't be faked.
@@ -3826,7 +4212,12 @@ grant execute on function
   public.watch_again(uuid),
   public.watched_again(uuid, date, jsonb),
   public.pending_rating_requests(),
-  public.start_movie_night(uuid, text[], jsonb, jsonb),
+  public.start_movie_night(uuid, text[], jsonb, jsonb, uuid),
+  public.plan_movie_night(uuid, timestamptz, text, text[], jsonb),
+  public.rsvp_movie_night_plan(uuid, text),
+  public.cancel_movie_night_plan(uuid),
+  public.planned_movie_nights(uuid),
+  public.due_movie_night_plans(),
   public.join_movie_night(uuid),
   public.cast_movie_night_votes(uuid, jsonb),
   public.finish_movie_night_stack(uuid),

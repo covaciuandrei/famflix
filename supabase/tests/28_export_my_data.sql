@@ -156,7 +156,7 @@ select public.export_my_data()::text as ida_text \gset
 reset role;
 insert into test.vals values ('ida_export', :'ida_text');
 select test.expect_eq((select array_agg(k order by k collate "C") from jsonb_object_keys(test.t('ida_export')::jsonb) k),
-  array['account', 'exported_at', 'families', 'family_lists', 'feed_events', 'movie_nights', 'my_list', 'not_included', 'watch_history'],
+  array['account', 'exported_at', 'families', 'family_lists', 'feed_events', 'movie_night_plans', 'movie_nights', 'my_list', 'not_included', 'watch_history'],
   'the document has the documented parts, and nothing else');
 select test.expect_eq(test.ex_part('ida_export', 'account') ->> 'display_name', 'Ida'::text, 'the account is hers');
 select test.expect_eq(test.ex_part('ida_export', 'account') ->> 'id', '7a7a7a7a-0000-0000-0000-000000000001'::text, 'with her id');
@@ -298,7 +298,7 @@ select test.expect_eq(test.ex_has('kai_export', 'KAI-SECRET-NOTE') and test.ex_h
 select test.expect_eq(test.ex_has('kai_export', 'IDA-MOVIE-NOTE') or test.ex_has('kai_export', 'JO-SECRET-NOTE') or test.ex_has('kai_export', 'EXMovie')
   or test.ex_has('kai_export', 'Export Fam') or test.ex_has('kai_export', 'ZedGuest'), false, 'and nothing of anyone else''s');
 select test.expect_eq((select array_agg(k order by k collate "C") from jsonb_object_keys(test.t('lee_export')::jsonb) k),
-  array['account', 'exported_at', 'families', 'family_lists', 'feed_events', 'movie_nights', 'my_list', 'not_included', 'watch_history'],
+  array['account', 'exported_at', 'families', 'family_lists', 'feed_events', 'movie_night_plans', 'movie_nights', 'my_list', 'not_included', 'watch_history'],
   'someone with nothing still gets the whole document');
 select test.expect_eq((select count(*) from jsonb_each(test.t('lee_export')::jsonb) e
   where e.key not in ('account', 'exported_at', 'not_included') and e.value <> '[]'::jsonb), 0::bigint, 'with every list empty');
@@ -319,14 +319,14 @@ select test.expect_eq((select array_agg(relname::text order by relname::text col
     -- read by the export
     'profiles', 'groups', 'group_members', 'media', 'list_items', 'ratings', 'reactions', 'watches', 'watch_history',
     'episode_logs', 'episode_history', 'activity', 'movie_nights', 'movie_night_stacks', 'movie_night_candidates',
-    'movie_night_votes', 'movie_night_finishes', 'movie_night_members',
+    'movie_night_votes', 'movie_night_finishes', 'movie_night_members', 'movie_night_plans', 'movie_night_plan_rsvps',
     -- left out: a family's secret link, and guests, who are not the person asking, and the temporary rate-limit counters
     'movie_night_links', 'movie_night_guests', 'movie_night_guest_votes', 'movie_night_guest_finishes', 'rate_limits']) x),
   'every table is either exported or listed as left out');
 select test.expect_eq((select array_agg(t order by t collate "C") from unnest(array[
     'profiles', 'groups', 'group_members', 'media', 'list_items', 'ratings', 'reactions', 'watches', 'watch_history',
     'episode_logs', 'episode_history', 'activity', 'movie_nights', 'movie_night_stacks', 'movie_night_candidates',
-    'movie_night_votes', 'movie_night_finishes', 'movie_night_members']) t
+    'movie_night_votes', 'movie_night_finishes', 'movie_night_members', 'movie_night_plans', 'movie_night_plan_rsvps']) t
   where (select prosrc from pg_proc where proname = 'export_my_data' and pronamespace = 'public'::regnamespace) !~ ('public\.' || t || '\M')),
   null::text[], 'each table listed as exported is read by the export');
 select test.expect_eq((select array_agg(t order by t collate "C") from unnest(array[

@@ -12,7 +12,8 @@ select test.expect_eq((select count(*) from pg_class where relnamespace = 'publi
 select test.expect_eq((select array_agg(relname::text order by relname::text collate "C") from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'),
   (select array_agg(x order by x collate "C") from unnest(array['activity', 'episode_history', 'episode_logs', 'group_members', 'groups', 'list_items', 'media',
     'movie_night_candidates', 'movie_night_finishes', 'movie_night_guest_finishes', 'movie_night_guest_votes',
-    'movie_night_guests', 'movie_night_links', 'movie_night_members', 'movie_night_stacks', 'movie_night_votes',
+    'movie_night_guests', 'movie_night_links', 'movie_night_members', 'movie_night_plan_rsvps', 'movie_night_plans',
+    'movie_night_stacks', 'movie_night_votes',
     'movie_nights', 'profiles', 'rate_limits', 'ratings', 'reactions', 'watch_history', 'watches']) x),
   'the tables are the ones whose grants are pinned here');
 
@@ -35,6 +36,7 @@ select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relnam
   (select array_agg(x order by x collate "C") from unnest(array[
     'activity:select', 'episode_history:select', 'episode_logs:select', 'group_members:select', 'groups:select', 'list_items:select', 'media:select',
     'movie_night_candidates:select', 'movie_night_finishes:select', 'movie_night_members:select',
+    'movie_night_plan_rsvps:select', 'movie_night_plans:select',
     'movie_night_stacks:select', 'movie_night_votes:select', 'movie_nights:select',
     'profiles:select', 'profiles:insert', 'profiles:update',
     'ratings:select', 'ratings:insert', 'ratings:update', 'ratings:delete',
@@ -63,6 +65,7 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname::text
     'add_movie_night_top_titles', 'pick_movie_night_card', 'pick_movie_night_title',
     'mark_episodes', 'mark_next_episode', 'rate_episode', 'watch_series_again', 'watch_episode_again', 'my_series_progress',
     'my_series_passes', 'my_episode_counts', 'export_my_data',
+    'plan_movie_night', 'rsvp_movie_night_plan', 'cancel_movie_night_plan', 'planned_movie_nights', 'due_movie_night_plans',
     'get_movie_night_guest_link', 'replace_movie_night_guest_link', 'turn_off_movie_night_guest_link',
     'remove_movie_night_guest', 'movie_night_guest_names']) x),
   'signed-in people can run exactly these functions');
