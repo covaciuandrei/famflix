@@ -248,6 +248,48 @@ export async function getMyRating(
   return (data as { score: number | null; comment: string | null } | null) ?? null;
 }
 
+/** An episode someone ticked on a series, as the series page gets it. */
+export interface TickedEpisode {
+  s: number;
+  e: number;
+  on: string;
+  score: number | null;
+  comment: string | null;
+}
+
+/** The episodes ticked on one of the signed-in person's My list series, with their scores and notes. */
+export async function getEpisodeLogs(itemId: string): Promise<TickedEpisode[]> {
+  const supabase = await createClient();
+  const found: TickedEpisode[] = [];
+  // The API hands out at most 1000 rows at a time, so a long series is read a page at a time.
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("episode_logs")
+      .select("season_number, episode_number, watched_on, score, comment")
+      .eq("list_item_id", itemId)
+      .order("season_number")
+      .order("episode_number")
+      .range(from, from + 999);
+    if (error) {
+      // Logged, not thrown: the page still works, it just shows nothing ticked.
+      console.error("Could not load episodes:", error.message);
+      break;
+    }
+    const rows = (data ?? []) as {
+      season_number: number;
+      episode_number: number;
+      watched_on: string;
+      score: number | null;
+      comment: string | null;
+    }[];
+    for (const r of rows) {
+      found.push({ s: r.season_number, e: r.episode_number, on: r.watched_on, score: r.score, comment: r.comment });
+    }
+    if (rows.length < 1000) break;
+  }
+  return found;
+}
+
 export async function getPendingRatings(): Promise<PendingRating[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("pending_rating_requests");

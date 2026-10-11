@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  airedEpisodes,
   airedIn,
   airedTotal,
+  applyMark,
   episodeKey,
   episodeLabel,
+  episodesBetween,
   isFinished,
+  isTicked,
   nextUp,
   parseSeriesInfo,
   seasonProgress,
@@ -13,6 +17,7 @@ import {
   seriesProgress,
   seriesStatus,
   seriesToJson,
+  type EpisodeState,
   type SeriesInfo,
 } from "../src/lib/series";
 
@@ -183,5 +188,89 @@ test.describe("progress", () => {
     // Nothing has aired yet: ticks can't be counted, so there is nothing to be caught up on.
     const unaired = seriesFromTmdb({ status: "Returning Series", seasons: [{ season_number: 1, episode_count: 8 }] })!;
     expect(seriesStatus(unaired, ticksOf([1, 1]), false)).toBe("not-started");
+  });
+});
+
+test.describe("ticking, as the page shows it", () => {
+  const mini = seriesFromTmdb(CHERNOBYL) as SeriesInfo;
+  /** Season 1 has 4 episodes, season 2 has 6 and has aired 3; still airing. */
+  const long = seriesFromTmdb({
+    status: "Returning Series",
+    seasons: [
+      { season_number: 1, episode_count: 4 },
+      { season_number: 2, episode_count: 6 },
+    ],
+    last_episode_to_air: { season_number: 2, episode_number: 3 },
+  }) as SeriesInfo;
+  const fresh = (completed = false): EpisodeState => ({ ticks: new Map(), completed });
+  const tick = (info: SeriesInfo, state: EpisodeState, from: [number, number], to: [number, number], watched = true) =>
+    applyMark(info, state, { watched, from: { s: from[0], e: from[1] }, to: { s: to[0], e: to[1] }, on: "2026-10-11" });
+  const rows = (state: EpisodeState) => [...state.ticks.keys()].sort().join(",");
+
+  test("the episodes between two, and the ones that have aired", () => {
+    expect(episodesBetween(long, { s: 1, e: 3 }, { s: 2, e: 2 }).map((x) => episodeLabel(x.s, x.e))).toEqual([
+      "S1E3", "S1E4", "S2E1", "S2E2",
+    ]);
+    // A season is asked for to episode 20000: it stops at the last one.
+    expect(episodesBetween(long, { s: 2, e: 1 }, { s: 2, e: 20000 })).toHaveLength(6);
+    expect(episodesBetween(long, { s: 1, e: 5 }, { s: 1, e: 9 })).toHaveLength(0);
+    expect(airedEpisodes(long)).toHaveLength(7);
+  });
+
+  test("ticking one episode, a season, or everything up to an episode", () => {
+    let state = tick(long, fresh(), [1, 2], [1, 2]);
+    expect(rows(state)).toBe("1:2");
+    state = tick(long, state, [1, 1], [1, 20000]);
+    expect(rows(state)).toBe("1:1,1:2,1:3,1:4");
+    state = tick(long, state, [1, 1], [2, 2]);
+    expect(rows(state)).toBe("1:1,1:2,1:3,1:4,2:1,2:2");
+  });
+
+  test("only what has aired is ticked, and what was ticked keeps its day and its score", () => {
+    let state = tick(long, fresh(), [2, 1], [2, 20000]);
+    expect(rows(state)).toBe("2:1,2:2,2:3");
+    state = { ...state, ticks: new Map(state.ticks).set(episodeKey(2, 1), { on: "2026-09-01", score: 8, comment: "good" }) };
+    state = tick(long, state, [2, 1], [2, 3]);
+    expect(state.ticks.get(episodeKey(2, 1))).toEqual({ on: "2026-09-01", score: 8, comment: "good" });
+    expect(tick(long, fresh(), [2, 4], [2, 6]).ticks.size).toBe(0);
+  });
+
+  test("the last aired episode of a show that has ended finishes it; a show still airing is never finished by ticking", () => {
+    let state = tick(mini, fresh(), [1, 1], [1, 4]);
+    expect(state.completed).toBe(false);
+    state = tick(mini, state, [1, 5], [1, 5]);
+    expect(state.completed).toBe(true);
+    expect(tick(long, fresh(), [1, 1], [2, 20000]).completed).toBe(false);
+  });
+
+  test("a Watched series shows every aired episode as watched", () => {
+    const done = fresh(true);
+    expect(isTicked(mini, done, 1, 5)).toBe(true);
+    expect(isTicked(long, done, 2, 3)).toBe(true);
+    expect(isTicked(long, done, 2, 4)).toBe(false);
+    expect(isTicked(mini, fresh(), 1, 1)).toBe(false);
+  });
+
+  test("unticking an episode of a Watched series ticks the others for real and reopens it", () => {
+    const state = tick(mini, fresh(true), [1, 3], [1, 3], false);
+    expect(state.completed).toBe(false);
+    expect(rows(state)).toBe("1:1,1:2,1:4,1:5");
+    // One that wasn't ticked, or hasn't aired, changes nothing.
+    const still = tick(long, fresh(true), [2, 5], [2, 5], false);
+    expect(still.completed).toBe(true);
+    expect(still.ticks.size).toBe(0);
+  });
+
+  test("unticking takes an episode's score and note with it", () => {
+    const rated: EpisodeState = {
+      ticks: new Map([[episodeKey(1, 2), { on: "2026-10-01", score: 9, comment: "great" }]]),
+      completed: false,
+    };
+    expect(tick(mini, rated, [1, 2], [1, 2], false).ticks.size).toBe(0);
+  });
+
+  test("unticking what is not ticked changes nothing", () => {
+    const state = tick(long, fresh(), [1, 1], [1, 2]);
+    expect(rows(tick(long, state, [1, 3], [1, 4], false))).toBe("1:1,1:2");
   });
 });

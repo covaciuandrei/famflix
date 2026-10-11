@@ -20,21 +20,13 @@ import { putOnList } from "@/lib/list-add";
 import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
 import type { MediaType } from "@/lib/types";
-import { cleanScore, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
+import { cleanScore, isDay, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
 
 export interface ActionResult {
   error?: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-
-/** A real calendar day written as YYYY-MM-DD (not 2026-13-45). */
-function isDay(value: unknown): value is string {
-  if (typeof value !== "string" || !DAY.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
 /** A family is never this big; it only keeps a request from carrying a huge list. */
 const MAX_VIEWERS = 50;
 

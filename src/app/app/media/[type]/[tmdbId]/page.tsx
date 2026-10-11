@@ -6,17 +6,20 @@ import { AddToListButton } from "@/components/add-to-list-button";
 import { ListBadges, SeenBy } from "@/components/library-badges";
 import { MarkWatchedButton } from "@/components/mark-watched-button";
 import { MediaPoster } from "@/components/media-poster";
+import { EpisodeTracker } from "@/components/series/episode-tracker";
 import { Trailer } from "@/components/trailer";
 import { Badge } from "@/components/ui/badge";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
 import {
+  getEpisodeLogs,
   getLibraryIndex,
   getMyGroups,
   getMyRating,
   getSessionProfile,
 } from "@/lib/data";
 import { tmdbImage } from "@/lib/images";
-import { getMediaDetails, TmdbError } from "@/lib/tmdb";
+import { episodeKey, seasonToOpen } from "@/lib/series";
+import { getMediaDetails, getSeasonEpisodes, TmdbError } from "@/lib/tmdb";
 import type { MediaType } from "@/lib/types";
 
 export default async function MediaDetailPage({
@@ -52,6 +55,35 @@ export default async function MediaDetailPage({
   if (!details) notFound();
 
   const backdrop = tmdbImage(details.backdropPath, "w1280");
+
+  // A series' seasons and episodes, to tick: where the person is, and the season to show open first.
+  let episodes: React.ReactNode = null;
+  if (details.series) {
+    const entry = onMyList
+      ? {
+          id: onMyList.itemId,
+          watched: onMyList.watched,
+          score: myRating?.score ?? null,
+          comment: myRating?.comment ?? null,
+        }
+      : null;
+    const ticks = entry ? await getEpisodeLogs(entry.id) : [];
+    const season = seasonToOpen(
+      details.series,
+      new Set(ticks.map((t) => episodeKey(t.s, t.e))),
+      entry?.watched ?? false,
+    );
+    episodes = (
+      <EpisodeTracker
+        tmdbId={id}
+        title={details.title}
+        series={details.series}
+        item={entry}
+        ticks={ticks}
+        initial={{ season, episodes: await getSeasonEpisodes(id, season).catch(() => null) }}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -148,6 +180,8 @@ export default async function MediaDetailPage({
           </div>
         </div>
       </div>
+
+      {episodes}
 
       {details.trailerKey && (
         <Trailer

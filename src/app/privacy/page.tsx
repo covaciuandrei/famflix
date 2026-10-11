@@ -32,8 +32,10 @@ export default function PrivacyPage() {
             <strong className="text-foreground">What you add:</strong> the
             titles on your lists (a title your family logs as watched together
             with you is also added to your personal list, which only you can
-            see), your scores, notes, likes and dislikes, who watched what and
-            when, the families you belong to, and a history of
+            see), the episodes you tick on a series (with your own score and
+            note for each, kept on your personal list), your scores, notes,
+            likes and dislikes, who watched what and when, the families you
+            belong to, and a history of
             family activity (for example &ldquo;Ana added Dune&rdquo;; each
             family keeps its latest 500 events).
           </li>
@@ -59,7 +61,10 @@ export default function PrivacyPage() {
 
       <Section title="Who can see it">
         <ul className="list-disc space-y-2 pl-5">
-          <li>Your personal list is visible only to you.</li>
+          <li>
+            Your personal list, with the episodes you tick on a series and
+            your scores and notes for them, is visible only to you.
+          </li>
           <li>
             Family lists, and your name, picture, scores, notes and reactions on
             them, are visible to the members of that family.
@@ -126,8 +131,8 @@ export default function PrivacyPage() {
           <strong className="text-foreground">
             Settings → Account → Delete account
           </strong>{" "}
-          deletes your account right away, with your personal list and your
-          scores, notes, likes and dislikes. Families you shared keep the
+          deletes your account right away, with your personal list (and the
+          episodes you ticked) and your scores, notes, likes and dislikes. Families you shared keep the
           titles you added to their lists, without your name, and your name is
           removed from their activity history. Your votes in movie nights go
           too; the nights themselves stay in the family&apos;s history. If

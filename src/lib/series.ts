@@ -104,6 +104,11 @@ export function parseSeriesInfo(value: unknown): SeriesInfo | null {
   };
 }
 
+/** Whether two readings of a series say the same (for saving a series' info again only when TMDB has changed it). */
+export function sameSeries(a: SeriesInfo | null, b: SeriesInfo | null): boolean {
+  return JSON.stringify(a && seriesToJson(a)) === JSON.stringify(b && seriesToJson(b));
+}
+
 /** Whether the show will get no new episodes. */
 export function isFinished(info: SeriesInfo): boolean {
   return FINISHED.has(info.status);
@@ -129,6 +134,9 @@ export const episodeKey = (season: number, episode: number): string => `${season
 /** "S2E5". */
 export const episodeLabel = (season: number, episode: number): string => `S${season}E${episode}`;
 
+/** The ticked episodes as episodeKey()s: a Set, or the Map of an EpisodeState. */
+export type Ticked = { has(key: string): boolean };
+
 export interface Progress {
   /** Aired episodes that are ticked (all of them once the series is completed). */
   watched: number;
@@ -139,7 +147,7 @@ export interface Progress {
 }
 
 /** One season's progress. `ticks` are the ticked episodes as episodeKey(); `completed` is a series marked Watched. */
-export function seasonProgress(info: SeriesInfo, n: number, ticks: ReadonlySet<string>, completed: boolean): Progress {
+export function seasonProgress(info: SeriesInfo, n: number, ticks: Ticked, completed: boolean): Progress {
   const season = info.seasons.find((s) => s.n === n);
   const aired = airedIn(info, n);
   let watched = 0;
@@ -149,7 +157,7 @@ export function seasonProgress(info: SeriesInfo, n: number, ticks: ReadonlySet<s
 }
 
 /** The whole series' progress. Ticks of episodes that have not aired (or that TMDB no longer lists) don't count. */
-export function seriesProgress(info: SeriesInfo, ticks: ReadonlySet<string>, completed: boolean): Progress {
+export function seriesProgress(info: SeriesInfo, ticks: Ticked, completed: boolean): Progress {
   const parts = info.seasons.map((s) => seasonProgress(info, s.n, ticks, completed));
   return {
     watched: parts.reduce((sum, p) => sum + p.watched, 0),
@@ -159,7 +167,7 @@ export function seriesProgress(info: SeriesInfo, ticks: ReadonlySet<string>, com
 }
 
 /** The first aired episode that is not ticked; null when everything that has aired is. */
-export function nextUp(info: SeriesInfo, ticks: ReadonlySet<string>, completed: boolean): EpisodeRef | null {
+export function nextUp(info: SeriesInfo, ticks: Ticked, completed: boolean): EpisodeRef | null {
   if (completed) return null;
   for (const season of info.seasons) {
     const aired = airedIn(info, season.n);
@@ -168,16 +176,100 @@ export function nextUp(info: SeriesInfo, ticks: ReadonlySet<string>, completed: 
   return null;
 }
 
+/** The season to show open at first: the one with the next episode, else the latest that has aired. */
+export function seasonToOpen(info: SeriesInfo, ticks: Ticked, completed: boolean): number {
+  const next = nextUp(info, ticks, completed);
+  if (next) return next.s;
+  const started = info.seasons.filter((season) => airedIn(info, season.n) > 0);
+  return (started[started.length - 1] ?? info.seasons[0]).n;
+}
+
 /**
  * Where someone is with a series: Not started (no ticks), Watching, Caught up (every episode that has aired is ticked,
  * on a show that may get more; a finished one completes by itself) or Completed (marked Watched).
  */
 export type SeriesStatus = "not-started" | "watching" | "caught-up" | "completed";
 
-export function seriesStatus(info: SeriesInfo | null, ticks: ReadonlySet<string>, completed: boolean): SeriesStatus {
+export function seriesStatus(info: SeriesInfo | null, ticks: Ticked, completed: boolean): SeriesStatus {
   if (completed) return "completed";
   if (!info) return "not-started";
   const { watched, aired } = seriesProgress(info, ticks, false);
   if (watched === 0) return "not-started";
   return aired > 0 && watched >= aired ? "caught-up" : "watching";
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+//  Ticking, as the page shows it at once (the database, in mark_episodes(), makes it so)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** One ticked episode: the day, and the person's own score and note for it. */
+export interface EpisodeLog {
+  on: string;
+  score: number | null;
+  comment: string | null;
+}
+
+/** A series entry's episodes as the page keeps them: the ticks by episodeKey(), and whether it is marked Watched. */
+export interface EpisodeState {
+  ticks: ReadonlyMap<string, EpisodeLog>;
+  completed: boolean;
+}
+
+/** The listed episodes from one to another, both included, in order (`to` may run past a season's end: it stops there). */
+export function episodesBetween(info: SeriesInfo, from: EpisodeRef, to: EpisodeRef): EpisodeRef[] {
+  const found: EpisodeRef[] = [];
+  for (const season of info.seasons) {
+    if (season.n < from.s || season.n > to.s) continue;
+    const first = season.n === from.s ? from.e : 1;
+    const last = Math.min(season.n === to.s ? to.e : season.episodes, season.episodes);
+    for (let e = first; e <= last; e++) found.push({ s: season.n, e });
+  }
+  return found;
+}
+
+/** Every episode that has aired, in order. */
+export function airedEpisodes(info: SeriesInfo): EpisodeRef[] {
+  return info.seasons.flatMap((season) =>
+    Array.from({ length: airedIn(info, season.n) }, (_, i) => ({ s: season.n, e: i + 1 })),
+  );
+}
+
+/** Whether an episode shows as watched: ticked, or part of a series marked Watched (once it has aired). */
+export function isTicked(info: SeriesInfo, state: EpisodeState, season: number, episode: number): boolean {
+  if (state.completed) return episode <= airedIn(info, season);
+  return state.ticks.has(episodeKey(season, episode));
+}
+
+/**
+ * What ticking (or unticking) a range does, the way mark_episodes() does it: only aired episodes get ticked, ticking the
+ * last aired episode of a series that has ended completes it, and unticking on a completed series first ticks every aired
+ * episode, then takes the range off and reopens it. Unticking takes the episodes' scores and notes with them.
+ */
+export function applyMark(
+  info: SeriesInfo,
+  state: EpisodeState,
+  mark: { watched: boolean; from: EpisodeRef; to: EpisodeRef; on: string },
+): EpisodeState {
+  const range = episodesBetween(info, mark.from, mark.to);
+  const ticks = new Map(state.ticks);
+  let completed = state.completed;
+
+  if (mark.watched) {
+    for (const { s, e } of range) {
+      if (e <= airedIn(info, s) && !ticks.has(episodeKey(s, e))) ticks.set(episodeKey(s, e), { on: mark.on, score: null, comment: null });
+    }
+    if (!completed && isFinished(info)) {
+      const aired = airedEpisodes(info);
+      completed = aired.length > 0 && aired.every(({ s, e }) => ticks.has(episodeKey(s, e)));
+    }
+  } else {
+    if (completed && range.some(({ s, e }) => e <= airedIn(info, s))) {
+      for (const { s, e } of airedEpisodes(info)) {
+        if (!ticks.has(episodeKey(s, e))) ticks.set(episodeKey(s, e), { on: mark.on, score: null, comment: null });
+      }
+      completed = false;
+    }
+    for (const { s, e } of range) ticks.delete(episodeKey(s, e));
+  }
+  return { ticks, completed };
 }

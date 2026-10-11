@@ -14,6 +14,18 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   and Watched tabs. **Mark as watched** on a title's page puts it straight on
   My list as watched. Every list can be filtered by release date (2020s,
   1990s, ...) and category (genre, movies or series).
+- **Series, episode by episode**: a series is one title on My list, and its page
+  lists its seasons and episodes (from TMDB). Tick the episodes you have
+  watched one by one, a whole season, or everything up to an episode, or tap
+  **Watched S2E5** for the next one. The page says where you are: Not started,
+  Watching, Caught up (a show that is still airing, with everything that has
+  aired ticked) or Completed. Only episodes that have aired can be ticked.
+  Ticking the last aired episode of a show that has ended makes it Watched and
+  asks how it was; **Mark as watched** marks a whole series without rewriting
+  your ticks (so un-marking brings them back), and a series marked watched
+  shows every episode as watched until you untick one. Ticking an episode puts
+  the series on My list. Your ticks are private, like My list: family lists
+  keep a series as one title, with no episodes.
 - **Browse and add**: search, browse trending and top rated titles, or pick a
   category (Comedy, Horror, Kids, ...) and decade. Trailers play from YouTube
   only once you press play.

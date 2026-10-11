@@ -406,7 +406,8 @@ export async function getMediaDetails(
   const raw = await tmdbFetch<RawDetails>(
     `/${mediaType}/${tmdbId}`,
     { append_to_response: "videos" },
-    86_400,
+    // A series gains episodes as it airs, so what is known of it is kept for less time than a movie's.
+    mediaType === "tv" ? 3600 : 86_400,
   );
 
   const base = normalize({ ...raw, media_type: mediaType });
@@ -430,6 +431,42 @@ export async function getMediaDetails(
     trailerKey: trailer?.key ?? null,
     series: mediaType === "tv" ? seriesFromTmdb(raw) : null,
   };
+}
+
+/** One episode of a season, as the series page lists it. */
+export interface TmdbEpisode {
+  number: number;
+  name: string;
+  /** YYYY-MM-DD, or null when TMDB has no date yet. */
+  airDate: string | null;
+  runtime: number | null;
+  overview: string;
+  stillPath: string | null;
+}
+
+interface RawEpisode {
+  episode_number?: number;
+  name?: string;
+  air_date?: string | null;
+  runtime?: number | null;
+  overview?: string;
+  still_path?: string | null;
+}
+
+/** The episodes of one season of a series, in order (cached for an hour: an airing show gains episodes). */
+export async function getSeasonEpisodes(tmdbId: number, season: number): Promise<TmdbEpisode[]> {
+  const raw = await tmdbFetch<{ episodes?: RawEpisode[] }>(`/tv/${tmdbId}/season/${season}`, {}, 3600);
+  return (raw.episodes ?? [])
+    .filter((e): e is RawEpisode & { episode_number: number } => Number.isInteger(e.episode_number) && (e.episode_number ?? 0) >= 1)
+    .map((e) => ({
+      number: e.episode_number,
+      name: e.name?.trim() || `Episode ${e.episode_number}`,
+      airDate: typeof e.air_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.air_date) ? e.air_date : null,
+      runtime: typeof e.runtime === "number" && e.runtime > 0 ? e.runtime : null,
+      overview: e.overview?.trim() ?? "",
+      stillPath: e.still_path ?? null,
+    }))
+    .sort((a, b) => a.number - b.number);
 }
 
 /** Map TMDB details into a row for our `media` cache table. */
