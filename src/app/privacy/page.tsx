@@ -115,9 +115,9 @@ export default function PrivacyPage() {
               The Movie Database (TMDB)
             </strong>{" "}
             supplies movie and series information. FamFlix never tells TMDB who
-            you are, but posters and pictures load straight from TMDB&apos;s
-            servers, which see your device&apos;s IP address like any site
-            you load pictures from.
+            you are, but posters, cast photos and other pictures load straight
+            from TMDB&apos;s servers, which see your device&apos;s IP address
+            like any site you load pictures from.
           </li>
           <li>
             <strong className="text-foreground">YouTube</strong> plays trailers.

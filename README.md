@@ -45,6 +45,11 @@ thought of them. Live at <https://famflix.andreicovaciu.dev>.
   them by type (movies or series), decade and category (Comedy, Horror, Kids,
   ...); the filters work together, and only offer the categories the chosen type
   has. Trailers play from YouTube only once you press play.
+- **A title's page**: besides the poster, score and trailer it shows the age
+  rating (the American one, else the British one), who directed it or created
+  it, the top-billed cast with their photos, the other films of its collection
+  and **More like this** (TMDB's recommendations, with the lists a title is on
+  and an Add button). Whatever TMDB doesn't know is left out.
 - **Scores and reactions**: rate 1–10 with one decimal (8.5) using a slider,
   and add a note. Marking a title watched asks for both right away. A score
   over 7 also likes the title and under 6 dislikes it; you can still change the

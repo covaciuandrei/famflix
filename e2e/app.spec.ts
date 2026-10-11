@@ -104,7 +104,7 @@ test("a series is saved with its seasons, a movie without", async ({ page, conte
 
   // Chernobyl: one season of five episodes, ended.
   await page.goto("/app/media/tv/87108");
-  await expect(page.getByRole("heading", { name: "Chernobyl" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Chernobyl", level: 1 })).toBeVisible();
   await addTo(page, page, "My list");
   await expect(page.getByRole("img", { name: /On My list/ })).toBeVisible();
   const series = await admin.from("media").select("series").eq("tmdb_id", 87108).eq("media_type", "tv").single();
@@ -127,7 +127,7 @@ test("mark a title watched from its page, with a score and a note", async ({ pag
   await signIn(context, ana);
 
   await page.goto("/app/media/movie/438631");
-  await expect(page.getByRole("heading", { name: "Dune" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dune", level: 1 })).toBeVisible();
   // No streaming services, and the trailer waits for a click before loading YouTube.
   await expect(page.getByText("Where to watch")).toHaveCount(0);
   await expect(page.locator("iframe")).toHaveCount(0);

@@ -78,10 +78,11 @@ export async function signIn(context: BrowserContext, user: TestUser) {
 
 /**
  * Adds a title to a list: "Add to…" opens a menu (a sheet on phones) to pick the list; someone without a
- * family only has My list, so their button just says "Add".
+ * family only has My list, so their button just says "Add". On a title's page the first one is the title's own
+ * (the rows of similar titles below it have an Add button each).
  */
 export async function addTo(page: Page, scope: Locator | Page, listName: string) {
-  const button = scope.getByRole("button", { name: /^(Add to…|Add)$/ });
+  const button = scope.getByRole("button", { name: /^(Add to…|Add)$/ }).first();
   await expect(button).toBeVisible();
   const opensMenu = (await button.textContent())?.trim() === "Add to…";
   await button.click();

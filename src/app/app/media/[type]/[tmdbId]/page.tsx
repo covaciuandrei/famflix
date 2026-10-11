@@ -6,9 +6,13 @@ import { AddToListButton } from "@/components/add-to-list-button";
 import { ListBadges, SeenBy } from "@/components/library-badges";
 import { MarkWatchedButton } from "@/components/mark-watched-button";
 import { MediaPoster } from "@/components/media-poster";
+import { MediaRow } from "@/components/media-row";
 import { WatchAgain } from "@/components/rewatch/watch-again";
 import { WatchedBefore } from "@/components/rewatch/watched-before";
 import { EpisodeTracker } from "@/components/series/episode-tracker";
+import { AgeBadge } from "@/components/title/age-badge";
+import { CastRow } from "@/components/title/cast-row";
+import { CrewLine } from "@/components/title/crew-line";
 import { Trailer } from "@/components/trailer";
 import { Badge } from "@/components/ui/badge";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
@@ -24,7 +28,7 @@ import {
 import { tmdbImage } from "@/lib/images";
 import { myViewings } from "@/lib/rewatch";
 import { episodeKey, seasonToOpen } from "@/lib/series";
-import { getMediaDetails, getSeasonEpisodes, TmdbError } from "@/lib/tmdb";
+import { getCollection, getMediaDetails, getSeasonEpisodes, TmdbError } from "@/lib/tmdb";
 import type { MediaType } from "@/lib/types";
 
 export default async function MediaDetailPage({
@@ -46,9 +50,8 @@ export default async function MediaDetailPage({
     { id: null, label: "My list" },
     ...groups.map((g) => ({ id: g.id, label: g.name })),
   ];
-  const library = (await getLibraryIndex(user.id, groups, { seenBy: true }))[
-    libraryKey(mediaType, id)
-  ];
+  const index = await getLibraryIndex(user.id, groups, { seenBy: true });
+  const library = index[libraryKey(mediaType, id)];
   const onMyList = library?.lists.find((l) => l.listId === null);
   const [myRating, viewings] = await Promise.all([
     onMyList ? getMyRating(onMyList.itemId, user.id) : null,
@@ -61,11 +64,16 @@ export default async function MediaDetailPage({
   ]);
 
   // Only a TMDB 404 means "no such title"; anything else goes to the error page.
-  const details = await getMediaDetails(mediaType, id).catch((e) => {
+  const details = await getMediaDetails(mediaType, id, { extras: true }).catch((e) => {
     if (e instanceof TmdbError && e.status === 404) return null;
     throw e;
   });
   if (!details) notFound();
+  const { extras } = details;
+
+  // The other films of the collection a film belongs to; a collection TMDB can't give just hides the row.
+  const collection = extras.collection ? await getCollection(extras.collection.id).catch(() => null) : null;
+  const otherFilms = collection?.items.filter((film) => film.tmdbId !== id) ?? [];
 
   // A series is watched again by episode (its tracker below), so only a movie, or a series without episodes, gets this.
   const again = details.series ? null : myViewings(viewings.current, viewings.earlier);
@@ -154,6 +162,10 @@ export default async function MediaDetailPage({
                     {details.voteAverage.toFixed(1)}/10
                   </span>
                 )}
+                <AgeBadge certification={extras.certification} />
+              </div>
+              <div className="mt-2">
+                <CrewLine credit={extras.credit} />
               </div>
             </div>
 
@@ -219,6 +231,19 @@ export default async function MediaDetailPage({
           backdrop={tmdbImage(details.backdropPath, "w780")}
         />
       )}
+
+      <CastRow cast={extras.cast} />
+
+      {collection && (
+        <MediaRow
+          title={`Other films in the ${collection.name || "collection"}`}
+          items={otherFilms}
+          targets={targets}
+          library={index}
+        />
+      )}
+
+      <MediaRow title="More like this" items={extras.similar} targets={targets} library={index} />
     </div>
   );
 }
