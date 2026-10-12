@@ -250,6 +250,7 @@ Per-person limits, kept in the database so every server instance shares them:
 | --- | --- |
 | Add a title, search | 30 and 60 a minute |
 | Open a series' seasons, tick episodes | 120 and 180 a minute |
+| Open a title's page, open a Discover stack | 120 a minute, 40 an hour |
 | Try invite codes, create families | 10 per 10 minutes, 10 an hour |
 | Start a family movie night, build another stack | 6 and 10 an hour |
 | Plan a night, answer a plan | 10 and 60 an hour |

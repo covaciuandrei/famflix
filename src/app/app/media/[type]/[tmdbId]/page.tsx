@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, Star } from "lucide-react";
+import { ArrowLeft, Clock, Star, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -15,6 +15,7 @@ import { CastRow } from "@/components/title/cast-row";
 import { CrewLine } from "@/components/title/crew-line";
 import { Trailer } from "@/components/trailer";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { libraryKey, mediaTypeLabel } from "@/lib/constants";
 import {
   getEpisodeHistory,
@@ -26,6 +27,7 @@ import {
   getSessionProfile,
 } from "@/lib/data";
 import { tmdbImage } from "@/lib/images";
+import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { myViewings } from "@/lib/rewatch";
 import { episodeKey, seasonToOpen } from "@/lib/series";
 import { getCollection, getMediaDetails, getSeasonEpisodes, TmdbError } from "@/lib/tmdb";
@@ -39,11 +41,26 @@ export default async function MediaDetailPage({
   const { type, tmdbId } = await params;
   if (type !== "movie" && type !== "tv") notFound();
   const mediaType = type as MediaType;
+  // Digits only, like the season route: nothing else is a TMDB id.
+  if (!/^\d{1,9}$/.test(tmdbId)) notFound();
   const id = Number(tmdbId);
-  if (!Number.isFinite(id)) notFound();
 
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
+
+  // Each view can cost TMDB calls, and the address works for any id, so it is counted.
+  const limited = await overRateLimit(user.id, LIMITS.titleView);
+  if (limited) {
+    return (
+      <div role="alert" className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
+        <TriangleAlert className="size-10 text-destructive" />
+        <p className="text-sm text-muted-foreground">{limited}</p>
+        <Link href="/app/browse" className={buttonVariants()}>
+          Back to browse
+        </Link>
+      </div>
+    );
+  }
 
   const groups = await getMyGroups();
   const targets = [

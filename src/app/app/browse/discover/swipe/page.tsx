@@ -8,6 +8,7 @@ import { getSessionProfile } from "@/lib/data";
 import { buildDiscoverDeck } from "@/lib/deck";
 import { findGenre } from "@/lib/genres";
 import { parseMood } from "@/lib/movie-night";
+import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
@@ -33,7 +34,9 @@ export default async function DiscoverSwipePage({
     max: first(params.max),
   });
 
-  const result = await buildDiscoverDeck({ userId: user.id, mood, seed });
+  // Starting a stack is counted (startDiscover), but the address works for any seed, so loading it is counted too.
+  const limited = await overRateLimit(user.id, LIMITS.deckView);
+  const result = limited ? { error: limited } : await buildDiscoverDeck({ userId: user.id, mood, seed });
   if ("error" in result) {
     return (
       <div

@@ -12,6 +12,12 @@ export const LIMITS = {
   season: { action: "season", max: 120, seconds: 60 },
   /** Building a stack to swipe (Discover, a new movie night, or more suggestions): each one asks TMDB for dozens of titles. */
   deck: { action: "deck", max: 12, seconds: 3600 },
+  /** Opening a Discover stack's address: the stack is built again on every load, and the seed in the address can be anything. */
+  deckView: { action: "deck_view", max: 40, seconds: 3600 },
+  /** Opening a title's page (up to three TMDB calls when the title isn't cached yet). */
+  titleView: { action: "title_view", max: 120, seconds: 60 },
+  /** Looking a series up to tick its episodes (each asks TMDB, and saves the series when it isn't stored yet). */
+  series: { action: "series", max: 180, seconds: 60 },
 } as const;
 
 /**

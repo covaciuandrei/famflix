@@ -57,6 +57,8 @@ async function mySeries(
   put: boolean,
 ): Promise<{ itemId: string | null } | { error: string }> {
   if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0) return { error: "That isn't a valid series." };
+  const lookupLimited = await overRateLimit(userId, LIMITS.series);
+  if (lookupLimited) return { error: lookupLimited };
 
   let details;
   try {
