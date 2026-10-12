@@ -620,7 +620,7 @@ YAML is a structured configuration format where indentation matters.
 | `on: push`, branch `main` | Publish production when commits are pushed to `main` |
 | Pull-request opened/synchronize/reopened events | Build/deploy a preview when a proposed change is created or updated |
 | Pull-request closed event | Run a separate job to close its preview |
-| `test` job | Lint, type-check, the database tests (against a `postgres:17` service container) and the browser tests (against a throwaway Supabase in Docker); see the README's Tests section |
+| `test` job | Lint, type-check, the database tests (against a `postgres:17` service container) and the browser tests (against a throwaway Supabase in Docker); see the README's Testing section |
 | `needs: test` | The deploy job only runs when the tests pass |
 | `runs-on: ubuntu-latest` | GitHub supplies a temporary Linux machine for the job |
 | `actions/checkout@v4` | Downloads the repository files onto that machine |
