@@ -6,6 +6,22 @@ export function initials(name: string | null | undefined): string {
   return parts.map((p) => p.charAt(0).toUpperCase()).join("") || "?";
 }
 
+/**
+ * A profile photo worth loading: Google's own (https, on googleusercontent.com), which is what signing in gives
+ * everybody. Any other address would send other people's browsers to a server they didn't choose, so it shows the
+ * initials instead.
+ */
+export function safeAvatarUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const { protocol, hostname, href } = new URL(url);
+    const google = hostname === "googleusercontent.com" || hostname.endsWith(".googleusercontent.com");
+    return protocol === "https:" && google ? href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function formatScore(score: number | null | undefined): string {
   if (score === null || score === undefined) return "–";
   return Number.isInteger(score) ? String(score) : score.toFixed(1);

@@ -573,10 +573,10 @@ alter table public.movie_night_plans          enable row level security;
 alter table public.movie_night_plan_rsvps     enable row level security;
 
 -- profiles ------------------------------------------------------------------
+-- No insert policy: a profile is made by handle_new_user() when someone first signs in. They may update their own row,
+-- but the only column granted to them is the display name (see the grants at the end of this file).
 create policy profiles_select on public.profiles for select
   using (id = (select auth.uid()) or public.shares_group((select auth.uid()), id));
-create policy profiles_insert_self on public.profiles for insert
-  with check (id = (select auth.uid()));
 create policy profiles_update_self on public.profiles for update
   using (id = (select auth.uid())) with check (id = (select auth.uid()));
 
@@ -4170,7 +4170,9 @@ grant select on
   to authenticated;
 -- They write straight to a table only where the security rules allow it (their own rows); everything else goes
 -- through the functions below, so the feed, the movie nights and the rate limits can't be faked.
-grant insert, update on public.profiles to authenticated;
+-- A profile is made at sign-up and its photo is Google's, which other people's browsers load: the only column people
+-- may change on it is their own display name.
+grant update (display_name) on public.profiles to authenticated;
 grant insert, update, delete on public.ratings, public.reactions to authenticated;
 -- A list item's list, movie and author are fixed once it's added; afterwards people only mark it watched or
 -- remove/restore it (the database fills in who removed it and when).

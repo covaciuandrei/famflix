@@ -1,4 +1,4 @@
-import { initials } from "@/lib/format";
+import { initials, safeAvatarUrl } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function Avatar({
@@ -10,11 +10,12 @@ export function Avatar({
   url?: string | null;
   className?: string;
 }) {
-  if (url) {
+  const src = safeAvatarUrl(url);
+  if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={url}
+        src={src}
         alt={name ?? "avatar"}
         // Google answers 429 instead of the photo when the request carries our page as referrer.
         referrerPolicy="no-referrer"

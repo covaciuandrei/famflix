@@ -38,7 +38,7 @@ select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relnam
     'movie_night_candidates:select', 'movie_night_finishes:select', 'movie_night_members:select',
     'movie_night_plan_rsvps:select', 'movie_night_plans:select',
     'movie_night_stacks:select', 'movie_night_votes:select', 'movie_nights:select',
-    'profiles:select', 'profiles:insert', 'profiles:update',
+    'profiles:select',
     'ratings:select', 'ratings:insert', 'ratings:update', 'ratings:delete',
     'reactions:select', 'reactions:insert', 'reactions:update', 'reactions:delete',
     'watch_history:select', 'watches:select', 'watches:delete']) x),
@@ -52,6 +52,7 @@ select test.expect_eq((select array_agg(c.relname || '.' || a.attname || ':' || 
   (select array_agg(x order by x collate "C") from unnest(array[
     'list_items.group_id:insert', 'list_items.added_by:insert', 'list_items.media_id:insert', 'list_items.status:insert',
     'list_items.status:update', 'list_items.watched_at:update', 'list_items.deleted_at:update',
+    'profiles.display_name:update',
     'watches.skipped_at:update']) x),
   'and only these columns where a table is not open to writes');
 select test.expect_eq((select array_agg(p.proname::text order by p.proname::text collate "C") from pg_proc p
