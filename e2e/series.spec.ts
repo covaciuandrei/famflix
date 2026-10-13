@@ -220,6 +220,8 @@ test("a series on My list shows how far you are, with a button for the next epis
   const episodes = page.getByRole("region", { name: "Episodes" });
   await episodes.getByRole("button", { name: "Watched S1E1" }).click();
   await expect(episodes.getByText("1 of 5 aired episodes watched")).toBeVisible();
+  // The tick shows at once and is saved a moment later: leaving the page before that would lose it.
+  await expect.poll(async () => (await myChernobyl(ana)).ticks).toBe("1:1");
   await page.goto("/app/mine");
   await expect(page.getByRole("button", { name: /^To watch 0$/ })).toBeVisible();
   await page.getByRole("button", { name: /^Watching 1$/ }).click();
