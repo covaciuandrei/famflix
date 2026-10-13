@@ -1,6 +1,7 @@
 import { User } from "lucide-react";
 import Image from "next/image";
 
+import { Carousel } from "@/components/carousel";
 import { tmdbImage } from "@/lib/images";
 import type { CastMember } from "@/lib/title-details";
 
@@ -12,7 +13,7 @@ export function CastRow({ cast }: { cast: CastMember[] }) {
       <h2 id="cast-title" className="text-lg font-semibold">
         Cast
       </h2>
-      <ul className="no-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+      <Carousel label="Cast" arrowClassName="top-10 sm:top-12">
         {cast.map((person) => {
           const photo = tmdbImage(person.profilePath, "w185");
           return (
@@ -34,7 +35,7 @@ export function CastRow({ cast }: { cast: CastMember[] }) {
             </li>
           );
         })}
-      </ul>
+      </Carousel>
     </section>
   );
 }

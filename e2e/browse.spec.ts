@@ -98,3 +98,74 @@ test("the rows of what you liked follow the type", async ({ page, context }) => 
   await expect(heading(page, "Because you liked Chernobyl")).toBeVisible();
   await expect(heading(page, "Because you liked The Matrix")).toHaveCount(0);
 });
+
+test("a row of titles scrolls with arrows for a mouse, which has no scrollbar to drag, and a phone swipes it", async ({ page, context }, testInfo) => {
+  await signIn(context, await createUser("Tess"));
+  await page.goto("/app/browse");
+
+  const title = "Trending this week";
+  const row = page.locator("section", { has: heading(page, title) });
+  const list = row.getByRole("list").first();
+  const cards = list.getByRole("listitem");
+  const next = row.getByRole("button", { name: `Next in ${title}` });
+  const back = row.getByRole("button", { name: `Previous in ${title}` });
+  const scrolled = () => list.evaluate((el) => el.scrollLeft);
+
+  // More cards than fit, so there is something to scroll to.
+  await expect(cards.first()).toBeVisible();
+  expect(await list.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+
+  if (testInfo.project.name !== "desktop") {
+    // Swiping moves a phone along a row; the arrows would only cover the cards.
+    const arrows = row.getByRole("button", { name: /^(Next|Previous) in /, includeHidden: true });
+    await expect(arrows).toHaveCount(2);
+    await expect(arrows.first()).toHaveCSS("display", "none");
+    await expect(arrows.last()).toHaveCSS("display", "none");
+    return;
+  }
+
+  // A click scrolls smoothly: it is done once the row has moved and then stopped.
+  const press = async (arrow: Locator) => {
+    const from = await scrolled();
+    await arrow.click();
+    let before = from;
+    await expect
+      .poll(async () => {
+        const now = await scrolled();
+        const done = now !== from && now === before;
+        before = now;
+        return done;
+      })
+      .toBe(true);
+  };
+  const inView = async (card: Locator) => {
+    const [at, view] = [(await card.boundingBox())!, (await list.boundingBox())!];
+    return at.x >= view.x - 1 && at.x + at.width <= view.x + view.width + 1;
+  };
+
+  // At the start there is only a way forward.
+  await expect(next).toBeVisible();
+  await expect(back).toBeHidden();
+  expect(await scrolled()).toBe(0);
+  expect(await inView(cards.last())).toBe(false);
+
+  // Next moves along, and then there is a way back too.
+  await press(next);
+  expect(await scrolled()).toBeGreaterThan(300);
+  expect(await inView(cards.first())).toBe(false);
+  await expect(back).toBeVisible();
+  await expect(next).toBeVisible();
+
+  // Going on reaches the last card, where Next is gone.
+  for (let clicks = 0; clicks < 10 && !(await inView(cards.last())); clicks++) await press(next);
+  expect(await inView(cards.last())).toBe(true);
+  await expect(next).toBeHidden();
+  await expect(back).toBeVisible();
+
+  // And Previous goes all the way back to the first card, where it is gone.
+  for (let clicks = 0; clicks < 10 && (await scrolled()) > 1; clicks++) await press(back);
+  expect(await scrolled()).toBe(0);
+  expect(await inView(cards.first())).toBe(true);
+  await expect(back).toBeHidden();
+  await expect(next).toBeVisible();
+});

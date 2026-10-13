@@ -108,7 +108,7 @@ export async function setSlider(slider: Locator, value: number) {
 export function firstCard(page: Page, row: string): Locator {
   return page
     .locator("section", { has: page.getByRole("heading", { name: row, exact: true }) })
-    .locator(":scope > div > div")
+    .getByRole("listitem")
     .first();
 }
 

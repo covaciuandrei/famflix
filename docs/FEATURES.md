@@ -36,8 +36,11 @@ See what happened in each family; removed titles can be restored for 30 days.
 
 Search, browse trending and top rated titles, or filter them by type (movies or
 series), decade and category (Comedy, Horror, Kids, ...); the filters work
-together, and only offer the categories the chosen type has. Trailers play from
-YouTube only once you press play.
+together, and only offer the categories the chosen type has. A row of titles
+scrolls sideways: swipe it on a phone, or use the arrows at its edges with a
+mouse (they show only while there is more to see that way, and the cast and
+similar titles on a title's page work the same). Trailers play from YouTube only
+once you press play.
 
 ### A title's page
 
