@@ -25,7 +25,7 @@ FamFlix ends the "what shall we watch?" discussion. Everyone has a private **My 
 a group of friends) has a shared list, and when nobody can decide a **movie night** puts the same stack of
 suggestions in front of everyone: swipe, watch the leaderboard fill up, pick the winner.
 
-It is built to be run for real: Google sign-in, a database that enforces its own security rules, more than 1,400
+It is built to be run for real: Google sign-in, a database that enforces its own security rules, more than 1,600
 database checks and 40+ browser scenarios on every push, and a free-tier deployment on Azure.
 
 ## Features
@@ -33,7 +33,7 @@ database checks and 40+ browser scenarios on every push, and a free-tier deploym
 | Feature | What you get |
 | --- | --- |
 | **Family and personal lists** | A private *My list* plus a shared list per family, joined with an invite code that expires. Filter by type, decade and category. |
-| **Movie night** | Pick a mood and everyone swipes the same stack (the family's To watch plus TMDB suggestions). A leaderboard decides. Guests can vote from a link, with no account. |
+| **Movie night** | Pick a mood and everyone swipes the same stack (the family's To watch plus TMDB suggestions). A leaderboard decides. Guests can vote from a link, with no account. A night can be edited (who watched, and when) or deleted afterwards. |
 | **Plan ahead** | Schedule a night, collect Going / Maybe / Can't answers and get reminders in the app. |
 | **Watched together** | Log who was there. Everyone confirms their own score, and the title lands on each person's My list. |
 | **Series, episode by episode** | Tick episodes or whole seasons, score each one, see Watching, Caught up or Completed. |
@@ -254,6 +254,7 @@ Per-person limits, kept in the database so every server instance shares them:
 | Try invite codes, create families | 10 per 10 minutes, 10 an hour |
 | Start a family movie night, build another stack | 6 and 10 an hour |
 | Plan a night, answer a plan | 10 and 60 an hour |
+| Edit a movie night, delete one | 60 and 30 an hour |
 | Download your data | 5 an hour |
 
 Names and notes are at most 250 characters, and each family's feed keeps its latest 500 events.
@@ -350,8 +351,8 @@ Open <http://localhost:3000>, continue with Google, then create a family or join
 | Suite | Command | What it covers | Needs |
 | --- | --- | --- | --- |
 | Unit | `npm run test:unit` | The pure logic in [`unit/`](unit): stacks and moods, genres, series progress, watch-again counting, the CSV download, stats, reminder windows. 200+ tests. | Node.js |
-| Database | `npm run test:db` | [`supabase/tests/`](supabase/tests): security rules, who may call which table and function, families, scores, limits, account deletion, that a download has everything of yours and nothing of anyone else's, movie nights, guests, plans, stats. 1,400+ checks. | PostgreSQL 17 |
-| Browser | `npm run test:e2e` | [`e2e/`](e2e): signing in, lists, watched together, watching again, movie nights from the invite to the pick, guests joining with a link, plans and reminders, stats, downloading your data, deleting an account. 40+ scenarios, each on a desktop-sized and a phone-sized screen. | Docker |
+| Database | `npm run test:db` | [`supabase/tests/`](supabase/tests): security rules, who may call which table and function, families, scores, limits, account deletion, that a download has everything of yours and nothing of anyone else's, movie nights, editing and deleting them, guests, plans, stats. 1,600+ checks. | PostgreSQL 17 |
+| Browser | `npm run test:e2e` | [`e2e/`](e2e): signing in, lists, watched together, watching again, movie nights from the invite to the pick, changing or deleting a night afterwards, guests joining with a link, plans and reminders, stats, downloading your data, deleting an account. 40+ scenarios, each on a desktop-sized and a phone-sized screen. | Docker |
 
 - The database tests build a throwaway database from `db_init.sql` **twice**: with Supabase's older defaults (new
   tables and functions are handed to the API roles) and its newer ones (nothing is). Both must pass. Install

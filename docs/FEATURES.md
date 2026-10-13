@@ -6,7 +6,7 @@ to run it, see the [README](../README.md).
 - [Lists](#lists): [family lists](#family-lists), [My list](#my-list), [activity feed](#activity-feed)
 - [Finding titles](#finding-titles): [browse and add](#browse-and-add), [a title's page](#a-titles-page), [Discover](#discover)
 - [Tracking what you watch](#tracking-what-you-watch): [scores and reactions](#scores-and-reactions), [watched together](#watched-together), [watch again](#watch-again), [series by episode](#series-episode-by-episode)
-- [Movie night](#movie-night): [the night](#the-night), [guests](#guests), [plan a night](#plan-a-movie-night)
+- [Movie night](#movie-night): [the night](#the-night), [edit or delete a night](#edit-or-delete-a-night), [guests](#guests), [plan a night](#plan-a-movie-night)
 - [Insights](#insights): [family stats](#family-stats), [your year](#your-year)
 - [The app and your data](#the-app-and-your-data)
 
@@ -151,10 +151,45 @@ watched together doesn't make a night in the history).
 - A night closes by itself after 12 hours without activity. The page lists every
   night of the family you chose (the first one until you pick another) with its
   status (in progress, finished, cancelled or expired), the ones in progress
-  first; nothing is ever deleted from it. Without a family the page points to
+  first; each one opens its own page. Without a family the page points to
   creating or joining one, and to Discover for swiping on your own. The old
   shuffle of what's left to watch is still there under "Browse your To watch
   list".
+
+### Edit or delete a night
+
+Forgot to tick someone, or ticked the wrong day? Open the night from the
+family's list (a night that is over opens its page) and use its menu.
+
+- **Edit who watched** is for any member of the family, on a night that picked
+  a title (a pick, or a Watched together log). Tick someone who was left out
+  and the title goes on their My list as watched and they are asked how they
+  liked it; untick someone and it comes off their My list; change the day and
+  everyone's My list follows. It needs one person at least, and the day can't be
+  in the future or before an earlier viewing of the title.
+- People who rated the title, left a note on it or reacted to it themselves stay
+  ticked: only they can take themselves off it ("I wasn't there" on the family
+  list), so nobody can wipe out another person's score or note. If someone else
+  changed the night while the window was open, nothing is saved and the page
+  reads it again.
+- **Delete movie night** is for the family's owner and for whoever started or
+  ended the night; a night still going is cancelled first. It removes the night
+  from the history for everyone, with its votes, guests and guest link. The title,
+  its viewing and everyone's My list stay as they are. Tick **Also put the title
+  back on To watch** to take it off Watched together too, which works while the
+  night is the title's latest viewing and nobody on it has rated, noted or reacted to it.
+  A plan that started the night stays started. A night whose starter has since
+  deleted their account can be deleted by the family's owner only.
+- A night can't be edited (but can be deleted) when it isn't unmistakably the
+  title's current viewing: the title was put back on the list to watch again
+  since, it was removed from the family list, another night picked it on the same
+  day, people were logged on different days, or the night no longer lists the
+  same people as the title's record, as with an older night left behind when the
+  same people were logged again later. A night recorded for a title, by logging
+  it or by picking it, lists everyone on the title's record for that day. The
+  feed gets a line for every edit and deletion (the name of someone who deletes
+  their account leaves it), and one person can make 60 edits and 30 deletions
+  an hour.
 
 ### Guests
 

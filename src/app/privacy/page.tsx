@@ -44,9 +44,10 @@ export default function PrivacyPage() {
             <strong className="text-foreground">Movie nights:</strong> when a
             family starts a movie night, the titles it shows, who took part,
             how each person voted (nope, yes, love or seen it) and what was
-            picked. Every night stays in the family&apos;s history. Swiping on
-            your own (Discover) stores nothing except the titles you put on My
-            list.
+            picked. A night stays in the family&apos;s history until the
+            family&apos;s owner, or whoever started or ended it, deletes it.
+            Swiping on your own (Discover) stores nothing except the titles
+            you put on My list.
           </li>
           <li>
             <strong className="text-foreground">Planned movie nights:</strong>{" "}
@@ -180,8 +181,8 @@ export default function PrivacyPage() {
           at once, and any member of the family can take a guest out while the
           night is going. Once a night is over, a guest&apos;s name and votes
           stay with it in the family&apos;s history, until the night or the
-          family is deleted; to have them removed sooner, write to{" "}
-          <ContactLink />.
+          family is deleted (the family&apos;s owner can delete a night); to
+          have them removed sooner, write to <ContactLink />.
         </p>
       </Section>
 
