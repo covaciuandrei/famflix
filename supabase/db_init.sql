@@ -793,12 +793,13 @@ begin
   update public.activity set subject_id = null, subject_name = null
   where subject_id = old.id;
   if coalesce(old.display_name, '') <> '' then
+    -- The lines that list everyone who watched: a title logged as watched together, and a movie night edited since.
     update public.activity
     set detail = array_to_string(array(
           select case when n = old.display_name then 'someone' else n end
           from unnest(string_to_array(detail, ', ')) as n
         ), ', ')
-    where kind = 'watched_together'
+    where kind in ('watched_together', 'movie_night_edited')
       and old.display_name = any (string_to_array(detail, ', '));
   end if;
 
@@ -1084,6 +1085,15 @@ begin
     raise exception 'Pick at least one person who watched it';
   end if;
 
+  -- The title first, then the people on its record: the order update_movie_night(), delete_movie_night() and
+  -- watch_again() lock them in too, so none of them can end up waiting on another. (Someone taking themselves off a watch
+  -- locks their own row and then needs the title, the other way round: if that happens for the same title at the same
+  -- moment as one of these, the database stops one of them with a deadlock error, and doing it again works.)
+  perform 1 from public.list_items where id = p_item and deleted_at is null for update;
+  if not found then
+    raise exception 'This title is not on one of your family lists';
+  end if;
+
   for v in
     select x.user_id, round(x.score, 1) as score
     from jsonb_to_recordset(p_viewers) as x(user_id uuid, score numeric)
@@ -1202,16 +1212,19 @@ begin
 
   -- The movie night history follows: that person didn't watch it after all, and a "logged" night nobody is left
   -- on never happened. Not the nights of a viewing they have in their history (the title was watched again since):
-  -- they were there, and those stay as they are.
-  update public.movie_night_members m
-  set watched = false
-  from public.movie_nights n
-  where n.id = m.night_id and n.picked_list_item_id = old.list_item_id and m.user_id = old.user_id
-    and not exists (select 1 from public.watch_history h
-                    where h.user_id = old.user_id and h.media_id = n.picked_media_id and h.watched_on = n.happened_on);
-  delete from public.movie_nights n
-  where n.source = 'logged' and n.picked_list_item_id = old.list_item_id
-    and not exists (select 1 from public.movie_night_members m where m.night_id = n.id and m.watched);
+  -- they were there, and those stay as they are. Not while editing or deleting one night either (update_movie_night(),
+  -- delete_movie_night()): they handle that night themselves, and no other night of the title may change with it.
+  if current_setting('famflix.editing_night', true) is distinct from 'on' then
+    update public.movie_night_members m
+    set watched = false
+    from public.movie_nights n
+    where n.id = m.night_id and n.picked_list_item_id = old.list_item_id and m.user_id = old.user_id
+      and not exists (select 1 from public.watch_history h
+                      where h.user_id = old.user_id and h.media_id = n.picked_media_id and h.watched_on = n.happened_on);
+    delete from public.movie_nights n
+    where n.source = 'logged' and n.picked_list_item_id = old.list_item_id
+      and not exists (select 1 from public.movie_night_members m where m.night_id = n.id and m.watched);
+  end if;
   return null;
 end;
 $$;
@@ -2603,8 +2616,13 @@ begin
     'ended_by_name', (select display_name from public.profiles where id = n.ended_by),
     'picked_media_id', n.picked_media_id,
     'picked_title', (select title from public.media where id = n.picked_media_id),
+    'picked_tmdb_id', (select tmdb_id from public.media where id = n.picked_media_id),
+    'picked_media_type', (select media_type from public.media where id = n.picked_media_id),
     'picked_list_item_id', n.picked_list_item_id,
-    'happened_on', n.happened_on
+    'happened_on', n.happened_on,
+    -- What the viewer may do with a night that is over (never a guest): see update_movie_night(), delete_movie_night().
+    'can_edit', (not p_guest) and (public.movie_night_edit_problem(n) is null),
+    'can_delete', (not p_guest) and public.movie_night_can_delete(n, v_me)
   );
 
   with av as materialized (select * from public.movie_night_all_votes(p_night)),
@@ -3265,6 +3283,14 @@ begin
     end if;
   end if;
 
+  -- Everyone on the title's record for that day was there, including those an earlier log put on it: a night made after
+  -- the earlier one was deleted (the viewing stays when a night is) knows them all, not only the people of this log.
+  insert into public.movie_night_members (night_id, user_id, watched)
+  select v_night, w.user_id, true
+  from public.watches w
+  where w.list_item_id = p_item and w.watched_on = p_date
+  on conflict (night_id, user_id) do update set watched = true;
+
   insert into public.movie_night_members (night_id, user_id, watched)
   select v_night, u, true from unnest(p_viewers) as u
   on conflict (night_id, user_id) do update set watched = true;
@@ -3392,6 +3418,351 @@ begin
   from (select distinct (x ->> 'user_id')::uuid as u from jsonb_array_elements(p_viewers) as x) v
   on conflict (night_id, user_id) do update set watched = true;
   return v_item;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+--  Editing and deleting a movie night
+-- ---------------------------------------------------------------------------
+
+-- A night that picked a title records who watched it as the title's current viewing on the family list (its watches),
+-- which belongs to the title, not to the night. So a night can only be edited while that record is unmistakably its own:
+-- this says why it isn't, or is null when it is. The night picked a title that is still on the list; its viewing hasn't
+-- gone to the history (the title has none on the night's day, and, while nobody is on the record, none later either: a
+-- night the same people were logged for again on a later day is left behind, still saying they watched it, and the
+-- record is empty once the title is put back on the list to watch again); no other night of the same title and day
+-- claims the same people; everyone on the record was logged on the night's day; and the night says exactly who is on
+-- the record. (A helper for update_movie_night(), delete_movie_night() and the night's state: it is not for the API.)
+create function public.movie_night_edit_problem(n public.movie_nights)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted timestamptz;
+begin
+  if n.status <> 'closed' or n.picked_list_item_id is null then
+    return 'Only a movie night that picked a title can be edited';
+  end if;
+  select li.deleted_at into v_deleted from public.list_items li where li.id = n.picked_list_item_id;
+  if not found then
+    return 'Only a movie night that picked a title can be edited';
+  end if;
+  if v_deleted is not null then
+    return 'This title was removed from the family list: restore it first to edit this movie night';
+  end if;
+  if exists (select 1 from public.watch_history h
+             where h.media_id = n.picked_media_id and h.group_id = n.group_id
+               and (h.watched_on = n.happened_on
+                    or (h.watched_on > n.happened_on
+                        and not exists (select 1 from public.watches w where w.list_item_id = n.picked_list_item_id)))) then
+    return 'This is an earlier viewing: the title was put back on the list to watch again since';
+  end if;
+  if exists (select 1 from public.movie_nights o
+             where o.picked_list_item_id = n.picked_list_item_id and o.id <> n.id and o.status = 'closed'
+               and o.happened_on = n.happened_on) then
+    return 'Another movie night picked this title on the same day, so who watched it can''t be told apart here';
+  end if;
+  if exists (select 1 from public.watches w where w.list_item_id = n.picked_list_item_id and w.watched_on <> n.happened_on) then
+    return 'People were logged on different days for this title, so it can''t be edited here';
+  end if;
+  -- A night left behind (the same people were logged again on another day, or the viewing was moved) still says people
+  -- watched it when the record says someone else, or nobody: it describes nothing that can be changed here.
+  if (select coalesce(array_agg(m.user_id order by m.user_id), '{}') from public.movie_night_members m
+      where m.night_id = n.id and m.watched)
+     is distinct from
+     (select coalesce(array_agg(w.user_id order by w.user_id), '{}') from public.watches w
+      where w.list_item_id = n.picked_list_item_id) then
+    return 'Who this movie night says watched it is not who the title says watched it, so it can''t be edited here';
+  end if;
+  return null;
+end;
+$$;
+
+-- Whether a person may delete a night that is over: the family's owner, whoever started it, or whoever picked, logged or
+-- cancelled it. Never null: the starter and the person who ended it are null once they have deleted their account, and
+-- "not null" would then let the caller through, so a night like that can be deleted by the owner only. (A helper, like the
+-- one above.)
+create function public.movie_night_can_delete(n public.movie_nights, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select n.status <> 'open'
+     and public.is_group_member(n.group_id, p_user)
+     and (public.is_group_owner(n.group_id, p_user)
+          or coalesce(n.started_by = p_user, false)
+          or coalesce(n.ended_by = p_user, false));
+$$;
+
+-- Whether someone has rated, noted or reacted to a family title themselves, or has a reaction on their own My list entry
+-- for it. Taking them off the title's viewing would take that entry off their My list, so only they may do it (with "I
+-- wasn't there"). A score is theirs when they gave it, or when nobody is recorded as having given it (from before the
+-- database recorded who); one somebody else filled in for them isn't. A note always is: only the person can write one, so
+-- it stays theirs even when someone filled a score in beside it afterwards (which makes that someone the score's author).
+-- The family-wide thumb doesn't count, it stays. (A helper, like the ones above.)
+create function public.watcher_has_own_state(p_item uuid, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.list_items li
+    join public.ratings r on r.list_item_id = li.id and r.user_id = p_user
+    where (li.id = p_item or (li.group_id is null and li.added_by = p_user and li.source_item_id = p_item))
+      and (r.rated_by is null or r.rated_by = p_user or nullif(btrim(r.comment), '') is not null)
+  ) or exists (
+    select 1
+    from public.list_items li
+    join public.reactions x on x.list_item_id = li.id and x.user_id = p_user
+    where li.group_id is null and li.added_by = p_user and li.source_item_id = p_item
+  );
+$$;
+
+-- Changes who watched the title a night picked, and on which day, for any member of the family. p_viewers is
+-- [{"user_id": "<uuid>", "score": 1-10 or null}, ...] as for log_watch: everyone who watched, so people who were left out
+-- are added (to their My list too, and they are asked to rate it) and people who are left out are taken off, unless
+-- they rated, noted or reacted to it themselves (see watcher_has_own_state). People who left the family stay as they were.
+-- p_expected_on and p_expected_viewers are what the editor saw when they opened it: if someone changed the night
+-- since, nothing is saved. Everything is saved or nothing is.
+create function public.update_movie_night(
+  p_night            uuid,
+  p_watched_on       date,
+  p_viewers          jsonb,
+  p_expected_on      date default null,
+  p_expected_viewers uuid[] default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me      uuid := auth.uid();
+  n         public.movie_nights;
+  v_item    uuid;
+  v_problem text;
+  v         record;
+  v_user    uuid;
+  v_score   numeric;
+  v_ids     uuid[] := '{}';
+  v_old     uuid[];
+  v_added   uuid[];
+  v_removed uuid[];
+  v_prev    date;
+  v_names   text;
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  perform public.hit_rate_limit(v_me, 'edit_night', 60, 3600);
+
+  n := public.movie_night_for_member(p_night);
+  v_item := n.picked_list_item_id;
+  -- The title, then the people on its record, then the night: the same order wherever more than one is locked.
+  if v_item is not null then
+    perform 1 from public.list_items where id = v_item for update;
+    perform 1 from public.watches where list_item_id = v_item order by user_id for update;
+  end if;
+  select * into n from public.movie_nights where id = p_night for update;
+  if not found or not public.is_group_member(n.group_id, v_me) then
+    raise exception 'This movie night is not available';
+  end if;
+  if n.picked_list_item_id is distinct from v_item then
+    raise exception 'This movie night changed. Please try again';
+  end if;
+  v_problem := public.movie_night_edit_problem(n);
+  if v_problem is not null then
+    raise exception '%', v_problem;
+  end if;
+
+  -- The people on the record now (members of the family: people who left are not ours to change).
+  select coalesce(array_agg(w.user_id order by w.user_id), '{}') into v_old
+  from public.watches w
+  where w.list_item_id = v_item and public.is_group_member(n.group_id, w.user_id);
+  if (p_expected_on is not null and p_expected_on <> n.happened_on)
+     or (p_expected_viewers is not null and not (v_old @> p_expected_viewers and v_old <@ p_expected_viewers)) then
+    raise exception 'Someone changed this movie night while you were editing it. Close this window and open it again';
+  end if;
+
+  -- One day of slack: the browser's "today" can be ahead of the server's (UTC).
+  if p_watched_on is null or p_watched_on > current_date + 1 then
+    raise exception 'Pick a date that is not in the future';
+  end if;
+  -- After the title's earlier viewings (on one of their days it would count as one of them).
+  select max(h.watched_on) into v_prev
+  from public.watch_history h where h.media_id = n.picked_media_id and h.group_id = n.group_id;
+  if v_prev is not null and p_watched_on <= v_prev then
+    raise exception 'The day has to be after the earlier viewing, on %', to_char(v_prev, 'FMDD Mon YYYY');
+  end if;
+
+  if jsonb_typeof(p_viewers) is distinct from 'array' or jsonb_array_length(p_viewers) = 0 then
+    raise exception 'Pick at least one person who watched it';
+  end if;
+  for v in
+    select x.user_id, round(x.score, 1) as score
+    from jsonb_to_recordset(p_viewers) as x(user_id uuid, score numeric)
+  loop
+    if v.user_id is null or not public.is_group_member(n.group_id, v.user_id) then
+      raise exception 'Only members of this family can be added';
+    end if;
+    if v.score is not null and (v.score < 1 or v.score > 10) then
+      raise exception 'Scores must be between 1 and 10';
+    end if;
+    v_ids := v_ids || v.user_id;
+  end loop;
+  v_ids := array(select distinct u from unnest(v_ids) u);
+  v_added := array(select u from unnest(v_ids) u except select w from unnest(v_old) w);
+  v_removed := array(select w from unnest(v_old) w except select u from unnest(v_ids) u);
+
+  if cardinality(v_added) = 0 and cardinality(v_removed) = 0 and p_watched_on = n.happened_on then
+    return;
+  end if;
+
+  foreach v_user in array v_removed loop
+    if public.watcher_has_own_state(v_item, v_user) then
+      raise exception '%', case when v_user = v_me
+        then 'You can only take yourself off this movie night ("I wasn''t there" on the family list)'
+        else coalesce((select display_name from public.profiles where id = v_user), 'Someone')
+             || ' can only take themselves off this movie night ("I wasn''t there" on the family list)' end;
+    end if;
+  end loop;
+
+  perform set_config('famflix.editing_night', 'on', true);
+
+  if p_watched_on <> n.happened_on then
+    update public.watches set watched_on = p_watched_on where list_item_id = v_item;
+    update public.movie_nights set happened_on = p_watched_on where id = n.id;
+    -- The My list entries this watch put there follow the day, for the people on the record only: one that was removed,
+    -- or that the person has made their own, isn't touched, and neither is that of someone who was at an earlier viewing
+    -- of the title (their entry still links to it) but not at this one.
+    update public.list_items li
+    set watched_at = least(now(), p_watched_on::timestamptz + interval '12 hours')
+    where li.group_id is null and li.source_item_id = v_item and li.watch_origin is not null
+      and li.status = 'watched' and li.deleted_at is null
+      and exists (select 1 from public.watches w where w.list_item_id = v_item and w.user_id = li.added_by);
+  end if;
+
+  -- First the people who are added, so the night is never left with nobody on it.
+  foreach v_user in array v_added loop
+    insert into public.watches (list_item_id, user_id, watched_on, logged_by)
+    values (v_item, v_user, p_watched_on, v_me)
+    on conflict (list_item_id, user_id) do nothing;
+    -- It goes on their My list as Watched too, with the others who were there. (Before the score below, which then
+    -- follows it there.)
+    perform public.add_to_my_list_watched(v_item, v_user, p_watched_on);
+    select round(x.score, 1) into v_score
+    from jsonb_to_recordset(p_viewers) as x(user_id uuid, score numeric)
+    where x.user_id = v_user
+    limit 1;
+    -- Only fills in a missing score; never overwrites one that already exists.
+    if v_score is not null then
+      insert into public.ratings as r (list_item_id, user_id, score)
+      values (v_item, v_user, v_score)
+      on conflict (list_item_id, user_id) do update
+        set score = excluded.score, updated_at = now()
+        where r.score is null;
+    end if;
+  end loop;
+  if cardinality(v_added) > 0 then
+    -- A night everyone had been taken off is watched again.
+    perform set_config('famflix.logging_watch', 'on', true);
+    update public.list_items set status = 'watched', watched_at = now() where id = v_item and status <> 'watched';
+  end if;
+  insert into public.movie_night_members (night_id, user_id, watched)
+  select n.id, u, true from unnest(v_ids) u
+  on conflict (night_id, user_id) do update set watched = true;
+
+  if cardinality(v_removed) > 0 then
+    -- Leaving the record takes the title off their My list again (after_watch_delete); the scores filled in for them go.
+    delete from public.watches where list_item_id = v_item and user_id = any (v_removed);
+    delete from public.ratings where list_item_id = v_item and user_id = any (v_removed);
+    update public.movie_night_members set watched = false where night_id = n.id and user_id = any (v_removed);
+  end if;
+  perform set_config('famflix.editing_night', 'off', true);
+
+  select string_agg(coalesce(p.display_name, 'someone'), ', ' order by p.display_name) into v_names
+  from unnest(v_ids) u left join public.profiles p on p.id = u;
+  perform public.add_activity(n.group_id, 'movie_night_edited', v_item, null, null, v_names);
+end;
+$$;
+
+-- Deletes a night that is over, from the family's history for everyone, with its votes, guests and link. Allowed for the
+-- family's owner and whoever started or ended it (movie_night_can_delete). The title, its viewing and everyone's My list stay
+-- as they are, and so do the titles a pick added to the family list, unless p_undo_watch takes the title off Watched
+-- together as well: everyone on its record is taken off (the title is To watch again), which only works while the night is
+-- the title's latest viewing and nobody on it has rated, noted or reacted to it themselves. A plan that started the night
+-- stays started.
+create function public.delete_movie_night(p_night uuid, p_undo_watch boolean default false)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me      uuid := auth.uid();
+  n         public.movie_nights;
+  v_item    uuid;
+  v_problem text;
+  v_users   uuid[];
+  v_user    uuid;
+begin
+  if v_me is null then
+    raise exception 'You must be signed in';
+  end if;
+  perform public.hit_rate_limit(v_me, 'delete_night', 30, 3600);
+
+  n := public.movie_night_for_member(p_night);
+  v_item := n.picked_list_item_id;
+  if v_item is not null then
+    perform 1 from public.list_items where id = v_item for update;
+    perform 1 from public.watches where list_item_id = v_item order by user_id for update;
+  end if;
+  select * into n from public.movie_nights where id = p_night for update;
+  if not found or not public.is_group_member(n.group_id, v_me) then
+    raise exception 'This movie night is not available';
+  end if;
+  if n.picked_list_item_id is distinct from v_item then
+    raise exception 'This movie night changed. Please try again';
+  end if;
+  if n.status = 'open' then
+    raise exception 'Cancel this movie night first';
+  end if;
+  if not public.movie_night_can_delete(n, v_me) then
+    raise exception 'Only the family''s owner, or whoever started or ended this movie night, can delete it';
+  end if;
+
+  if coalesce(p_undo_watch, false) then
+    v_problem := public.movie_night_edit_problem(n);
+    if v_problem is not null then
+      raise exception '%', v_problem;
+    end if;
+    select coalesce(array_agg(w.user_id), '{}') into v_users from public.watches w where w.list_item_id = v_item;
+    foreach v_user in array v_users loop
+      if public.watcher_has_own_state(v_item, v_user) then
+        raise exception '%', case when v_user = v_me
+          then 'You can only take yourself off it ("I wasn''t there" on the family list)'
+          else coalesce((select display_name from public.profiles where id = v_user), 'Someone')
+               || ' can only take themselves off it ("I wasn''t there" on the family list)' end;
+      end if;
+    end loop;
+    perform set_config('famflix.editing_night', 'on', true);
+    delete from public.watches where list_item_id = v_item;
+    delete from public.ratings where list_item_id = v_item and user_id = any (v_users);
+    perform set_config('famflix.editing_night', 'off', true);
+  end if;
+
+  -- The detail is the night's day, and "undone" when the title went back to To watch.
+  perform public.add_activity(n.group_id, 'movie_night_deleted', v_item, null, null,
+                              n.happened_on::text || case when coalesce(p_undo_watch, false) then ' undone' else '' end);
+  delete from public.movie_nights where id = n.id;
 end;
 $$;
 
@@ -4231,6 +4602,8 @@ grant execute on function
   public.add_movie_night_top_titles(uuid),
   public.pick_movie_night_card(uuid, uuid, date, jsonb),
   public.pick_movie_night_title(uuid, uuid, date, jsonb),
+  public.update_movie_night(uuid, date, jsonb, date, uuid[]),
+  public.delete_movie_night(uuid, boolean),
   public.mark_episodes(uuid, boolean, integer, integer, integer, integer, date),
   public.mark_next_episode(uuid, date),
   public.rate_episode(uuid, integer, integer, numeric, text),
