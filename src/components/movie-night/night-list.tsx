@@ -84,13 +84,9 @@ function Entry({ entry }: { entry: HistoryEntry }) {
     entry.source === "swipe" && genres.length > 0 ? genres.join(", ") : null,
   ].filter(Boolean);
 
-  // A swipe night opens its leaderboard; a Watched together log opens the title it is about.
-  const href =
-    entry.source === "swipe"
-      ? `/app/movie-night/${entry.id}`
-      : entry.picked
-        ? `/app/media/${entry.picked.mediaType}/${entry.picked.tmdbId}`
-        : null;
+  // Every night opens its own page: a swipe night its leaderboard, a Watched together log who watched it. That is where
+  // a night that is over can be edited or deleted.
+  const href = `/app/movie-night/${entry.id}`;
   const Icon = entry.status === "cancelled" ? Ban : entry.status === "expired" ? Clock : Popcorn;
 
   const body = (
@@ -113,13 +109,9 @@ function Entry({ entry }: { entry: HistoryEntry }) {
   const className = "flex items-center gap-3 rounded-xl border border-border bg-card p-2.5";
   return (
     <li>
-      {href ? (
-        <Link href={href} className={`${className} transition-colors hover:bg-muted/40`}>
-          {body}
-        </Link>
-      ) : (
-        <div className={className}>{body}</div>
-      )}
+      <Link href={href} className={`${className} transition-colors hover:bg-muted/40`}>
+        {body}
+      </Link>
     </li>
   );
 }
@@ -154,7 +146,8 @@ function PendingEntry({ night }: { night: ActiveNight }) {
 
 /**
  * Every movie night of a family, with its status: the ones in progress first (live, from the same check as the dot on
- * the menu), then those that are over, newest first, a page at a time. Nothing is ever deleted from it.
+ * the menu), then those that are over, newest first, a page at a time. Whoever started or ended a night, and the family's
+ * owner, can delete it from its page; it is not deleted any other way.
  */
 export function NightList({
   scope,

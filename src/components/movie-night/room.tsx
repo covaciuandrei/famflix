@@ -10,7 +10,10 @@ import {
   addTopTitles,
   type ActionResult,
   cancelNight,
+  deleteNight,
+  getNightEditInfo,
   joinNight,
+  type NightEditInfo,
   pickCard,
   pickTitle,
   removeGuest,
@@ -18,6 +21,8 @@ import {
   revealNight,
 } from "@/app/app/movie-night/actions";
 import { GuestMessage } from "@/components/guest/guest-message";
+import { DeleteNightDialog } from "@/components/movie-night/delete-night-dialog";
+import { EditNightDialog } from "@/components/movie-night/edit-night-dialog";
 import { GuestLinkDialog } from "@/components/movie-night/guest-link-dialog";
 import { Leaderboard, type RowActions } from "@/components/movie-night/leaderboard";
 import { NightHeader } from "@/components/movie-night/night-header";
@@ -101,6 +106,9 @@ export function Room({
   const [searching, setSearching] = useState(false);
   const [otherTitle, setOtherTitle] = useState<TmdbItem | null>(null);
   const [inviting, setInviting] = useState(false);
+  // A night that is over: changing who watched it (the window opens with what the night is now) or deleting it.
+  const [editInfo, setEditInfo] = useState<NightEditInfo | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -250,6 +258,29 @@ export function Room({
     await refresh(true);
   }
 
+  /** Opens the window to change who watched: what it starts from is read now, so it is what the night is now. */
+  function openEdit() {
+    return work("edit", async () => {
+      const res = await getNightEditInfo(night.id);
+      if (res.error || !res.info) {
+        setMessage(res.error ?? "Couldn't open this movie night. Please try again.");
+        await refresh(true);
+        return;
+      }
+      setEditInfo(res.info);
+    });
+  }
+
+  /** Deletes the night, then goes back to the family's nights. Returns the error when it can't, for the window to show. */
+  async function deleteThisNight(undoWatch: boolean): Promise<ActionResult> {
+    const res = await deleteNight({ nightId: night.id, undoWatch });
+    if (!res.error) {
+      router.push(`/app/movie-night?who=${night.group_id}`);
+      router.refresh();
+    }
+    return res;
+  }
+
   async function cancel() {
     if (!window.confirm("Cancel this movie night for everyone? Its votes stay in the history.")) return;
     setMessage(null);
@@ -327,6 +358,8 @@ export function Room({
         onPickOther={canAct ? () => setSearching(true) : undefined}
         onInvite={canAct ? () => setInviting(true) : undefined}
         onCancel={canAct ? cancel : undefined}
+        onEdit={!isGuest && night.can_edit ? openEdit : undefined}
+        onDelete={!isGuest && night.can_delete ? () => setDeleting(true) : undefined}
         onLeave={isGuest && onLeave ? leave : undefined}
       />
 
@@ -335,6 +368,14 @@ export function Room({
           {ended}
           <div className="flex flex-wrap items-center gap-2">
             {night.status === "closed" && night.picked_title && <SharePick title={night.picked_title} />}
+            {night.status === "closed" && night.picked_tmdb_id && night.picked_media_type && (
+              <Link
+                href={`/app/media/${night.picked_media_type}/${night.picked_tmdb_id}`}
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+              >
+                Open {night.picked_title ?? "the title"}
+              </Link>
+            )}
             {canAddTop && (
               <Button size="sm" onClick={addTop} disabled={busy !== null} className="h-auto min-h-8 max-w-full py-1.5 text-left whitespace-normal">
                 {busy === "top" && <Loader2 className="size-3.5 animate-spin" />}
@@ -493,6 +534,32 @@ export function Room({
           onPicked={() => void refresh(true)}
           onFailed={() => void refresh(true)}
           onClose={() => setOtherTitle(null)}
+        />
+      )}
+      {!isGuest && editInfo && (
+        <EditNightDialog
+          nightId={night.id}
+          title={night.picked_title ?? "this title"}
+          groupName={night.group_name}
+          info={editInfo}
+          meId={me}
+          onSaved={() => {
+            setNotice("Saved.");
+            void refresh(true);
+            router.refresh();
+          }}
+          onFailed={() => void refresh(true)}
+          onClose={() => setEditInfo(null)}
+        />
+      )}
+      {!isGuest && deleting && (
+        <DeleteNightDialog
+          title={night.picked_title}
+          day={night.happened_on}
+          groupName={night.group_name}
+          canUndo={Boolean(night.can_edit) && members.some((m) => !m.guest && m.watched)}
+          onDelete={deleteThisNight}
+          onClose={() => setDeleting(false)}
         />
       )}
     </div>

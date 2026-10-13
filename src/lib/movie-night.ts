@@ -235,8 +235,17 @@ export interface NightInfo {
   ended_by_name: string | null;
   picked_media_id: string | null;
   picked_title: string | null;
+  /** What the title's page is at: its TMDB id and type. */
+  picked_tmdb_id: number | null;
+  picked_media_type: MediaType | null;
   picked_list_item_id: string | null;
   happened_on: string;
+  /**
+   * What the signed-in member may do with a night that is over (never a guest): change who watched and the day, and
+   * delete it. Missing before the database has the update that adds them, and then they can't.
+   */
+  can_edit?: boolean;
+  can_delete?: boolean;
 }
 
 export interface StackInfo {
@@ -452,6 +461,33 @@ export function peopleLabel(status: HistoryEntry["status"], people: readonly His
  */
 export function whoWatched(members: readonly MemberProgress[]): MemberProgress[] {
   return [...members.filter((m) => !m.guest && m.watched), ...members.filter((m) => m.guest)];
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+//  Editing and deleting a night that is over: update_movie_night() and delete_movie_night() in db_init.sql
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Who can only take themselves off a night's record: the people who rated or noted the title themselves. That is a score
+ * they gave, a score with no author (from before the database recorded one), or any note: only they can write one, so it
+ * is theirs even when someone else filled a score in beside it. The database refuses to take them off for someone else,
+ * and also counts what is private to them, which isn't visible here. A score someone filled in for a person, without a
+ * note, doesn't count.
+ */
+export function ownRaters(
+  ratings: readonly { user_id: string; rated_by: string | null; comment?: string | null }[],
+): Set<string> {
+  return new Set(
+    ratings
+      .filter((r) => r.rated_by === null || r.rated_by === r.user_id || (r.comment ?? "").trim() !== "")
+      .map((r) => r.user_id),
+  );
+}
+
+/** What the feed's line about a deleted night carries: its day ("2026-10-12"), and "undone" when the title went back to To watch. */
+export function deletedNightDetail(detail: string | null | undefined): { day: string | null; undone: boolean } {
+  const [day, flag] = (detail ?? "").split(" ");
+  return { day: /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day : null, undone: flag === "undone" };
 }
 
 /** A night's card as the swipe stack shows it. */

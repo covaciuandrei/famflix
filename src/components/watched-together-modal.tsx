@@ -38,6 +38,9 @@ export function WatchedTogetherModal({
   submitLabel = "Save",
   members,
   initialChecked,
+  initialDate,
+  locked,
+  noScoreFor,
   ratings,
   currentUserId,
   onSubmit,
@@ -49,6 +52,12 @@ export function WatchedTogetherModal({
   members: MemberSummary[];
   /** Who starts ticked. */
   initialChecked: readonly string[];
+  /** The day it starts at (today when there is none), for changing a day that was already logged. */
+  initialDate?: string;
+  /** People who can't be unticked, by id, each with the reason: for editing a night, whom only they can take off. */
+  locked?: Readonly<Record<string, string>>;
+  /** People who are not asked for a score: for editing a night, those who were there already (only people who are added get one). */
+  noScoreFor?: readonly string[];
   /** What the family already rated this title: those scores show as they are, and your note starts from yours. */
   ratings: RatingWithProfile[];
   currentUserId: string;
@@ -64,7 +73,7 @@ export function WatchedTogetherModal({
   const [scores, setScores] = useState<Record<string, number | null>>({});
   const [note, setNote] = useState(myComment);
   const [today] = useState(localToday);
-  const [watchedOn, setWatchedOn] = useState(today);
+  const [watchedOn, setWatchedOn] = useState(initialDate ?? today);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const selected = members.filter((m) => checked.has(m.id));
@@ -74,6 +83,7 @@ export function WatchedTogetherModal({
   }, []);
 
   function toggle(userId: string) {
+    if (locked?.[userId] !== undefined) return;
     setChecked((prev) => {
       const next = new Set(prev);
       if (next.has(userId)) next.delete(userId);
@@ -132,14 +142,16 @@ export function WatchedTogetherModal({
         {members.map((m) => {
           const isChecked = checked.has(m.id);
           const existing = existingScore(m.id);
+          const lockedReason = locked?.[m.id];
           return (
             <li key={m.id} className="rounded-lg border border-border px-3 py-2">
               <div className="flex items-center justify-between gap-3">
-                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
+                <label className={`flex min-w-0 flex-1 items-center gap-2 text-sm ${lockedReason === undefined ? "cursor-pointer" : ""}`}>
                   <input
                     type="checkbox"
                     checked={isChecked}
                     onChange={() => toggle(m.id)}
+                    disabled={lockedReason !== undefined}
                     className="size-4 accent-primary"
                   />
                   <Avatar name={m.display_name} url={m.avatar_url} className="size-6" />
@@ -152,7 +164,8 @@ export function WatchedTogetherModal({
                   <span className="text-xs text-muted-foreground">Rated {formatScore(existing)}/10</span>
                 )}
               </div>
-              {isChecked && existing === null && (
+              {lockedReason !== undefined && <p className="mt-1 text-xs text-muted-foreground">{lockedReason}</p>}
+              {isChecked && existing === null && !noScoreFor?.includes(m.id) && (
                 <div className="mt-2">
                   <ScoreInput
                     compact

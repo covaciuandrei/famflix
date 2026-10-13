@@ -157,7 +157,9 @@ export type ActivityKind =
   | "movie_night_cancelled"
   | "movie_night_added"
   | "movie_night_planned"
-  | "movie_night_plan_cancelled";
+  | "movie_night_plan_cancelled"
+  | "movie_night_edited"
+  | "movie_night_deleted";
 
 export interface ActivityEvent {
   id: string;

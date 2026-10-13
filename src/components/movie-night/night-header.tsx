@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, EyeIcon, ListOrdered, LogOut, MoreVertical, Popcorn, Search, UserPlus, XCircle } from "lucide-react";
+import { ArrowLeft, EyeIcon, ListOrdered, LogOut, MoreVertical, Pencil, Popcorn, Search, Trash2, UserPlus, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -10,8 +10,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * The title of a night and a menu with what can be done with it: every item is there when its handler is. A member of
- * a night that is open can show the results now, pick a title themselves, invite a guest or cancel it; a guest can
- * leave. `compact` (while swiping) takes less room on a phone, where every pixel goes to the card: the family's name
+ * a night that is open can show the results now, pick a title themselves, invite a guest or cancel it; a member of one
+ * that is over can change who watched it and when, or delete it, if the database says they may; a guest can leave.
+ * `compact` (while swiping) takes less room on a phone, where every pixel goes to the card: the family's name
  * moves up beside the title and the line under it goes.
  */
 export function NightHeader({
@@ -23,6 +24,8 @@ export function NightHeader({
   onPickOther,
   onInvite,
   onCancel,
+  onEdit,
+  onDelete,
   onLeave,
 }: {
   night: NightInfo;
@@ -37,6 +40,10 @@ export function NightHeader({
   /** Open the window with the night's guest link. */
   onInvite?: () => void;
   onCancel?: () => void;
+  /** Change who watched the night's title, and when. */
+  onEdit?: () => void;
+  /** Delete the night. */
+  onDelete?: () => void;
   /** A guest takes their name and votes out of the night. */
   onLeave?: () => void;
 }) {
@@ -163,6 +170,34 @@ export function NightHeader({
               >
                 <XCircle className="size-4" />
                 Cancel movie night
+              </button>
+            )}
+            {onEdit && (
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                onClick={() => {
+                  setOpen(false);
+                  onEdit();
+                }}
+              >
+                <Pencil className="size-4" />
+                Edit who watched
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                role="menuitem"
+                className={cn(item, "text-destructive")}
+                onClick={() => {
+                  setOpen(false);
+                  onDelete();
+                }}
+              >
+                <Trash2 className="size-4" />
+                Delete movie night
               </button>
             )}
             {onLeave && (

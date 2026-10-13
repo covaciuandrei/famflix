@@ -20,7 +20,7 @@ import { MAX_PLAN_NOTE, PLAN_ANSWERS, planTimeProblem, type PlanAnswer } from "@
 import { putOnList } from "@/lib/list-add";
 import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
-import type { MediaType } from "@/lib/types";
+import type { MediaType, MemberSummary, RatingWithProfile } from "@/lib/types";
 import { cleanScore, isDay, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
 
 export interface ActionResult {
@@ -511,4 +511,127 @@ export async function addTopTitles(nightId: string): Promise<ActionResult & { ad
   if (error) return { error: error.message };
   revalidatePath("/app", "layout");
   return { added: Number(data) };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+//  A night that is over: change who watched it and when, or delete it
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The database's own message, except when it hasn't had the update that adds editing and deleting yet, or two people changed the same title at once. */
+function manageFriendly(error: { code?: string; message: string }): string {
+  if (error.code === "PGRST202") {
+    return "Editing and deleting movie nights isn't set up yet: the database update hasn't been run.";
+  }
+  // The database stopped one of two changes to the same title made in the same instant: the other went through.
+  if (error.code === "40P01" || error.code === "40001") {
+    return "Someone changed this title at the same moment. Please try again.";
+  }
+  return error.message;
+}
+
+/** What the "Who watched?" window of a night needs: the family, who is on the record now, and the scores they have. */
+export interface NightEditInfo {
+  /** The day it is for now. */
+  watchedOn: string;
+  members: MemberSummary[];
+  /** Members of the family who are on the title's record now. */
+  viewerIds: string[];
+  ratings: RatingWithProfile[];
+}
+
+/**
+ * Reads what the edit window starts from, as the signed-in member may see it (row level security keeps everyone else
+ * out). Read when the window opens, so it is what the night is now, and handed back with the changes so the database
+ * can tell if someone else changed the night in between.
+ */
+export async function getNightEditInfo(nightId: string): Promise<ActionResult & { info?: NightEditInfo }> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
+  const { data: night } = await supabase
+    .from("movie_nights")
+    .select("group_id, picked_list_item_id, happened_on")
+    .eq("id", nightId)
+    .maybeSingle();
+  const row = night as { group_id: string; picked_list_item_id: string | null; happened_on: string } | null;
+  if (!row?.picked_list_item_id) return { error: "This movie night isn't available." };
+
+  const [members, watches, ratings] = await Promise.all([
+    supabase.from("group_members").select("user_id, profiles(id, display_name, avatar_url)").eq("group_id", row.group_id),
+    supabase.from("watches").select("user_id").eq("list_item_id", row.picked_list_item_id),
+    supabase.from("ratings").select("*, profiles(id, display_name, avatar_url)").eq("list_item_id", row.picked_list_item_id),
+  ]);
+  if (members.error || watches.error || ratings.error) {
+    console.error("Could not read a movie night to edit:", members.error?.message ?? watches.error?.message ?? ratings.error?.message);
+    return { error: "Couldn't open this movie night. Please try again." };
+  }
+  const family = ((members.data ?? []) as unknown as { user_id: string; profiles: MemberSummary | null }[])
+    .map((m) => m.profiles)
+    .filter((profile): profile is MemberSummary => profile !== null)
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+  const inFamily = new Set(family.map((m) => m.id));
+  return {
+    info: {
+      watchedOn: row.happened_on,
+      members: family,
+      viewerIds: ((watches.data ?? []) as { user_id: string }[]).map((w) => w.user_id).filter((id) => inFamily.has(id)),
+      ratings: (ratings.data ?? []) as unknown as RatingWithProfile[],
+    },
+  };
+}
+
+/**
+ * Changes who watched the title a night picked, and on which day: `viewers` is everyone who watched (with a score for
+ * anyone who had none), as when the title was picked, and `expectedOn` and `expectedViewers` are what the person saw
+ * when they opened the window. The database adds the people who are new (to their My list too, and they are asked to
+ * rate it), takes off the people who are left out, and refuses if someone changed the night since or the night can't be
+ * edited. Then the person's own note, if they changed it.
+ */
+export async function editNight(
+  input: PickInput & { expectedOn: string; expectedViewers: string[] },
+): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  const checked = checkPick(input);
+  if ("error" in checked) return checked;
+  const expected = Array.isArray(input?.expectedViewers) ? input.expectedViewers : null;
+  if (
+    !isDay(input?.expectedOn) ||
+    !expected ||
+    expected.length > MAX_VIEWERS ||
+    expected.some((id) => !UUID.test(String(id)))
+  ) {
+    return { error: "This movie night couldn't be read. Close this window and open it again." };
+  }
+
+  const { data: night } = await supabase.from("movie_nights").select("picked_list_item_id").eq("id", input.nightId).maybeSingle();
+  const { error } = await supabase.rpc("update_movie_night", {
+    p_night: input.nightId,
+    p_watched_on: input.watchedOn,
+    p_viewers: checked.viewers,
+    p_expected_on: input.expectedOn,
+    p_expected_viewers: expected,
+  });
+  if (error) return { error: manageFriendly(error) };
+  const itemId = (night as { picked_list_item_id: string | null } | null)?.picked_list_item_id;
+  if (!itemId) {
+    revalidatePath("/app", "layout");
+    return {};
+  }
+  return finishPick(supabase, user.id, itemId, checked.viewers, checked.note);
+}
+
+/**
+ * Deletes a night that is over from the family's history. With `undoWatch` the title also goes off Watched together,
+ * back to To watch, which the database only allows while nobody on it rated, noted or reacted to it themselves. Whether this
+ * person may is the database's call (the owner, whoever started the night or whoever ended it).
+ */
+export async function deleteNight(input: { nightId: string; undoWatch: boolean }): Promise<ActionResult> {
+  const { supabase } = await requireUser();
+  if (!UUID.test(String(input?.nightId))) return { error: "That isn't a movie night." };
+  const { error } = await supabase.rpc("delete_movie_night", {
+    p_night: input.nightId,
+    p_undo_watch: input.undoWatch === true,
+  });
+  if (error) return { error: manageFriendly(error) };
+  revalidatePath("/app", "layout");
+  return {};
 }

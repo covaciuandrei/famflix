@@ -7,6 +7,7 @@ import {
   candidateToCard,
   deckOrder,
   DEFAULT_MOOD,
+  deletedNightDetail,
   groupVotes,
   GUEST_SECRET,
   guestPath,
@@ -21,6 +22,7 @@ import {
   nightAction,
   nightMood,
   nightPeople,
+  ownRaters,
   parseMood,
   peopleLabel,
   personLabel,
@@ -461,5 +463,57 @@ test.describe("isSwipingPath", () => {
     for (const path of ["/app", "/app/browse", "/app/mine", "/app/groups", "/app/media/movie/603"]) {
       expect(isSwipingPath(path), path).toBe(false);
     }
+  });
+});
+
+test.describe("ownRaters", () => {
+  test("counts a rating the person gave themself, or one nobody is recorded as giving", () => {
+    const ratings = [
+      { user_id: "ana", rated_by: "ana" },
+      { user_id: "bob", rated_by: null },
+    ];
+    expect([...ownRaters(ratings)].sort()).toEqual(["ana", "bob"]);
+  });
+
+  test("ignores a score somebody else filled in for them", () => {
+    const ratings = [
+      { user_id: "ana", rated_by: "bob" },
+      { user_id: "bob", rated_by: "bob" },
+    ];
+    expect([...ownRaters(ratings)]).toEqual(["bob"]);
+  });
+
+  test("counts a note as theirs even when somebody else filled a score in beside it", () => {
+    const ratings = [
+      { user_id: "ana", rated_by: "bob", comment: "Loved the ending" },
+      { user_id: "cara", rated_by: "bob", comment: null },
+    ];
+    expect([...ownRaters(ratings)]).toEqual(["ana"]);
+  });
+
+  test("a note of only blanks is no note", () => {
+    expect(ownRaters([{ user_id: "ana", rated_by: "bob", comment: "   " }]).size).toBe(0);
+    expect(ownRaters([{ user_id: "ana", rated_by: "bob", comment: "" }]).size).toBe(0);
+  });
+
+  test("is empty without ratings", () => {
+    expect(ownRaters([]).size).toBe(0);
+  });
+});
+
+test.describe("deletedNightDetail", () => {
+  test("reads the day the night was on", () => {
+    expect(deletedNightDetail("2026-10-12")).toEqual({ day: "2026-10-12", undone: false });
+  });
+
+  test("knows when the title went back to To watch", () => {
+    expect(deletedNightDetail("2026-10-12 undone")).toEqual({ day: "2026-10-12", undone: true });
+  });
+
+  test("copes with nothing or with text that isn't a day", () => {
+    for (const detail of [null, undefined, "", "yesterday", "12/10/2026"]) {
+      expect(deletedNightDetail(detail), String(detail)).toEqual({ day: null, undone: false });
+    }
+    expect(deletedNightDetail("soon undone")).toEqual({ day: null, undone: true });
   });
 });

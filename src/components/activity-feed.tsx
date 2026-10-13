@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 
 import { Avatar } from "@/components/avatar";
 import { LocalTime } from "@/components/movie-night/local-time";
-import { formatScore, timeAgo } from "@/lib/format";
+import { formatDay, formatScore, timeAgo } from "@/lib/format";
 import { findGenre } from "@/lib/genres";
+import { deletedNightDetail } from "@/lib/movie-night";
 import type { ActivityEvent } from "@/lib/types";
 
 /** " for Sat, Oct 18" from the moment a plan was for (the feed's detail), in the viewer's own time zone; nothing when there is none. */
@@ -140,6 +141,23 @@ function describe(e: ActivityEvent, currentUserId: string): ReactNode {
       return (
         <>
           {who} added {count === 1 ? "1 title" : `${count} titles`} from the movie night
+        </>
+      );
+    }
+    case "movie_night_edited":
+      // The detail is everyone who watched it now.
+      return (
+        <>
+          {who} edited the movie night for {title}: now watched by {e.detail}
+        </>
+      );
+    case "movie_night_deleted": {
+      const { day, undone } = deletedNightDetail(e.detail);
+      return (
+        <>
+          {who} deleted the movie night{e.media_title ? <> for {title}</> : null}
+          {day ? <> of {formatDay(day)}</> : null}
+          {undone ? " and put it back on To watch" : null}
         </>
       );
     }
