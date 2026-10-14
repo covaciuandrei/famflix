@@ -64,7 +64,7 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname::text
     'start_movie_night', 'join_movie_night', 'cast_movie_night_votes', 'finish_movie_night_stack',
     'add_movie_night_stack', 'reveal_movie_night', 'cancel_movie_night', 'movie_night_state', 'active_movie_nights',
     'add_movie_night_top_titles', 'pick_movie_night_card', 'pick_movie_night_title', 'update_movie_night', 'delete_movie_night',
-    'mark_episodes', 'mark_next_episode', 'rate_episode', 'watch_series_again', 'watch_episode_again', 'my_series_progress',
+    'mark_episodes', 'mark_next_episode', 'redate_episodes', 'rate_episode', 'watch_series_again', 'watch_episode_again', 'my_series_progress',
     'my_series_passes', 'my_episode_counts', 'member_list', 'export_my_data',
     'plan_movie_night', 'rsvp_movie_night_plan', 'cancel_movie_night_plan', 'planned_movie_nights', 'due_movie_night_plans',
     'get_movie_night_guest_link', 'replace_movie_night_guest_link', 'turn_off_movie_night_guest_link',

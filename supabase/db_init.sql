@@ -86,6 +86,8 @@ create table public.list_items (
   media_id   uuid not null references public.media (id) on delete cascade,
   status     text not null default 'want' check (status in ('want', 'watched')),
   created_at timestamptz not null default now(),
+  -- When it was watched. A Watched title with no time is one nobody remembers the day of: it is watched, and is not
+  -- counted for any year.
   watched_at timestamptz,
   -- Removing a title only hides it, so it can be restored.
   deleted_at timestamptz,
@@ -159,13 +161,14 @@ create index watches_logged_by_idx on public.watches (logged_by);
 -- Earlier viewings of a title, kept when it is watched again: one row per person, title and day. What a list shows now (the
 -- current viewing) stays in watches and list_items; watch_again() and the functions next to it move it here. group_id is
 -- the family it was watched with, empty for a viewing on one's own, and once that family is gone. Nobody writes to it
--- directly: only those functions do.
+-- directly: only those functions do. watched_on is empty for a viewing nobody remembers the day of: any number of
+-- those can be kept (a null is never the same day as another), and they are not counted for any year.
 create table public.watch_history (
   -- Own id key (like ratings) so PostgREST doesn't treat this as a profiles <-> media join table.
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references public.profiles (id) on delete cascade,
   media_id   uuid not null references public.media (id) on delete cascade,
-  watched_on date not null,
+  watched_on date,
   group_id   uuid references public.groups (id) on delete set null,
   logged_by  uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
@@ -176,13 +179,14 @@ create index watch_history_group_idx on public.watch_history (group_id);
 create index watch_history_logged_by_idx on public.watch_history (logged_by);
 
 -- The episodes someone has ticked on a series on their My list, with their own score and note for each. One row per
--- ticked episode, so Not started is no rows. Only mark_episodes(), mark_next_episode(), rate_episode(),
--- watch_series_again() and watch_episode_again() write it.
+-- ticked episode, so Not started is no rows. Only mark_episodes(), mark_next_episode(), redate_episodes(),
+-- rate_episode(), watch_series_again() and watch_episode_again() write it. watched_on is empty for an episode nobody
+-- remembers the day of: it is watched, and is not counted for any year.
 create table public.episode_logs (
   list_item_id   uuid not null references public.list_items (id) on delete cascade,
   season_number  smallint not null check (season_number between 1 and 200),
   episode_number smallint not null check (episode_number between 1 and 20000),
-  watched_on     date not null default current_date,
+  watched_on     date default current_date,
   score          numeric(3,1) check (score between 1 and 10),
   comment        text check (char_length(comment) <= 250),
   created_at     timestamptz not null default now(),
@@ -194,18 +198,21 @@ create table public.episode_logs (
 -- series is started again; episode_logs keeps the current one. A viewing is the episode on one day, with the score and
 -- note it had then. `pass` is the time through the series it belonged to (1 for the first time, 2 for the second...), or
 -- null for a viewing of a single episode that was watched again. Only watch_series_again() and watch_episode_again()
--- write it.
+-- write it. watched_on is empty for a viewing nobody remembers the day of.
 create table public.episode_history (
   list_item_id   uuid not null references public.list_items (id) on delete cascade,
   season_number  smallint not null check (season_number between 1 and 200),
   episode_number smallint not null check (episode_number between 1 and 20000),
-  watched_on     date not null,
+  watched_on     date,
   score          numeric(3,1) check (score between 1 and 10),
   comment        text check (char_length(comment) <= 250),
   pass           smallint check (pass >= 1),
   created_at     timestamptz not null default now(),
-  primary key (list_item_id, season_number, episode_number, watched_on)
+  id             uuid primary key default gen_random_uuid()
 );
+-- One viewing of an episode per day, and any number of them with no day (a null is never the same day as another).
+create unique index episode_history_viewing_uniq
+  on public.episode_history (list_item_id, season_number, episode_number, watched_on);
 
 -- Family activity feed. Names and titles are copied in, so history stays readable after people leave.
 create table public.activity (
@@ -1278,8 +1285,8 @@ end;
 $$;
 
 -- Moves the caller's current viewing of a title on their My list into the history (a viewing a family put there is
--- remembered as that family's), and makes the entry their own again, on To watch or Watched on the given day. Returns
--- nothing; the callers check who may do it.
+-- remembered as that family's; one with no day is kept with no day), and makes the entry their own again, on To watch or
+-- Watched on the given day. Returns nothing; the callers check who may do it.
 create function public.archive_my_viewing(p_item uuid, p_status text, p_on date default null)
 returns void
 language plpgsql
@@ -1294,7 +1301,7 @@ begin
   if li.status = 'watched' then
     select group_id into v_group from public.list_items where id = li.source_item_id;
     insert into public.watch_history (user_id, media_id, watched_on, group_id)
-    values (li.added_by, li.media_id, (coalesce(li.watched_at, now()) at time zone 'UTC')::date, v_group)
+    values (li.added_by, li.media_id, (li.watched_at at time zone 'UTC')::date, v_group)
     on conflict (user_id, media_id, watched_on) do update
       set group_id = coalesce(public.watch_history.group_id, excluded.group_id);
   end if;
@@ -1490,16 +1497,16 @@ begin
     return;
   end if;
 
-  -- They watched it another time too (it is in their history): the entry stays, as of that time, with its score and note.
-  if v_mine.status = 'watched' and v_mine.watch_origin is not null then
+  -- They watched it another time too (it is in their history): the entry stays, as of that time (with no day, if that is
+  -- all they know), with its score and note.
+  if v_mine.status = 'watched' and v_mine.watch_origin is not null
+     and exists (select 1 from public.watch_history h where h.user_id = p_user and h.media_id = v_mine.media_id) then
     select max(h.watched_on) into v_prev from public.watch_history h
     where h.user_id = p_user and h.media_id = v_mine.media_id;
-    if v_prev is not null then
-      update public.list_items
-      set watched_at = least(now(), v_prev::timestamptz + interval '12 hours')
-      where id = v_mine.id;
-      return;
-    end if;
+    update public.list_items
+    set watched_at = case when v_prev is null then null else least(now(), v_prev::timestamptz + interval '12 hours') end
+    where id = v_mine.id;
+    return;
   end if;
 
   if v_mine.status = 'watched' and v_mine.watch_origin = 'created' then
@@ -1643,8 +1650,10 @@ begin
 end;
 $$;
 
--- A series that has ended and has every aired episode ticked is Watched. Returns whether it just became so.
-create function public.episodes_complete_if_done(p_item uuid, p_series jsonb)
+-- A series that has ended and has every aired episode ticked is Watched, as of the day given: today when none is (the
+-- time it is now), and no day at all when it is null (the episodes were ticked with no day). Returns whether it just
+-- became so.
+create function public.episodes_complete_if_done(p_item uuid, p_series jsonb, p_on date default current_date)
 returns boolean
 language plpgsql
 security definer
@@ -1664,7 +1673,11 @@ begin
   if v_ticked < v_aired then
     return false;
   end if;
-  update public.list_items set status = 'watched', watched_at = now()
+  update public.list_items
+  set status = 'watched',
+      watched_at = case when p_on is null then null
+                        when p_on >= current_date then now()
+                        else p_on::timestamptz + interval '12 hours' end
   where id = p_item and status = 'want';
   return found;
 end;
@@ -1703,11 +1716,13 @@ $$;
 
 -- Ticks (p_watched) or unticks the episodes from (p_from_season, p_from_episode) to (p_to_season, p_to_episode), both
 -- included, on a series on the caller's My list: one episode, a season (to episode 20000: it stops at the last one), or
--- everything up to an episode (from 1, 1). Only aired episodes can be ticked. Ticking the last aired episode of a series
--- that has ended makes it Watched. Unticking on a series that is Watched first ticks every aired episode for real (a
--- Watched series shows all of them as watched), then takes these off and puts the series back to To watch. Unticking
--- also takes off the episodes' scores and notes. Returns {"changed": episodes ticked or unticked, "completed": it
--- became Watched, "reopened": it stopped being Watched}.
+-- everything up to an episode (from 1, 1). They are ticked as watched on p_on: today when it is left out, and no day at
+-- all when it is null (someone catching up on a series, who doesn't remember when: those episodes are watched but are
+-- not counted for any year). Only aired episodes can be ticked. Ticking the last aired episode of a series that has
+-- ended makes it Watched. Unticking on a series that is Watched first ticks every aired episode for real (a Watched
+-- series shows all of them as watched), then takes these off and puts the series back to To watch. Unticking also takes
+-- off the episodes' scores and notes. Returns {"changed": episodes ticked or unticked, "completed": it became Watched,
+-- "reopened": it stopped being Watched}.
 create function public.mark_episodes(
   p_item         uuid,
   p_watched      boolean,
@@ -1738,7 +1753,8 @@ begin
      or p_to_season is null or p_to_episode is null then
     raise exception 'Pick the episodes';
   end if;
-  if p_on is null or p_on > current_date + 1 then
+  -- One day of slack: the browser's "today" can be ahead of the server's (UTC).
+  if p_on > current_date + 1 then
     raise exception 'Pick a date that is not in the future';
   end if;
   if (select count(*) from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
@@ -1781,11 +1797,11 @@ begin
     where x.n between p_from_season and p_to_season and g.e <= public.series_aired(v_series, x.n)
     on conflict do nothing;
     get diagnostics v_changed = row_count;
-    v_completed := public.episodes_complete_if_done(p_item, v_series);
+    v_completed := public.episodes_complete_if_done(p_item, v_series, p_on);
   else
     if v_status = 'watched' and v_aired > 0 then
       insert into public.episode_logs (list_item_id, season_number, episode_number, watched_on)
-      select p_item, x.n, g.e, coalesce(v_watched::date, current_date)
+      select p_item, x.n, g.e, v_watched::date
       from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
       cross join lateral generate_series(1, public.series_aired(v_series, x.n)) as g(e)
       on conflict do nothing;
@@ -1811,7 +1827,8 @@ begin
 end;
 $$;
 
--- Ticks the first aired episode that isn't ticked yet. Returns {"season", "episode", "completed"}.
+-- Ticks the first aired episode that isn't ticked yet, as watched on p_on (today when it is left out, no day when it is
+-- null). Returns {"season", "episode", "completed"}.
 create function public.mark_next_episode(p_item uuid, p_on date default current_date)
 returns jsonb
 language plpgsql
@@ -1826,7 +1843,7 @@ declare
   v_completed boolean;
 begin
   select m.status, m.series into v_status, v_series from public.episodes_my_item(p_item) as m;
-  if p_on is null or p_on > current_date + 1 then
+  if p_on > current_date + 1 then
     raise exception 'Pick a date that is not in the future';
   end if;
   if v_status = 'watched' then
@@ -1849,8 +1866,62 @@ begin
   insert into public.episode_logs (list_item_id, season_number, episode_number, watched_on)
   values (p_item, v_season, v_episode, p_on)
   on conflict do nothing;
-  v_completed := public.episodes_complete_if_done(p_item, v_series);
+  v_completed := public.episodes_complete_if_done(p_item, v_series, p_on);
   return jsonb_build_object('season', v_season, 'episode', v_episode, 'completed', v_completed);
+end;
+$$;
+
+-- Gives the episodes that are ticked from (p_from_season, p_from_episode) to (p_to_season, p_to_episode), both included,
+-- on a series on the caller's My list, another day: the one they were really watched on, or no day (null) when it
+-- isn't known, which keeps them out of Your year. It only changes ticks that are there (it never ticks or unticks an
+-- episode), keeps their scores and notes, and leaves the viewings in the history as they are. Returns how many ticks
+-- were in the range.
+create function public.redate_episodes(
+  p_item         uuid,
+  p_from_season  integer,
+  p_from_episode integer,
+  p_to_season    integer,
+  p_to_episode   integer,
+  p_on           date
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_series  jsonb;
+  v_changed integer;
+begin
+  select m.series into v_series from public.episodes_my_item(p_item) as m;
+
+  if p_from_season is null or p_from_episode is null or p_to_season is null or p_to_episode is null then
+    raise exception 'Pick the episodes';
+  end if;
+  -- One day of slack: the browser's "today" can be ahead of the server's (UTC).
+  if p_on > current_date + 1 then
+    raise exception 'Pick a date that is not in the future';
+  end if;
+  if (select count(*) from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+      where x.n in (p_from_season, p_to_season)) < (case when p_from_season = p_to_season then 1 else 2 end) then
+    raise exception 'That season is not listed for this series';
+  end if;
+  if p_from_episode < 1 or p_from_season > p_to_season
+     or (p_from_season = p_to_season and p_from_episode > p_to_episode) then
+    raise exception 'Pick the episodes in order';
+  end if;
+  if p_from_episode > (select x.episodes from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
+                       where x.n = p_from_season) then
+    raise exception 'That episode is not listed for this series';
+  end if;
+
+  update public.episode_logs l
+  set watched_on = p_on, updated_at = now()
+  where l.list_item_id = p_item
+    and (l.season_number, l.episode_number) >= (p_from_season, p_from_episode)
+    and (l.season_number, l.episode_number) <= (p_to_season, p_to_episode);
+  get diagnostics v_changed = row_count;
+  return v_changed;
 end;
 $$;
 
@@ -1910,10 +1981,10 @@ $$;
 -- ---------------------------------------------------------------------------
 
 -- Starts a series on the caller's My list again, as a new pass: every episode they have watched of it (every aired
--- episode if it is marked Watched, dated by when it was marked) goes into episode_history as the next pass, with its
--- day, score and note, the ticks are cleared and the series is back on To watch. The series' own score and note stay,
--- and an entry that a family's watch put on My list becomes theirs again. Returns {"pass": the number of the pass
--- that was kept, "episodes": how many episodes it had}.
+-- episode if it is marked Watched, dated by when it was marked, or with no day if that isn't known) goes into
+-- episode_history as the next pass, with its day, score and note, the ticks are cleared and the series is back on To
+-- watch. The series' own score and note stay, and an entry that a family's watch put on My list becomes theirs again.
+-- Returns {"pass": the number of the pass that was kept, "episodes": how many episodes it had}.
 create function public.watch_series_again(p_item uuid)
 returns jsonb
 language plpgsql
@@ -1944,7 +2015,7 @@ begin
     from public.episode_logs l
     where l.list_item_id = p_item
     union all
-    select x.n, g.e, coalesce(v_watched::date, current_date), null::numeric, null::text
+    select x.n, g.e, v_watched::date, null::numeric, null::text
     from jsonb_to_recordset(v_series -> 'seasons') as x(n integer, episodes integer)
     cross join lateral generate_series(1, public.series_aired(v_series, x.n)) as g(e)
     where v_status = 'watched'
@@ -1967,8 +2038,8 @@ $$;
 
 -- Logs another viewing of one episode that the caller has watched, of a series on their My list: the day it has now
 -- (with its score and note) goes into episode_history, and the episode gets the new day, keeping its score and note.
--- A series marked Watched counts every aired episode as watched, dated by when it was marked. The day it already has
--- is refused.
+-- A series marked Watched counts every aired episode as watched, dated by when it was marked. An episode with no day
+-- keeps that viewing with no day. The day it already has is refused.
 create function public.watch_episode_again(p_item uuid, p_season integer, p_episode integer, p_on date default current_date)
 returns void
 language plpgsql
@@ -2003,7 +2074,7 @@ begin
   if found then
     v_was := v_log.watched_on;
   elsif v_status = 'watched' then
-    v_was := coalesce(v_watched::date, current_date);
+    v_was := v_watched::date;
   else
     raise exception 'You have not watched this episode yet';
   end if;
@@ -2043,8 +2114,9 @@ $$;
 -- How many episodes the caller watched on their My list, for Your year: per series and per month. A viewing is an
 -- episode on one day: the same episode on another day counts again, twice on one day counts once. It is an episode
 -- ticked now (episode_logs), one kept when the series was started again or the episode watched again (episode_history),
--- or one that a series marked Watched counts as watched without a tick, dated by when it was marked. A title taken off
--- My list still counts, it was watched. p_year keeps the viewings of one year, null is all time. Returns
+-- or one that a series marked Watched counts as watched without a tick, dated by when it was marked. A viewing with no
+-- day (nobody remembers when) is not counted, not even for all time. A title taken off My list still counts, it was
+-- watched. p_year keeps the viewings of one year, null is all time. Returns
 -- {"by_series": {"<My list entry>": episodes}, "by_month": {"YYYY-MM": episodes}}. One value, so the API's cap on rows
 -- doesn't cut it short.
 create function public.my_episode_counts(p_year integer default null)
@@ -4650,6 +4722,7 @@ grant execute on function
   public.delete_movie_night(uuid, boolean),
   public.mark_episodes(uuid, boolean, integer, integer, integer, integer, date),
   public.mark_next_episode(uuid, date),
+  public.redate_episodes(uuid, integer, integer, integer, integer, date),
   public.rate_episode(uuid, integer, integer, numeric, text),
   public.watch_series_again(uuid),
   public.watch_episode_again(uuid, integer, integer, date),
