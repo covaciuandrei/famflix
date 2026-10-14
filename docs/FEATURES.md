@@ -21,10 +21,22 @@ members (**Manage** on the Families page).
 
 ### My list
 
-A private list that only you can see, with To watch and Watched tabs. **Mark as
-watched** on a title's page puts it straight on My list as watched. Every list
-can be filtered by release date (2020s, 1990s, ...) and category (genre, movies
-or series).
+Your personal list, with To watch and Watched tabs. **Mark as watched** on a
+title's page puts it straight on My list as watched. Every list can be filtered
+by release date (2020s, 1990s, ...) and category (genre, movies or series).
+
+The people in your families can see it, so you can look at each other's lists
+and take titles from them: the titles, whether you watched them and when, and
+your score. Never your notes, reactions, ticked episodes or earlier viewings,
+and never a title you removed. Switch that off under **Settings → Privacy** and
+only you can see it; My list's header says which it is. A family's **Members**
+tab lists everyone with a link to their list ("Not sharing their list" when they
+have switched it off), and a list can be read, with To watch and Watched tabs,
+and an Add button on each title (to My list or a family's list).
+
+From My list, **Add to family** on a title puts it on a family's list (a menu when
+you are in several; a family that has it already says so). It is only there when
+you are in at least one family.
 
 ### Activity feed
 

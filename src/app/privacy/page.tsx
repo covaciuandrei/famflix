@@ -10,7 +10,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy policy"
-      updated="October 9, 2026"
+      updated="October 15, 2026"
       intro={
         <p>
           FamFlix is a small, private watchlist for families and friends, run
@@ -26,13 +26,15 @@ export default function PrivacyPage() {
             <strong className="text-foreground">Your account:</strong> you
             sign in with Google, which shares your name, email address and
             profile picture with FamFlix. FamFlix never sees your Google
-            password or anything else in your Google account.
+            password or anything else in your Google account. It also keeps
+            one setting of yours: whether the people in your families can see
+            your list.
           </li>
           <li>
             <strong className="text-foreground">What you add:</strong> the
             titles on your lists (a title your family logs as watched together
-            with you is also added to your personal list, which only you can
-            see), the episodes you tick on a series (with your own score and
+            with you is also added to your personal list), the episodes you
+            tick on a series (with your own score and
             note for each, kept on your personal list), your scores, notes,
             likes and dislikes, who watched what and when (and, for a title
             you watched again, each day you watched it before), the families you
@@ -82,10 +84,12 @@ export default function PrivacyPage() {
       <Section title="Who can see it">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            Your personal list, with the episodes you tick on a series, the
-            earlier times you watched them, and your scores and notes for them,
-            is visible only to you. So is Your year, which is worked out from
-            them.
+            Your personal list is visible to you and, unless you switch that
+            off in Settings, to the people in the families you are in: the
+            titles on it, whether you watched them and when, and your score
+            for each. Your notes and reactions, the episodes you tick on a
+            series, the earlier times you watched a title, and Your year,
+            which is worked out from them, are visible only to you.
           </li>
           <li>
             Family lists, and your name, picture, scores, notes and reactions on

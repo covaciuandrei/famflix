@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import {
   AddToListButton,
@@ -15,10 +16,13 @@ export function MediaCard({
   item,
   targets,
   library,
+  note,
 }: {
   item: CardItem;
   targets: AddTarget[];
   library?: LibraryEntry;
+  /** Something to say about the title, under its type and year. */
+  note?: ReactNode;
 }) {
   const href = `/app/media/${item.mediaType}/${item.tmdbId}`;
   return (
@@ -46,6 +50,7 @@ export function MediaCard({
           {mediaTypeLabel(item.mediaType)}
           {item.year ? ` · ${item.year}` : ""}
         </p>
+        {note && <div className="mt-0.5 text-xs text-muted-foreground">{note}</div>}
       </div>
       <AddToListButton
         tmdbId={item.tmdbId}

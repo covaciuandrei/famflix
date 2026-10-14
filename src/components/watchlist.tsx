@@ -5,15 +5,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { restoreListItem } from "@/app/app/actions";
+import type { AddTarget } from "@/components/add-to-list-button";
 import { CategoryChips } from "@/components/category-chips";
 import { ListItemCard } from "@/components/list-item-card";
 import { SortSelect } from "@/components/sort-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { listCategories, matchesCategory } from "@/lib/categories";
+import { libraryKey } from "@/lib/constants";
 import { ANY_YEAR, listDecades, matchesDecade } from "@/lib/decades";
 import { isToWatch, isWatching } from "@/lib/list-status";
 import { sortCards } from "@/lib/sort";
 import type {
+  LibraryIndex,
   ListItemCard as Card,
   MemberSummary,
   SortKey,
@@ -26,10 +29,16 @@ export function Watchlist({
   cards,
   currentUserId,
   members,
+  families,
+  library,
 }: {
   cards: Card[];
   currentUserId: string;
   members?: MemberSummary[];
+  /** On My list, for a person in a family: the families a title can be added to from its card. */
+  families?: AddTarget[];
+  /** Which lists have each title, for those cards to say which families have it already. */
+  library?: LibraryIndex;
 }) {
   // Only family lists are given their members.
   const family = members !== undefined;
@@ -171,6 +180,16 @@ export function Watchlist({
               card={card}
               currentUserId={currentUserId}
               members={members}
+              share={
+                families && families.length > 0
+                  ? {
+                      families,
+                      alreadyOn: (library?.[libraryKey(card.media.media_type, card.media.tmdb_id)]?.lists ?? []).filter(
+                        (l) => l.listId !== null,
+                      ),
+                    }
+                  : undefined
+              }
               onRemoved={(id, title) => {
                 setUndoError(null);
                 setRemoved({ id, title });

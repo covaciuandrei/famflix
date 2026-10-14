@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { ActivityFeed } from "@/components/activity-feed";
 import { Avatar } from "@/components/avatar";
 import { InviteCode } from "@/components/invite-code";
+import { MemberLists } from "@/components/member-lists";
 import { RemovedItems } from "@/components/removed-items";
 import { FamilyNightLink } from "@/components/movie-night/family-night-link";
 import { FamilyStatsView } from "@/components/stats/family-stats";
@@ -16,6 +17,7 @@ import {
   getListCards,
   getRemovedItems,
   getSessionProfile,
+  getSharing,
   refreshInviteCodes,
 } from "@/lib/data";
 import { timeUntil } from "@/lib/format";
@@ -34,7 +36,8 @@ export default async function FamilyPage({
   const { view, year } = await searchParams;
   const showActivity = view === "activity";
   const showStats = view === "stats";
-  const showList = !showActivity && !showStats;
+  const showMembers = view === "members";
+  const showList = !showActivity && !showStats && !showMembers;
   const { user } = await getSessionProfile();
   if (!user) redirect("/login");
 
@@ -55,7 +58,7 @@ export default async function FamilyPage({
     memberSummaries.map((m) => [m.id, m.display_name]),
   );
 
-  const [cards, removed, events, statsInput] = await Promise.all([
+  const [cards, removed, events, statsInput, sharing] = await Promise.all([
     showList ? getListCards({ groupId, userId: user.id }) : [],
     showList
       ? getRemovedItems({ groupId, userId: user.id, memberNames })
@@ -67,6 +70,7 @@ export default async function FamilyPage({
           memberSummaries.map((m) => ({ id: m.id, name: m.display_name })),
         )
       : null,
+    showMembers ? getSharing(memberSummaries.map((m) => m.id)) : new Map<string, boolean>(),
   ]);
   const years = statsInput
     ? yearsWithData(statsInput.titles.flatMap((t) => t.viewings.map((v) => v.on)))
@@ -144,6 +148,13 @@ export default async function FamilyPage({
           List
         </Link>
         <Link
+          href={`/app/family/${group.id}?view=members`}
+          aria-current={showMembers ? "page" : undefined}
+          className={tabClass(showMembers)}
+        >
+          Members
+        </Link>
+        <Link
           href={`/app/family/${group.id}?view=activity`}
           aria-current={showActivity ? "page" : undefined}
           className={tabClass(showActivity)}
@@ -163,6 +174,18 @@ export default async function FamilyPage({
         <div className="rounded-xl border border-border bg-card px-4 py-2">
           <ActivityFeed events={events} currentUserId={user.id} />
         </div>
+      ) : showMembers ? (
+        <MemberLists
+          groupId={group.id}
+          meId={user.id}
+          sharing={sharing}
+          people={members.map((m) => ({
+            id: m.user_id,
+            name: m.profiles?.display_name || "Member",
+            avatarUrl: m.profiles?.avatar_url ?? null,
+            owner: m.role === "owner",
+          }))}
+        />
       ) : showStats ? (
         stats ? (
           <FamilyStatsView stats={stats} years={years} groupId={group.id} />

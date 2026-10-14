@@ -367,6 +367,25 @@ export async function updateDisplayName(
 
 // Family settings: the database functions check that the caller is the owner.
 
+/** Whether the people in the person's families can see their My list (the database reads this in member_list()). */
+export async function setListSharing(share: boolean): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (typeof share !== "boolean") return { error: "That isn't a valid choice." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ share_my_list: share })
+    .eq("id", user.id);
+  if (error) {
+    // PGRST204: the database doesn't have the setting yet (the app was updated before it).
+    if (error.code === "PGRST204") return { error: "This setting isn't available yet. Please try again in a little while." };
+    return { error: error.message };
+  }
+
+  revalidateApp();
+  return {};
+}
+
 export async function renameGroup(
   groupId: string,
   name: string,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 
 import { removeListItem } from "@/app/app/actions";
+import { AddToListButton, type AddTarget } from "@/components/add-to-list-button";
 import { Avatar } from "@/components/avatar";
 import { MediaPoster } from "@/components/media-poster";
 import { RatingPanel } from "@/components/rating-panel";
@@ -26,12 +27,15 @@ export function ListItemCard({
   card,
   currentUserId,
   members,
+  share,
   onRemoved,
 }: {
   card: Card;
   currentUserId: string;
   /** Only passed for family lists. */
   members?: MemberSummary[];
+  /** On My list, for a person in at least one family: the families a title can be added to, and the ones that have it. */
+  share?: { families: AddTarget[]; alreadyOn: { listId: string | null; itemId: string }[] };
   onRemoved?: (itemId: string, title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -169,6 +173,18 @@ export function ListItemCard({
             )}
             {canStartSeriesAgain(card) && (
               <StartSeriesAgain itemId={item.id} title={media.title} pass={card.passes + 1} />
+            )}
+            {share && share.families.length > 0 && !item.group_id && (
+              <AddToListButton
+                tmdbId={media.tmdb_id}
+                mediaType={media.media_type}
+                title={media.title}
+                targets={share.families}
+                alreadyOn={share.alreadyOn}
+                label="Add to family"
+                variant="outline"
+                addOnly
+              />
             )}
             <ReactionButtons
               itemId={item.id}

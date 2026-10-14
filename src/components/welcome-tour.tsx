@@ -32,7 +32,7 @@ const STEPS: Step[] = [
   {
     icon: Users,
     title: "Family lists",
-    text: "Create a family or join one with an invite code. Everyone adds what they want to watch, and you still get a private list just for you.",
+    text: "Create a family or join one with an invite code. Everyone adds what they want to watch, and you still get a list just for you: the people in your families can look at it, and you can add its titles to a family's list. Switch the sharing off in Settings.",
   },
   {
     icon: Layers,

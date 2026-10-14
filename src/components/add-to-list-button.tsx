@@ -21,6 +21,9 @@ export function AddToListButton({
   targets,
   alreadyOn,
   size = "sm",
+  variant = "default",
+  label = "Add",
+  addOnly = false,
   className,
 }: {
   tmdbId: number;
@@ -31,6 +34,12 @@ export function AddToListButton({
   /** Lists that already have this title (listId null = My list), with the list item to remove. */
   alreadyOn?: { listId: string | null; itemId: string }[];
   size?: "sm" | "default";
+  /** How loud the button is: the main action of a card, or one of several. */
+  variant?: "default" | "outline";
+  /** What the button says ("Add", or "Add to…" when there is a list to pick). */
+  label?: string;
+  /** Only adds: a list that has the title already says so, and doesn't offer to take it off again. */
+  addOnly?: boolean;
   className?: string;
 }) {
   const [pending, start] = useTransition();
@@ -99,24 +108,27 @@ export function AddToListButton({
               <Check className="size-4" />
               Added
             </Button>
-            <Button
-              size={size}
-              variant="ghost"
-              disabled={pending}
-              onClick={() => toggle(t)}
-              aria-label={`Remove from ${t.label}`}
-              className="px-2.5 text-muted-foreground hover:text-destructive"
-            >
-              {pending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-            </Button>
+            {!addOnly && (
+              <Button
+                size={size}
+                variant="ghost"
+                disabled={pending}
+                onClick={() => toggle(t)}
+                aria-label={`Remove from ${t.label}`}
+                className="px-2.5 text-muted-foreground hover:text-destructive"
+              >
+                {pending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Trash2 className="size-4" />
+                )}
+              </Button>
+            )}
           </div>
         ) : (
           <Button
             size={size}
+            variant={variant}
             className={className}
             disabled={pending}
             onClick={() => toggle(t)}
@@ -126,7 +138,7 @@ export function AddToListButton({
             ) : (
               <Plus className="size-4" />
             )}
-            Add
+            {label}
           </Button>
         )}
         {errorText}
@@ -139,17 +151,22 @@ export function AddToListButton({
   ) : (
     <Plus className="size-4" />
   );
+  // With a list to pick, the button says where it leads: "Add to…", or what it was given ("Add to family…").
+  const pickLabel = label === "Add" ? "Add to…" : `${label}…`;
   const options = (large: boolean) =>
     targets.map((t) => {
       const on = itemIds.has(key(t.id));
+      // A list that has the title is only a note, when this button only adds.
+      const settled = on && addOnly;
       return (
         <button
           key={key(t.id)}
           type="button"
           onClick={() => toggle(t)}
-          aria-label={on ? `Remove from ${t.label}` : undefined}
+          disabled={settled}
+          aria-label={on && !addOnly ? `Remove from ${t.label}` : undefined}
           className={cn(
-            "flex w-full items-center justify-between gap-2 rounded-md px-2.5 text-left hover:bg-muted",
+            "flex w-full items-center justify-between gap-2 rounded-md px-2.5 text-left hover:bg-muted disabled:pointer-events-none",
             large ? "py-3.5 text-base" : "py-2 text-sm",
           )}
         >
@@ -162,7 +179,7 @@ export function AddToListButton({
               )}
             >
               <Check className="size-4 text-like" />
-              Remove
+              {addOnly ? "Added" : "Remove"}
             </span>
           )}
         </button>
@@ -174,22 +191,24 @@ export function AddToListButton({
       {/* Phones get a bottom sheet (a <dialog>, so it also works on iPhones without the Popover API). */}
       <Button
         size={size}
+        variant={variant}
         className={cn(className, "sm:hidden")}
         disabled={pending}
         onClick={() => sheetRef.current?.showModal()}
       >
         {icon}
-        Add to…
+        {pickLabel}
       </Button>
       <Button
         ref={buttonRef}
         size={size}
+        variant={variant}
         className={cn(className, "max-sm:hidden")}
         disabled={pending}
         popoverTarget={menuId}
       >
         {icon}
-        Add to…
+        {pickLabel}
       </Button>
       {/* A native popover renders above everything, so scrolling rows and rounded cards can't clip it. */}
       <div

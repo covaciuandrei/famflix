@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { signOut } from "@/app/login/actions";
 import { DeleteAccount } from "@/components/delete-account";
 import { DownloadData } from "@/components/download-data";
+import { ListSharing } from "@/components/list-sharing";
 import { ProfileForm } from "@/components/profile-form";
 import { ThemePicker } from "@/components/theme";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,15 @@ export default async function SettingsPage() {
           <p className="text-sm text-muted-foreground">
             Signed in with Google as {user.email}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Privacy</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ListSharing shared={profile?.share_my_list !== false} />
         </CardContent>
       </Card>
 

@@ -21,7 +21,7 @@ Keep one list of what to watch, log who watched what, and settle "what shall we 
 
 ## Overview
 
-FamFlix ends the "what shall we watch?" discussion. Everyone has a private **My list**, every family (a household,
+FamFlix ends the "what shall we watch?" discussion. Everyone has their own **My list**, every family (a household,
 a group of friends) has a shared list, and when nobody can decide a **movie night** puts the same stack of
 suggestions in front of everyone: swipe, watch the leaderboard fill up, pick the winner.
 
@@ -32,7 +32,7 @@ database checks and 40+ browser scenarios on every push, and a free-tier deploym
 
 | Feature | What you get |
 | --- | --- |
-| **Family and personal lists** | A private *My list* plus a shared list per family, joined with an invite code that expires. Filter by type, decade and category. |
+| **Family and personal lists** | Your own *My list* plus a shared list per family, joined with an invite code that expires. The people in your families can look at your My list (switch that off in Settings) and take titles from it; from My list a title goes onto a family's list with one button. Filter by type, decade and category. |
 | **Movie night** | Pick a mood and everyone swipes the same stack (the family's To watch plus TMDB suggestions). A leaderboard decides. Guests can vote from a link, with no account. A night can be edited (who watched, and when) or deleted afterwards. |
 | **Plan ahead** | Schedule a night, collect Going / Maybe / Can't answers and get reminders in the app. |
 | **Watched together** | Log who was there. Everyone confirms their own score, and the title lands on each person's My list. |
@@ -236,7 +236,7 @@ flowchart TD
 | Layer | What it does |
 | --- | --- |
 | Sign-in | Google only; e-mail and password sign-up is switched off in Supabase. [`proxy.ts`](src/proxy.ts) refreshes the session on every request and keeps signed-out visitors out of `/app`. |
-| Row-level security | On for every table. My list is readable only by its owner, a family's data only by its members. |
+| Row-level security | On for every table. My list is readable only by its owner through the tables; the people in their families get a narrower view through one function, `member_list()` (title, whether and when it was watched, the owner's score: never notes or reactions), which the owner can switch off. A family's data is readable only by its members. |
 | Database functions | Anything beyond "may I read or write this row" (log a watch, start a night, vote, pick, plan, export) is a SQL function that re-checks who is asking, the dates, the scores and the limits. |
 | Explicit grants | Supabase no longer hands new tables and functions to the API roles. [`db_init.sql`](supabase/db_init.sql) grants exactly what each role needs, and the database tests run it under the older and the newer defaults, with an inventory that fails when a table or function is left out. |
 | Guests | A guest has no account and no direct access: the server speaks for them through functions only the service role may run. Their link is a secret (`no-referrer`, `noindex`), limited to one night, and stops working when the night ends. |

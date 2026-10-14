@@ -19,6 +19,7 @@ import type {
   ListItemCard,
   ListItemWithDetails,
   MediaType,
+  MemberTitle,
   PendingRating,
   Profile,
   RemovedItem,
@@ -119,6 +120,45 @@ export async function getGroupWithMembers(groupId: string): Promise<{
     group: group as Group,
     members: (members ?? []) as GroupMemberWithProfile[],
   };
+}
+
+/**
+ * What is on another person's My list, for someone who is in a family with them. The database decides who may see it
+ * (member_list()): a list that is switched off, or of someone you share no family with, comes back empty. `unavailable`
+ * when the database doesn't have the function yet.
+ */
+export async function getMemberList(
+  personId: string,
+): Promise<{ titles: MemberTitle[] } | { unavailable: true }> {
+  const supabase = await createClient();
+  const titles: MemberTitle[] = [];
+  // The API hands out at most 1000 rows at a time, so a long list is read a page at a time.
+  for (let from = 0; from < 20_000; from += 1000) {
+    const { data, error } = await supabase.rpc("member_list", { p_user: personId }).range(from, from + 999);
+    if (error) {
+      // PGRST202: the database doesn't have the function yet.
+      if (error.code !== "PGRST202") console.error("Could not load a member's list:", error.message);
+      return { unavailable: true };
+    }
+    const page = (data ?? []) as MemberTitle[];
+    titles.push(...page);
+    if (page.length < 1000) break;
+  }
+  return { titles };
+}
+
+/** Whether each of these people lets their families see their My list. Anyone it can't tell about counts as sharing. */
+export async function getSharing(ids: string[]): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  if (ids.length === 0) return result;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("profiles").select("id, share_my_list").in("id", ids);
+  // Quietly: until the database has the setting, nobody has switched it off.
+  if (error) return result;
+  for (const row of (data ?? []) as { id: string; share_my_list: boolean }[]) {
+    result.set(row.id, row.share_my_list);
+  }
+  return result;
 }
 
 /** Fetch and aggregate the cards for a shared (groupId) or personal list. */

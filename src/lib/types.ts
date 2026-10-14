@@ -10,6 +10,8 @@ export interface Profile {
   display_name: string;
   avatar_url: string | null;
   created_at: string;
+  /** Whether the people in their families can see their My list. Not there until the database has the setting. */
+  share_my_list?: boolean;
 }
 
 export interface Group {
@@ -103,6 +105,22 @@ export interface Reaction {
 }
 
 export type MemberSummary = Pick<Profile, "id" | "display_name" | "avatar_url">;
+
+/** One title on another person's My list, as member_list() gives it: what a list shows of a title, and nothing private. */
+export interface MemberTitle {
+  tmdb_id: number;
+  media_type: MediaType;
+  title: string;
+  release_year: number | null;
+  poster_path: string | null;
+  tmdb_rating: number | null;
+  status: ListStatus;
+  /** The moment it was marked watched (its day is what matters); null when it is not, or no day is known. */
+  watched_at: string | null;
+  added_at: string;
+  /** The owner's score. */
+  score: number | null;
+}
 
 /** A family member marked as having watched a family-list title. */
 export interface Watch {
