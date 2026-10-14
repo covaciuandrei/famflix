@@ -249,6 +249,7 @@ Per-person limits, kept in the database so every server instance shares them:
 | Action | Limit |
 | --- | --- |
 | Add a title, search | 30 and 60 a minute |
+| Load a row's next titles as it is scrolled | 120 a minute |
 | Open a series' seasons, tick episodes | 120 and 180 a minute |
 | Open a title's page, open a Discover stack | 120 a minute, 40 an hour |
 | Try invite codes, create families | 10 per 10 minutes, 10 an hour |

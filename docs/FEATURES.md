@@ -38,9 +38,13 @@ Search, browse trending and top rated titles, or filter them by type (movies or
 series), decade and category (Comedy, Horror, Kids, ...); the filters work
 together, and only offer the categories the chosen type has. A row of titles
 scrolls sideways: swipe it on a phone, or use the arrows at its edges with a
-mouse (they show only while there is more to see that way, and the cast and
-similar titles on a title's page work the same). Trailers play from YouTube only
-once you press play.
+mouse (they show only while there is more to see that way). A row has no last
+card: as you near its end the next page of titles is loaded from TMDB (a few
+placeholders hold the place meanwhile, and a failed page says so and waits for
+"Try again"), without repeating a title, for as long as TMDB has more. The
+"Because you liked ..." rows and "More like this" on a title's page keep going the
+same way; the cast and a film's collection are short and don't. Trailers play from
+YouTube only once you press play.
 
 ### A title's page
 

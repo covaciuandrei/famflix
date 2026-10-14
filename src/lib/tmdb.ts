@@ -1,5 +1,6 @@
 import "server-only";
 
+import { hasMorePages, rowRequest, type RowSource } from "@/lib/browse-rows";
 import type { Decade } from "@/lib/decades";
 import { findGenre, type BrowseGenre } from "@/lib/genres";
 import { interleave } from "@/lib/deck-compose";
@@ -37,13 +38,20 @@ export interface TmdbDetails extends TmdbItem {
 
 /** What a title's page shows besides the basics: the cast, who made it, its age rating, its collection and similar titles. */
 export interface TmdbExtras extends TitleExtras {
-  /** TMDB's "if you liked this" titles, with a poster, without the title itself. */
+  /** TMDB's "if you liked this" titles, with a poster, without the title itself (the first page of them). */
   similar: TmdbItem[];
+  /** Whether TMDB has more of them after those. */
+  similarHasMore: boolean;
 }
 
 export interface TmdbRow {
   title: string;
+  /** The first page of the row. */
   items: TmdbItem[];
+  /** Where the row's titles come from, so the pages after the first can be asked for as the row is scrolled. */
+  source: RowSource;
+  /** Whether TMDB has pages after the first. */
+  hasMore: boolean;
 }
 
 interface RawResult {
@@ -64,7 +72,7 @@ interface RawDetails extends RawResult, RawSeries, RawTitleExtras {
   runtime?: number;
   episode_run_time?: number[];
   videos?: { results: { key: string; site: string; type: string }[] };
-  recommendations?: { results?: RawResult[] };
+  recommendations?: { results?: RawResult[]; total_pages?: number };
 }
 
 function token(): string {
@@ -179,44 +187,53 @@ export async function searchMedia(query: string, only?: MediaType): Promise<Tmdb
   return normalizeMany(data.results, only);
 }
 
+/**
+ * One page of a row: its titles (a recommendation row leaves out titles without a poster, and the title itself) and
+ * whether TMDB has pages after it. Throws if TMDB can't be reached.
+ */
+export async function getRowPage(
+  source: RowSource,
+  page: number,
+): Promise<{ items: TmdbItem[]; hasMore: boolean }> {
+  const { path, params, fallbackType } = rowRequest(source, page);
+  const data = await tmdbFetch<{ results: RawResult[]; total_pages?: number }>(
+    path,
+    params,
+    // What TMDB recommends for a title hardly changes.
+    source.kind === "like" ? 86_400 : 3600,
+  );
+  const items = normalizeMany(data.results, fallbackType);
+  return {
+    items:
+      source.kind === "like"
+        ? items.filter((i) => i.posterPath && !(i.mediaType === source.type && i.tmdbId === source.id))
+        : items,
+    hasMore: hasMorePages(page, data.total_pages),
+  };
+}
+
+/** A row as it is first shown: its first page, and what is needed to ask for the rest. */
+async function firstPageOf(title: string, source: RowSource): Promise<TmdbRow> {
+  return { title, source, ...(await getRowPage(source, 1)) };
+}
+
 /** Curated browse rows for the discover page, or with a type only that kind of title. */
 export async function getBrowseRows(type: MediaType | null = null): Promise<TmdbRow[]> {
-  if (type) {
-    const [trending, popular, topRated] = await Promise.all([
-      tmdbFetch<{ results: RawResult[] }>(`/trending/${type}/week`, {}, 3600),
-      tmdbFetch<{ results: RawResult[] }>(`/${type}/popular`, {}, 3600),
-      tmdbFetch<{ results: RawResult[] }>(`/${type}/top_rated`, {}, 3600),
-    ]);
-    const kind = type === "movie" ? "movies" : "series";
-    return [
-      { title: `Trending ${kind} this week`, items: normalizeMany(trending.results, type) },
-      { title: `Popular ${kind}`, items: normalizeMany(popular.results, type) },
-      { title: `Top rated ${kind}`, items: normalizeMany(topRated.results, type) },
-    ];
-  }
-
-  const [trending, popularMovies, popularTv, topMovies, topTv] =
-    await Promise.all([
-      tmdbFetch<{ results: RawResult[] }>("/trending/all/week", {}, 3600),
-      tmdbFetch<{ results: RawResult[] }>("/movie/popular", {}, 3600),
-      tmdbFetch<{ results: RawResult[] }>("/tv/popular", {}, 3600),
-      tmdbFetch<{ results: RawResult[] }>("/movie/top_rated", {}, 3600),
-      tmdbFetch<{ results: RawResult[] }>("/tv/top_rated", {}, 3600),
-    ]);
-
-  return [
-    { title: "Trending this week", items: normalizeMany(trending.results) },
-    {
-      title: "Popular movies",
-      items: normalizeMany(popularMovies.results, "movie"),
-    },
-    { title: "Popular series", items: normalizeMany(popularTv.results, "tv") },
-    {
-      title: "Top rated movies",
-      items: normalizeMany(topMovies.results, "movie"),
-    },
-    { title: "Top rated series", items: normalizeMany(topTv.results, "tv") },
-  ];
+  const kind = type === "movie" ? "movies" : "series";
+  const rows: [string, RowSource][] = type
+    ? [
+        [`Trending ${kind} this week`, { kind: "trending", type }],
+        [`Popular ${kind}`, { kind: "popular", type }],
+        [`Top rated ${kind}`, { kind: "top", type }],
+      ]
+    : [
+        ["Trending this week", { kind: "trending", type: null }],
+        ["Popular movies", { kind: "popular", type: "movie" }],
+        ["Popular series", { kind: "popular", type: "tv" }],
+        ["Top rated movies", { kind: "top", type: "movie" }],
+        ["Top rated series", { kind: "top", type: "tv" }],
+      ];
+  return Promise.all(rows.map(([title, source]) => firstPageOf(title, source)));
 }
 
 /**
@@ -239,62 +256,22 @@ export async function getDiscoverRows({
       ? ` from before ${decade.to + 1}`
       : ` from the ${decade.label}`;
 
-  const discover = (mediaType: MediaType, params: Record<string, string>) => {
-    const genreId = genre ? genre[mediaType] : null;
-    const dateField =
-      mediaType === "movie" ? "primary_release_date" : "first_air_date";
-    return tmdbFetch<{ results: RawResult[] }>(
-      `/discover/${mediaType}`,
-      {
-        ...(genreId !== null && { with_genres: String(genreId) }),
-        // Talk, news, reality and soap shows would otherwise fill the Comedy and Drama series rows.
-        ...(mediaType === "tv" && { without_genres: "10763,10764,10766,10767" }),
-        ...(decade?.from != null && { [`${dateField}.gte`]: `${decade.from}-01-01` }),
-        ...(decade?.to != null && { [`${dateField}.lte`]: `${decade.to}-12-31` }),
-        include_adult: "false",
-        page: "1",
-        ...params,
-      },
-      3600,
-    ).then((data) => normalizeMany(data.results, mediaType));
-  };
-  // Vote minimums keep out obscure titles and ones rated by a handful of people.
-  const popular = { sort_by: "popularity.desc", "vote_count.gte": "100" };
-  const topRated = (minVotes: number) => ({
-    sort_by: "vote_average.desc",
-    "vote_count.gte": String(minVotes),
+  const discover = (mediaType: MediaType, sort: "popular" | "top"): RowSource => ({
+    kind: "discover",
+    type: mediaType,
+    sort,
+    genre: genre?.slug ?? null,
+    decade: decade?.value ?? null,
   });
 
   const movies = type !== "tv" && (!genre || genre.movie !== null);
   const series = type !== "movie" && (!genre || genre.tv !== null);
-  const rows: { title: string; items: Promise<TmdbItem[]> }[] = [];
-  if (movies) {
-    rows.push({
-      title: `Popular ${what}movies${when}`,
-      items: discover("movie", popular),
-    });
-  }
-  if (series) {
-    rows.push({
-      title: `Popular ${what}series${when}`,
-      items: discover("tv", popular),
-    });
-  }
-  if (movies) {
-    rows.push({
-      title: `Top rated ${what}movies${when}`,
-      items: discover("movie", topRated(1000)),
-    });
-  }
-  if (series) {
-    rows.push({
-      title: `Top rated ${what}series${when}`,
-      items: discover("tv", topRated(300)),
-    });
-  }
-  return Promise.all(
-    rows.map(async (r) => ({ title: r.title, items: await r.items })),
-  );
+  const rows: [string, RowSource][] = [];
+  if (movies) rows.push([`Popular ${what}movies${when}`, discover("movie", "popular")]);
+  if (series) rows.push([`Popular ${what}series${when}`, discover("tv", "popular")]);
+  if (movies) rows.push([`Top rated ${what}movies${when}`, discover("movie", "top")]);
+  if (series) rows.push([`Top rated ${what}series${when}`, discover("tv", "top")]);
+  return Promise.all(rows.map(([title, source]) => firstPageOf(title, source)));
 }
 
 /** Spreads a stack's seed over TMDB's first few pages, so asking again for the same mood gives other titles. */
@@ -480,7 +457,14 @@ export async function getMediaDetails(
   const similar = normalizeMany(raw.recommendations?.results ?? [], mediaType)
     .filter((item) => item.posterPath && !(item.mediaType === mediaType && item.tmdbId === tmdbId))
     .slice(0, MAX_SIMILAR);
-  return { ...details, extras: { ...titleExtrasFrom(mediaType, raw), similar } };
+  return {
+    ...details,
+    extras: {
+      ...titleExtrasFrom(mediaType, raw),
+      similar,
+      similarHasMore: hasMorePages(1, raw.recommendations?.total_pages),
+    },
+  };
 }
 
 /** The films of a collection (a series of films), oldest first, and its name; cached for a day. */

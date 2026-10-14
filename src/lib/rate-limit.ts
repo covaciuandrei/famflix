@@ -8,6 +8,8 @@ export const LIMITS = {
   addTitle: { action: "add_title", max: 30, seconds: 60 },
   /** Searching for titles. */
   search: { action: "search", max: 60, seconds: 60 },
+  /** Loading the next page of a row on Browse or a title's page as it is scrolled (each asks TMDB for one page). */
+  rowMore: { action: "row_more", max: 120, seconds: 60 },
   /** Opening the seasons of a series (each asks TMDB for the season's episodes). */
   season: { action: "season", max: 120, seconds: 60 },
   /** Building a stack to swipe (Discover, a new movie night, or more suggestions): each one asks TMDB for dozens of titles. */

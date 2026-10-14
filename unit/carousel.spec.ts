@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { pageTarget, scrollReach } from "../src/lib/carousel";
+import { nearEnd, pageTarget, scrollReach } from "../src/lib/carousel";
 
 // A desktop row: about a thousand pixels wide, cards 144px wide with a 12px gap.
 const pitch = 156;
@@ -72,4 +72,35 @@ test("the same holds in a narrow window", () => {
     if (at < 2500) expect(pageTarget(narrow(at), 1, 140)).toBeGreaterThan(at);
     if (at > 0) expect(pageTarget(narrow(at), -1, 140)).toBeLessThan(at);
   }
+});
+
+test("more titles are asked for once less than a page and a half is left to scroll", () => {
+  // 3500 wide in a 984 window: 3500 − 984 = 2516 to scroll in all; the limit is 1.5 × 984 = 1476 from the end.
+  expect(nearEnd(row(0))).toBe(false);
+  expect(nearEnd(row(1000))).toBe(false);
+  expect(nearEnd(row(1040))).toBe(true);
+  expect(nearEnd(row(1100))).toBe(true);
+  expect(nearEnd(row(3500 - 984))).toBe(true);
+  // Right on the limit counts.
+  expect(nearEnd(row(2516 - 1476))).toBe(true);
+  expect(nearEnd(row(2516 - 1476 - 1))).toBe(false);
+});
+
+test("a row that fits is at its end, so what follows is asked for at once", () => {
+  expect(nearEnd(row(0, 984))).toBe(true);
+  expect(nearEnd(row(0, 500))).toBe(true);
+  // Even a short row of cards a screen and a bit wide.
+  expect(nearEnd(row(0, 1500))).toBe(true);
+});
+
+test("a row that is not on screen is never near its end, or hidden rows would load for ever", () => {
+  expect(nearEnd({ scrollLeft: 0, clientWidth: 0, scrollWidth: 0 })).toBe(false);
+  expect(nearEnd({ scrollLeft: 0, clientWidth: 0, scrollWidth: 3000 })).toBe(false);
+});
+
+test("how far ahead to look can be changed", () => {
+  expect(nearEnd(row(0), 3)).toBe(true);
+  expect(nearEnd(row(0), 2)).toBe(false);
+  expect(nearEnd(row(0), 0)).toBe(false);
+  expect(nearEnd(row(3500 - 984), 0)).toBe(true);
 });

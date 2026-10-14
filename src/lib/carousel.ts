@@ -12,6 +12,17 @@ export function scrollReach({ scrollLeft, clientWidth, scrollWidth }: RowMetrics
   };
 }
 
+/** How far from its end a row that keeps loading starts to fetch more, in widths of the row: before the end comes, not at it. */
+const LOOK_AHEAD = 1.5;
+
+/**
+ * Whether a row is scrolled close enough to its end for the titles after it to be fetched (a row that fits is at its end).
+ * A row that is not laid out, such as a hidden one, never is.
+ */
+export function nearEnd({ scrollLeft, clientWidth, scrollWidth }: RowMetrics, ahead = LOOK_AHEAD) {
+  return clientWidth > 0 && scrollWidth - (scrollLeft + clientWidth) <= clientWidth * ahead;
+}
+
 /**
  * Where one click on an arrow scrolls to: a page of whole cards, so the first card in view lines up with the row's edge
  * again even after a free scroll. `pitch` is the distance from one card to the next (width plus gap); without a usable

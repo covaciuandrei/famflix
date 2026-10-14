@@ -1,9 +1,22 @@
 import { test, type Locator, type Page } from "@playwright/test";
 
-import { admin, createUser, expect, signIn } from "./helpers";
+import { addTo, admin, createUser, expect, signIn } from "./helpers";
 
 const heading = (page: Page, name: string) => page.getByRole("heading", { name, exact: true });
 const top = async (nav: Locator) => (await nav.boundingBox())!.y;
+
+const rowOf = (page: Page, title: string) => page.locator("section", { has: heading(page, title) });
+/** What a row asks the server for when it is scrolled near its end. */
+const MORE_TITLES = /\/api\/browse\/rows\?/;
+/** The address of every title in a row, in order (a card's poster links to the title's page). */
+async function addressesIn(list: Locator) {
+  const hrefs = await list
+    .getByRole("listitem")
+    .evaluateAll((items) => items.map((item) => item.querySelector("a")?.getAttribute("href") ?? null));
+  return hrefs.filter((href): href is string => href !== null);
+}
+/** Takes a row to its end, as a swipe or the wheel would. */
+const scrollToEnd = (list: Locator) => list.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
 
 test("Browse is filtered by type, first among the filters, and the type goes along with the others", async ({ page, context }) => {
   await signIn(context, await createUser("Tess"));
@@ -101,10 +114,12 @@ test("the rows of what you liked follow the type", async ({ page, context }) => 
 
 test("a row of titles scrolls with arrows for a mouse, which has no scrollbar to drag, and a phone swipes it", async ({ page, context }, testInfo) => {
   await signIn(context, await createUser("Tess"));
+  // A real row has pages without end; this one has none after its first, so there is a last card to reach.
+  await page.route(MORE_TITLES, (route) => route.fulfill({ json: { items: [], hasMore: false } }));
   await page.goto("/app/browse");
 
   const title = "Trending this week";
-  const row = page.locator("section", { has: heading(page, title) });
+  const row = rowOf(page, title);
   const list = row.getByRole("list").first();
   const cards = list.getByRole("listitem");
   const next = row.getByRole("button", { name: `Next in ${title}` });
@@ -168,4 +183,151 @@ test("a row of titles scrolls with arrows for a mouse, which has no scrollbar to
   expect(await inView(cards.first())).toBe(true);
   await expect(back).toBeHidden();
   await expect(next).toBeVisible();
+});
+
+test("a row goes on loading titles as it is scrolled to its end, so it has no last card", async ({ page, context }, testInfo) => {
+  await signIn(context, await createUser("Tess"));
+  await page.goto("/app/browse");
+
+  const title = "Popular movies";
+  const row = rowOf(page, title);
+  const list = row.getByRole("list").first();
+  const next = row.getByRole("button", { name: `Next in ${title}` });
+  await expect(list.getByRole("listitem").first()).toBeVisible();
+
+  let known = (await addressesIn(list)).length;
+  expect(known).toBeGreaterThanOrEqual(15);
+
+  // Each time the row is taken to its end, with the arrow on a computer and by swiping on a phone, the next page arrives.
+  for (let round = 1; round <= 3; round++) {
+    await expect
+      .poll(
+        async () => {
+          if (testInfo.project.name === "desktop") await next.click({ timeout: 5_000 });
+          else await scrollToEnd(list);
+          return (await addressesIn(list)).length;
+        },
+        { timeout: 40_000, message: `more titles after ${round} page(s) of scrolling` },
+      )
+      .toBeGreaterThan(known);
+    const titles = await addressesIn(list);
+    expect(new Set(titles).size, "no title is shown twice").toBe(titles.length);
+    known = titles.length;
+  }
+
+  // A first page and three more, and the way on is still there.
+  expect(known).toBeGreaterThanOrEqual(60);
+  if (testInfo.project.name === "desktop") await expect(next).toBeVisible();
+  // All those cards stay inside the row: the page itself doesn't scroll sideways.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test("while a page is on its way the row says so and holds the place with blank cards", async ({ page, context }) => {
+  await signIn(context, await createUser("Tess"));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route(MORE_TITLES, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await page.goto("/app/browse");
+
+  const row = rowOf(page, "Popular movies");
+  const list = row.getByRole("list").first();
+  const blanks = list.locator(":scope > li[aria-hidden='true']");
+  await expect(list.getByRole("listitem").first()).toBeVisible();
+  const known = (await addressesIn(list)).length;
+  await expect(blanks).toHaveCount(0);
+
+  await scrollToEnd(list);
+  await expect(row.getByRole("status")).toHaveText("Loading more titles…");
+  await expect(blanks).toHaveCount(4);
+
+  release();
+  await expect(blanks).toHaveCount(0);
+  await expect(row.getByRole("status")).toHaveText("");
+  await expect.poll(async () => (await addressesIn(list)).length).toBeGreaterThan(known);
+});
+
+test("a page that can't be loaded is said so, isn't asked for again by itself, and loads on a second try", async ({ page, context }) => {
+  await signIn(context, await createUser("Tess"));
+  let asked = 0;
+  let broken = true;
+  await page.route(MORE_TITLES, (route) => {
+    asked++;
+    return broken
+      ? route.fulfill({ status: 429, json: { error: "You're doing that too often. Try again in a minute." } })
+      : route.continue();
+  });
+  await page.goto("/app/browse");
+
+  const row = rowOf(page, "Popular movies");
+  const list = row.getByRole("list").first();
+  const retry = row.getByRole("button", { name: "Try again" });
+  await expect(list.getByRole("listitem").first()).toBeVisible();
+  const known = (await addressesIn(list)).length;
+
+  // What the server said, where the next cards would be, and to anyone who can't see the row.
+  await scrollToEnd(list);
+  await expect(retry).toBeVisible();
+  await expect(list.getByRole("listitem").filter({ has: page.getByRole("button", { name: "Try again" }) })).toContainText(
+    "You're doing that too often. Try again in a minute.",
+  );
+  await expect(row.getByRole("status")).toHaveText("You're doing that too often. Try again in a minute.");
+  expect(asked).toBe(1);
+
+  // Scrolling about doesn't ask again: only the button does.
+  await list.evaluate((el) => el.scrollBy({ left: -400 }));
+  await scrollToEnd(list);
+  await page.waitForTimeout(500);
+  expect(asked).toBe(1);
+  expect((await addressesIn(list)).length).toBe(known);
+
+  broken = false;
+  await retry.click();
+  await expect(retry).toBeHidden();
+  await expect.poll(async () => (await addressesIn(list)).length).toBeGreaterThan(known);
+  await expect(row.getByRole("status")).toHaveText("");
+  expect(asked).toBe(2);
+});
+
+test("the titles a page adds come after the row's own, none twice, and show your lists like the rest", async ({ page, context }) => {
+  await signIn(context, await createUser("Tess"));
+  await page.goto("/app/browse");
+
+  const row = rowOf(page, "Popular movies");
+  const list = row.getByRole("list").first();
+  const cards = list.getByRole("listitem");
+  await expect(cards.first()).toBeVisible();
+  const own = await addressesIn(list);
+
+  // A page that repeats the row's first title and has one it doesn't have yet (a classic, whatever is popular today).
+  const repeated = Number(own[0].split("/").pop());
+  const newId = [603, 680, 550, 13, 155].find((id) => !own.includes(`/app/media/movie/${id}`))!;
+  await page.route(MORE_TITLES, (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          { tmdbId: repeated, mediaType: "movie", title: "Seen already", year: 2001, posterPath: null, voteAverage: 7 },
+          { tmdbId: newId, mediaType: "movie", title: "Just loaded", year: 1999, posterPath: null, voteAverage: 8.1 },
+        ],
+        hasMore: false,
+      },
+    }),
+  );
+  await scrollToEnd(list);
+  const loaded = cards.filter({ hasText: "Just loaded" });
+  await expect(loaded).toBeVisible();
+  expect(await addressesIn(list)).toEqual([...own, `/app/media/movie/${newId}`]);
+  await expect(cards.last()).toContainText("Just loaded");
+  await expect(loaded).toContainText("Movie · 1999");
+  await expect(loaded).toContainText("8.1");
+  await expect(cards.filter({ hasText: "Seen already" })).toHaveCount(0);
+
+  // It can be added like any card, and then shows it is on My list, as the cards the page itself rendered do.
+  await addTo(page, loaded, "My list");
+  await expect(loaded.getByRole("img", { name: /On My list/ })).toBeVisible();
+  await expect(loaded.getByText("Added")).toBeVisible();
+  // The row stays where it was, with what it had loaded.
+  expect(await addressesIn(list)).toEqual([...own, `/app/media/movie/${newId}`]);
 });

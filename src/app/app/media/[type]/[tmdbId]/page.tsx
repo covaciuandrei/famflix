@@ -260,7 +260,14 @@ export default async function MediaDetailPage({
         />
       )}
 
-      <MediaRow title="More like this" items={extras.similar} targets={targets} library={index} />
+      <MediaRow
+        title="More like this"
+        items={extras.similar}
+        targets={targets}
+        library={index}
+        source={{ kind: "like", type: mediaType, id }}
+        hasMore={extras.similarHasMore}
+      />
     </div>
   );
 }

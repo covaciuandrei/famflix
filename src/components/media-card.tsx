@@ -7,8 +7,8 @@ import {
 } from "@/components/add-to-list-button";
 import { ListBadges } from "@/components/library-badges";
 import { MediaPoster } from "@/components/media-poster";
+import type { CardItem } from "@/lib/browse-rows";
 import { mediaTypeLabel } from "@/lib/constants";
-import type { TmdbItem } from "@/lib/tmdb";
 import type { LibraryEntry } from "@/lib/types";
 
 export function MediaCard({
@@ -16,7 +16,7 @@ export function MediaCard({
   targets,
   library,
 }: {
-  item: TmdbItem;
+  item: CardItem;
   targets: AddTarget[];
   library?: LibraryEntry;
 }) {

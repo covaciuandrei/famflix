@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { pageTarget, scrollReach } from "@/lib/carousel";
+import { nearEnd, pageTarget, scrollReach } from "@/lib/carousel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,16 +15,27 @@ import { cn } from "@/lib/utils";
 export function Carousel({
   label,
   arrowClassName,
+  more = false,
+  onNearEnd,
   children,
 }: {
   /** What the row is, for the arrows' names: "Next in {label}". */
   label: string;
   /** Where the arrows sit down the row (a `top-*` class): level with the middle of the pictures. */
   arrowClassName: string;
+  /** A row that keeps loading: cards may still come after the last one, so Next stays for as long as they may. */
+  more?: boolean;
+  /** Called while the row is scrolled (or sized) so that its end is near: time to load the cards that come next. */
+  onNearEnd?: () => void;
   children: ReactNode;
 }) {
   const list = useRef<HTMLUListElement>(null);
   const [reach, setReach] = useState({ back: false, forward: false });
+  // The latest callback, so a new one on every render doesn't restart the observers below.
+  const nearEndRef = useRef(onNearEnd);
+  useEffect(() => {
+    nearEndRef.current = onNearEnd;
+  });
 
   useEffect(() => {
     const row = list.current;
@@ -32,9 +43,10 @@ export function Carousel({
     const measure = () => {
       const next = scrollReach(row);
       setReach((now) => (now.back === next.back && now.forward === next.forward ? now : next));
+      if (nearEnd(row)) nearEndRef.current?.();
     };
     row.addEventListener("scroll", measure, { passive: true });
-    // Watching a row measures it once, then again whenever its size or its cards change (a resize, new filters).
+    // Watching a row measures it once, then again whenever its size or its cards change (a resize, new filters, a loaded page).
     const resized = new ResizeObserver(measure);
     resized.observe(row);
     const changed = new MutationObserver(measure);
@@ -62,7 +74,13 @@ export function Carousel({
       <ul ref={list} className="no-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
         {children}
       </ul>
-      <Arrow direction={1} label={label} shown={reach.forward} className={arrowClassName} onClick={() => go(1)} />
+      <Arrow
+        direction={1}
+        label={label}
+        shown={reach.forward || more}
+        className={arrowClassName}
+        onClick={() => go(1)}
+      />
     </div>
   );
 }

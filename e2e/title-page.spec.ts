@@ -31,6 +31,33 @@ test("a film's page shows its age rating, director, cast, collection and similar
   await expect(similar.getByRole("img", { name: /On My list/ })).toBeVisible();
 });
 
+test("More like this goes on loading as it is scrolled to its end, without ever showing the film itself", async ({ page, context }) => {
+  await signIn(context, await createUser("Ana"));
+  await page.goto("/app/media/movie/438631");
+
+  const row = page.locator("section", { has: page.getByRole("heading", { name: "More like this", exact: true }) });
+  const list = row.getByRole("list").first();
+  const cards = list.getByRole("listitem");
+  await expect(cards.first()).toBeVisible();
+  const known = await cards.count();
+
+  await expect
+    .poll(
+      async () => {
+        await list.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+        return cards.count();
+      },
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(known);
+
+  const hrefs = await list.locator("a[href^='/app/media/']").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+  const titles = new Set(hrefs);
+  // Two links on each card (its poster and its name), to a different film each.
+  expect(titles.size).toBe(hrefs.length / 2);
+  expect(titles.has("/app/media/movie/438631")).toBe(false);
+});
+
 test("a series' page names its creator, rating and cast, and has no collection", async ({ page, context }) => {
   await signIn(context, await createUser("Ana"));
   await page.goto("/app/media/tv/87108");

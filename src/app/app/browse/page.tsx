@@ -13,11 +13,12 @@ import {
   getSuggestionSeeds,
 } from "@/lib/data";
 import { BROWSE_TYPES, browseHref, genresFor, parseBrowseFilters } from "@/lib/browse-filters";
+import { rowSourceKey } from "@/lib/browse-rows";
 import { DECADES } from "@/lib/decades";
 import {
   getBrowseRows,
   getDiscoverRows,
-  getRecommendations,
+  getRowPage,
   type TmdbRow,
 } from "@/lib/tmdb";
 import type { MediaType } from "@/lib/types";
@@ -28,21 +29,17 @@ import type { MediaType } from "@/lib/types";
  */
 async function getSuggestionRows(type: MediaType | null): Promise<TmdbRow[]> {
   const seeds = await getSuggestionSeeds(3, type);
-  const results = await Promise.allSettled(
-    seeds.map((s) => getRecommendations(s.mediaType, s.tmdbId)),
-  );
-  return seeds.flatMap((seed, i) => {
-    const result = results[i];
-    if (result.status === "rejected") return [];
-    const items = result.value.slice(0, 12);
-    if (items.length === 0) return [];
-    return [
-      {
+  const rows = await Promise.allSettled(
+    seeds.map(async (seed) => {
+      const source = { kind: "like", type: seed.mediaType, id: seed.tmdbId } as const;
+      return {
         title: `Because ${seed.fromFamily ? "your family" : "you"} liked ${seed.title}`,
-        items,
-      },
-    ];
-  });
+        source,
+        ...(await getRowPage(source, 1)),
+      };
+    }),
+  );
+  return rows.flatMap((row) => (row.status === "fulfilled" && row.value.items.length > 0 ? [row.value] : []));
 }
 
 export default async function BrowsePage({
@@ -169,11 +166,14 @@ export default async function BrowsePage({
         <div className="flex flex-col gap-8">
           {allRows.map((r) => (
             <MediaRow
-              key={r.title}
+              // By source, not title: two titles can share a name, and a row that keeps loading keeps its place by its key.
+              key={rowSourceKey(r.source)}
               title={r.title}
               items={r.items}
               targets={targets}
               library={library}
+              source={r.source}
+              hasMore={r.hasMore}
             />
           ))}
         </div>
