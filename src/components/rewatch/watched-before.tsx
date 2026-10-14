@@ -40,9 +40,9 @@ export function WatchedBefore({ chip, lines }: { chip: string; lines: ViewingLin
         />
       </button>
       <ul id={listId} hidden={!open} className="mt-1.5 flex flex-col gap-0.5 text-xs text-muted-foreground">
-        {lines.map((line) => (
-          <li key={line.on}>
-            <span className="font-medium text-foreground">{formatDayNumeric(line.on)}</span>
+        {lines.map((line, i) => (
+          <li key={line.on ?? `unknown-${i}`}>
+            <span className="font-medium text-foreground">{line.on ? formatDayNumeric(line.on) : "Date unknown"}</span>
             {line.who.length > 0 && <> · {line.who.join(", ")}</>}
           </li>
         ))}

@@ -1,9 +1,17 @@
 import { test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { addTo, admin, createUser, expect, listCard, setSlider, signIn, type TestUser } from "./helpers";
 
 // Chernobyl (TMDB 87108): a miniseries that has ended, one season of five episodes.
 const CHERNOBYL = "/app/media/tv/87108";
+
+/** Ticking several episodes at once asks which day they were watched on: this takes the one it starts on, today. */
+async function pickToday(page: Page, count: number) {
+  const dialog = page.getByRole("dialog", { name: `When did you watch these ${count} episodes?` });
+  await dialog.getByRole("button", { name: "Mark watched" }).click();
+  await expect(dialog).toBeHidden();
+}
 
 /** The series' entry on someone's My list and the episodes ticked on it ("1:1,1:3"). */
 async function myChernobyl(user: TestUser) {
@@ -70,6 +78,7 @@ test("tick the episodes of a series: the next one, one by one, up to an episode,
 
   // Everything up to an episode, for catching up.
   await episodes.getByRole("button", { name: "Mark all up to S1E4" }).click();
+  await pickToday(page, 2);
   await expect(episodes.getByText("4 of 5 aired episodes watched")).toBeVisible();
   await expect.poll(async () => (await myChernobyl(ana)).ticks).toBe("1:1,1:2,1:3,1:4");
   expect((await myChernobyl(ana)).status).toBe("want");
@@ -194,6 +203,7 @@ test("rate and note an episode: it ticks it and shows on the row, and unticking 
 
   // Rating the last episode of a series that has ended finishes it, like ticking it.
   await episodes.getByRole("button", { name: "Mark all up to S1E4" }).click();
+  await pickToday(page, 2);
   await expect(episodes.getByText("4 of 5 aired episodes watched")).toBeVisible();
   await episodes.getByRole("button", { name: "Rate or add a note to S1E5" }).click();
   await setSlider(panel(5).locator('input[type="range"]'), 9.5);
@@ -266,6 +276,7 @@ test("start a series again as a new pass, watch an episode again, and finish the
   const episodes = page.getByRole("region", { name: "Episodes" });
   await expect(episodes.getByRole("button", { name: "Start again" })).toHaveCount(0);
   await episodes.getByRole("button", { name: "Mark season 1 watched" }).click();
+  await pickToday(page, 5);
   const ask = page.getByRole("dialog", { name: "How was Chernobyl?" });
   await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: "Later" }).click();
@@ -314,6 +325,7 @@ test("start a series again as a new pass, watch an episode again, and finish the
 
   // Finishing the new pass completes the series again: pass 2, and it is Watched twice on My list.
   await episodes.getByRole("button", { name: "Mark season 1 watched" }).click();
+  await pickToday(page, 4);
   await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: "Later" }).click();
   await expect(episodes.getByText("Pass 2", { exact: true })).toBeVisible();

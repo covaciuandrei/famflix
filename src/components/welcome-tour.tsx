@@ -62,7 +62,7 @@ const STEPS: Step[] = [
   {
     icon: ChartColumn,
     title: "Your year",
-    text: "See what you watched in a year: titles, hours, episodes, your favourites and what you watched again, under Your year on My list. Your family's Stats tab adds who watched what and whose taste is closest. Share either as a short text.",
+    text: "See what you watched in a year: titles, hours, episodes, your favourites and what you watched again, under Your year on My list. When you mark something watched you pick the day, or tick I don't remember to keep it out of the numbers. Your family's Stats tab adds who watched what and whose taste is closest. Share either as a short text.",
   },
 ];
 

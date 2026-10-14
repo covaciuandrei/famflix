@@ -37,7 +37,8 @@ export default function PrivacyPage() {
             tick on a series (with your own score and
             note for each, kept on your personal list), your scores, notes,
             likes and dislikes, who watched what and when (and, for a title
-            you watched again, each day you watched it before), the families you
+            you watched again, each day you watched it before; or that you
+            don&apos;t remember when, if that is what you say), the families you
             belong to, and a history of
             family activity (for example &ldquo;Ana added Dune&rdquo;; each
             family keeps its latest 500 events).

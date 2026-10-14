@@ -6,6 +6,7 @@ import { useTransition } from "react";
 import { toggleWatched } from "@/app/app/actions";
 import { Button } from "@/components/ui/button";
 import { useWatchedPrompt } from "@/components/watched-prompt";
+import { localDay } from "@/lib/day";
 
 export function WatchedToggle({
   itemId,
@@ -13,12 +14,15 @@ export function WatchedToggle({
   title,
   myScore,
   myComment,
+  personal,
 }: {
   itemId: string;
   watched: boolean;
   title: string;
   myScore: number | null;
   myComment: string | null;
+  /** On My list: the day it was watched on is the person's to pick (the popup after marking asks). */
+  personal: boolean;
 }) {
   const [pending, start] = useTransition();
   const askHowItWas = useWatchedPrompt();
@@ -30,9 +34,10 @@ export function WatchedToggle({
       disabled={pending}
       onClick={() =>
         start(async () => {
-          const res = await toggleWatched(itemId, !watched);
+          const watchedOn = personal && !watched ? localDay() : undefined;
+          const res = await toggleWatched(itemId, !watched, watchedOn);
           if (!res.error && !watched) {
-            askHowItWas({ itemId, title, score: myScore, comment: myComment });
+            askHowItWas({ itemId, title, score: myScore, comment: myComment, watchedOn });
           }
         })
       }

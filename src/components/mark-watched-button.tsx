@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { markWatched, toggleWatched } from "@/app/app/actions";
 import { Button } from "@/components/ui/button";
 import { useWatchedPrompt } from "@/components/watched-prompt";
+import { localDay } from "@/lib/day";
 import type { MediaType } from "@/lib/types";
 
 /** On a title's page: marks it watched on My list (adding it there if needed), then asks how it was. */
@@ -39,7 +40,8 @@ export function MarkWatchedButton({
         if (res.error) setError(res.error);
         return;
       }
-      const res = await markWatched({ tmdbId, mediaType });
+      const watchedOn = localDay();
+      const res = await markWatched({ tmdbId, mediaType, watchedOn });
       if (res.error || !res.itemId) {
         setError(res.error ?? "Couldn't mark it as watched. Please try again.");
         return;
@@ -49,6 +51,7 @@ export function MarkWatchedButton({
         title,
         score: mine?.score ?? null,
         comment: mine?.comment ?? null,
+        watchedOn,
       });
     });
   }

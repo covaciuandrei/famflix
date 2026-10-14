@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
+import { dayOf } from "@/lib/day";
 import { timeAgo } from "@/lib/format";
 import { nightPeople, type ActiveNight, type HistoryEntry, type NightState } from "@/lib/movie-night";
 import { parseDuePlans, parsePlans, type DuePlan, type PlannedNight } from "@/lib/movie-night-plans";
@@ -320,7 +321,7 @@ async function loadWatchedWith(
         .filter((w) => w.user_id !== userId)
         .map((w) => names.get(w.user_id) ?? "someone")
         .sort((a, b) => a.localeCompare(b)),
-      on: mine?.watched_on ?? (row.watched_at ?? row.created_at).slice(0, 10),
+      on: mine?.watched_on ?? dayOf(row.watched_at),
     });
   }
   return result;
@@ -399,7 +400,8 @@ export async function getMyRating(
 
 /**
  * The signed-in person's viewings of one title, for its page: the day it is watched on their My list now (when it
- * is), and the days before that.
+ * is; `on` is null when nobody remembers it, and `own` is false when a family's watch put it there, whose day is the
+ * family's), and the viewings before that.
  */
 export async function getMyViewings(opts: {
   userId: string;
@@ -407,11 +409,11 @@ export async function getMyViewings(opts: {
   tmdbId: number;
   /** The My list entry, if the title is on it. */
   item: { id: string; watched: boolean } | null;
-}): Promise<{ current: string | null; earlier: EarlierViewing[] }> {
+}): Promise<{ current: { on: string | null; own: boolean } | null; earlier: EarlierViewing[] }> {
   const supabase = await createClient();
   const [entry, history] = await Promise.all([
     opts.item?.watched
-      ? supabase.from("list_items").select("watched_at, created_at").eq("id", opts.item.id).maybeSingle()
+      ? supabase.from("list_items").select("watched_at, source_item_id").eq("id", opts.item.id).maybeSingle()
       : null,
     supabase
       .from("watch_history")
@@ -430,22 +432,23 @@ export async function getMyViewings(opts: {
     if (history.error.code !== "PGRST205") console.error("Could not load earlier viewings:", history.error.message);
   } else {
     earlier = groupEarlier(
-      ((history.data ?? []) as unknown as { watched_on: string }[]).map((r) => ({
+      ((history.data ?? []) as unknown as { watched_on: string | null }[]).map((r) => ({
         user_id: opts.userId,
         watched_on: r.watched_on,
       })),
     );
   }
 
-  const row = entry?.data as { watched_at: string | null; created_at: string } | null | undefined;
-  return { current: row ? (row.watched_at ?? row.created_at).slice(0, 10) : null, earlier };
+  const row = entry?.data as { watched_at: string | null; source_item_id: string | null } | null | undefined;
+  return { current: row ? { on: dayOf(row.watched_at), own: row.source_item_id === null } : null, earlier };
 }
 
 /** An episode someone ticked on a series, as the series page gets it. */
 export interface TickedEpisode {
   s: number;
   e: number;
-  on: string;
+  /** The day it was watched on; null when nobody remembers it. */
+  on: string | null;
   score: number | null;
   comment: string | null;
 }
@@ -471,7 +474,7 @@ export async function getEpisodeLogs(itemId: string): Promise<TickedEpisode[]> {
     const rows = (data ?? []) as {
       season_number: number;
       episode_number: number;
-      watched_on: string;
+      watched_on: string | null;
       score: number | null;
       comment: string | null;
     }[];
@@ -499,6 +502,7 @@ export async function getEpisodeHistory(itemId: string): Promise<EarlierEpisode[
       .order("season_number")
       .order("episode_number")
       .order("watched_on")
+      .order("id")
       .range(from, from + 999);
     if (error) {
       // Logged, not thrown: the page still works, it just shows no earlier viewings. (PGRST205: the database doesn't
@@ -509,7 +513,7 @@ export async function getEpisodeHistory(itemId: string): Promise<EarlierEpisode[
     const rows = (data ?? []) as {
       season_number: number;
       episode_number: number;
-      watched_on: string;
+      watched_on: string | null;
       pass: number | null;
     }[];
     for (const r of rows) {

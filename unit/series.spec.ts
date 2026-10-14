@@ -6,6 +6,7 @@ import {
   airedTotal,
   applyMark,
   applyRating,
+  applyRedate,
   currentPass,
   earlierDays,
   episodeKey,
@@ -22,6 +23,7 @@ import {
   seriesStatus,
   seriesToJson,
   type EarlierEpisode,
+  type EpisodeLog,
   type EpisodeState,
   type SeriesInfo,
 } from "../src/lib/series";
@@ -339,6 +341,7 @@ test.describe("watching again", () => {
     { s: 1, e: 1, on: "2026-04-01", pass: null },
     { s: 1, e: 1, on: "2026-04-01", pass: null },
   ];
+  const earlier = (days: string[], unknown = 0) => ({ days, unknown });
 
   test("the pass someone is on is one more than the last one kept, and 1 when there is none", () => {
     expect(currentPass([])).toBe(1);
@@ -349,32 +352,110 @@ test.describe("watching again", () => {
 
   test("an episode's earlier days are each once, newest first", () => {
     const days = earlierDays(history);
-    expect(days.get(episodeKey(1, 1))).toEqual(["2026-04-01", "2026-03-05", "2026-01-10"]);
-    expect(days.get(episodeKey(1, 2))).toEqual(["2026-01-11"]);
+    expect(days.get(episodeKey(1, 1))).toEqual(earlier(["2026-04-01", "2026-03-05", "2026-01-10"]));
+    expect(days.get(episodeKey(1, 2))).toEqual(earlier(["2026-01-11"]));
     expect(days.get(episodeKey(1, 3))).toBeUndefined();
   });
 
+  test("earlier viewings with no day are counted one by one, not as a day", () => {
+    const days = earlierDays([
+      { s: 1, e: 1, on: null, pass: 1 },
+      { s: 1, e: 1, on: null, pass: 2 },
+      { s: 1, e: 1, on: "2026-03-05", pass: null },
+      { s: 1, e: 2, on: null, pass: null },
+    ]);
+    expect(days.get(episodeKey(1, 1))).toEqual(earlier(["2026-03-05"], 2));
+    expect(days.get(episodeKey(1, 2))).toEqual(earlier([], 1));
+  });
+
   test("an episode ticked now counts its day with the earlier ones", () => {
-    expect(episodeViewings(["2026-03-05", "2026-01-10"], true, "2026-04-20")).toEqual({
+    expect(episodeViewings(earlier(["2026-03-05", "2026-01-10"]), true, "2026-04-20")).toEqual({
       times: 3,
       days: ["2026-04-20", "2026-03-05", "2026-01-10"],
+      unknown: 0,
     });
-    expect(episodeViewings([], true, "2026-04-20")).toEqual({ times: 1, days: ["2026-04-20"] });
+    expect(episodeViewings(earlier([]), true, "2026-04-20")).toEqual({ times: 1, days: ["2026-04-20"], unknown: 0 });
   });
 
   test("a day it has now and had before counts once", () => {
-    expect(episodeViewings(["2026-04-20", "2026-01-10"], true, "2026-04-20")).toEqual({
+    expect(episodeViewings(earlier(["2026-04-20", "2026-01-10"]), true, "2026-04-20")).toEqual({
       times: 2,
       days: ["2026-04-20", "2026-01-10"],
+      unknown: 0,
     });
   });
 
   test("an episode that isn't ticked counts only its earlier days", () => {
-    expect(episodeViewings(["2026-01-10"], false, null)).toEqual({ times: 1, days: ["2026-01-10"] });
-    expect(episodeViewings([], false, null)).toEqual({ times: 0, days: [] });
+    expect(episodeViewings(earlier(["2026-01-10"]), false, null)).toEqual({ times: 1, days: ["2026-01-10"], unknown: 0 });
+    expect(episodeViewings(earlier([]), false, null)).toEqual({ times: 0, days: [], unknown: 0 });
   });
 
   test("one a series marked Watched counts without a day of its own is still watched once more", () => {
-    expect(episodeViewings(["2026-01-10"], true, null)).toEqual({ times: 2, days: ["2026-01-10"] });
+    expect(episodeViewings(earlier(["2026-01-10"]), true, null)).toEqual({ times: 2, days: ["2026-01-10"], unknown: 1 });
+  });
+
+  test("an episode ticked with no day is one more viewing, next to the unknown ones it had", () => {
+    expect(episodeViewings(earlier(["2026-01-10"], 1), true, null)).toEqual({
+      times: 3,
+      days: ["2026-01-10"],
+      unknown: 2,
+    });
+  });
+});
+
+test.describe("days of ticks", () => {
+  const info: SeriesInfo = { status: "Ended", seasons: [{ n: 1, episodes: 3 }], lastAired: { s: 1, e: 3 }, nextAir: null };
+  const ticked = (on: string | null): EpisodeState => ({
+    ticks: new Map([
+      [episodeKey(1, 1), { on, score: 8, comment: "good" }],
+      [episodeKey(1, 2), { on, score: null, comment: null }],
+      [episodeKey(1, 3), { on: "2026-02-02", score: null, comment: null }],
+    ]),
+    completed: false,
+  });
+
+  test("ticking with no day ticks the episodes with none", () => {
+    const next = applyMark(info, { ticks: new Map(), completed: false }, {
+      watched: true,
+      from: { s: 1, e: 1 },
+      to: { s: 1, e: 2 },
+      on: null,
+    });
+    expect([...next.ticks.values()].map((t) => t.on)).toEqual([null, null]);
+  });
+
+  test("giving ticks another day changes only the ticks in the range, and keeps their scores and notes", () => {
+    const next = applyRedate(info, ticked("2026-01-01"), { from: { s: 1, e: 1 }, to: { s: 1, e: 2 }, on: "2025-06-06" });
+    expect(next.ticks.get(episodeKey(1, 1))).toEqual({ on: "2025-06-06", score: 8, comment: "good" });
+    expect(next.ticks.get(episodeKey(1, 2))?.on).toBe("2025-06-06");
+    expect(next.ticks.get(episodeKey(1, 3))?.on).toBe("2026-02-02");
+  });
+
+  test("giving ticks no day takes it off, and never ticks an episode that wasn't", () => {
+    const next = applyRedate(info, ticked("2026-01-01"), { from: { s: 1, e: 1 }, to: { s: 1, e: 5 }, on: null });
+    expect([...next.ticks.values()].map((t) => t.on)).toEqual([null, null, null]);
+    const start = { ticks: new Map<string, EpisodeLog>(), completed: false };
+    expect(applyRedate(info, start, { from: { s: 1, e: 1 }, to: { s: 1, e: 5 }, on: "2026-01-01" }).ticks.size).toBe(0);
+  });
+
+  test("unticking on a series marked Watched ticks the rest on the day it was marked, or with none", () => {
+    const marked = (completedOn: string | null | undefined): EpisodeState => ({
+      ticks: new Map(),
+      completed: true,
+      ...(completedOn === undefined ? {} : { completedOn }),
+    });
+    const untick = (state: EpisodeState) =>
+      applyMark(info, state, { watched: false, from: { s: 1, e: 1 }, to: { s: 1, e: 1 }, on: "2026-10-11" });
+    expect(untick(marked("2025-05-05")).ticks.get(episodeKey(1, 2))?.on).toBe("2025-05-05");
+    expect(untick(marked(null)).ticks.get(episodeKey(1, 2))?.on).toBeNull();
+    // Where the page doesn't know the day, the day of the change stands in.
+    expect(untick(marked(undefined)).ticks.get(episodeKey(1, 2))?.on).toBe("2026-10-11");
+    expect(untick(marked("2025-05-05")).completed).toBe(false);
+  });
+
+  test("the day a series was marked Watched is kept through ticks and ratings", () => {
+    const state: EpisodeState = { ticks: new Map(), completed: true, completedOn: "2025-05-05" };
+    expect(applyRating(info, state, { season: 1, episode: 1, score: 7, comment: null, on: "2026-10-11" }).completedOn).toBe("2025-05-05");
+    expect(applyRedate(info, state, { from: { s: 1, e: 1 }, to: { s: 1, e: 1 }, on: null }).completedOn).toBe("2025-05-05");
   });
 });

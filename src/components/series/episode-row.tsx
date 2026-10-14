@@ -5,8 +5,9 @@ import { useState } from "react";
 
 import { EpisodeAgainPanel } from "@/components/series/episode-again";
 import { EpisodeRatingPanel } from "@/components/series/episode-rating";
+import { WatchedOnDialog } from "@/components/watched-on-dialog";
 import { formatDayNumeric, formatRuntime, formatScore } from "@/lib/format";
-import { episodeLabel, episodeViewings, type EpisodeLog } from "@/lib/series";
+import { episodeLabel, episodeViewings, type EpisodeEarlier, type EpisodeLog } from "@/lib/series";
 import type { TmdbEpisode } from "@/lib/tmdb";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,8 @@ function airLine(episode: TmdbEpisode, aired: boolean): string {
 /**
  * One episode of a season: a tick, its number and name, when it aired and how long it is, and what it is about.
  * Episodes that haven't aired can't be ticked or rated. A button opens the person's own score and note for it, and a
- * ticked episode can be logged as watched again (its days then show: "Watched 2×").
+ * ticked episode can be logged as watched again (its days then show: "Watched 2×"). A ticked episode says when it was
+ * watched ("Date unknown" when nobody remembers), and that can be changed.
  * `onUpTo` (only given when there is something before it to tick) ticks everything up to this episode.
  */
 export function EpisodeRow({
@@ -33,31 +35,40 @@ export function EpisodeRow({
   onTick,
   onRate,
   onWatchAgain,
+  onChangeDay,
   onUpTo,
 }: {
   season: number;
   episode: TmdbEpisode;
   aired: boolean;
   ticked: boolean;
-  /** The person's own score and note for it, if it has any. */
+  /** The person's own tick for it (its day, score and note), if it has one: a series marked Watched ticks none. */
   log: EpisodeLog | undefined;
-  /** The days it was watched on before the one it has now (from the history), newest first. */
-  earlier: readonly string[];
-  /** The day it is ticked on now; null when it isn't, or when a series marked Watched gives it no day of its own. */
+  /** The earlier viewings of it (from the history): the days, newest first, and how many have no day. */
+  earlier: EpisodeEarlier;
+  /** The day it is ticked on now; null when it isn't, or when it is ticked with no known day. */
   currentOn: string | null;
   onTick: (watched: boolean) => void;
   /** Saves a score and/or note; says what went wrong, or nothing. */
   onRate: (score: number | null, comment: string | null) => Promise<string | null>;
   /** Logs it as watched again on a day; says what went wrong, or nothing. */
   onWatchAgain: (on: string) => Promise<string | null>;
+  /** Gives it another day (null: nobody remembers it); says what went wrong, or nothing. */
+  onChangeDay: (on: string | null) => Promise<string | null>;
   onUpTo?: () => void;
 }) {
   const [rating, setRating] = useState(false);
   const [again, setAgain] = useState(false);
+  const [changing, setChanging] = useState(false);
   const label = episodeLabel(season, episode.number);
   const score = log?.score ?? null;
   const note = log?.comment ?? null;
-  const { times, days } = episodeViewings(earlier, ticked, currentOn);
+  const { times, days, unknown } = episodeViewings(earlier, ticked, currentOn);
+  const ownTick = ticked && log !== undefined;
+  const dayLabels = [
+    ...days.map(formatDayNumeric),
+    ...(unknown > 0 ? [unknown === 1 ? "date unknown" : `${unknown} with no date`] : []),
+  ];
   return (
     <li className={cn("group py-1", !aired && "opacity-60")}>
       <label
@@ -143,11 +154,40 @@ export function EpisodeRow({
           )}
         </div>
       )}
-      {times >= 2 && (
-        <p className="mb-1 ml-9 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Watched {times}×</span>
-          {days.length > 0 && ` · ${days.map(formatDayNumeric).join(", ")}`}
+      {(times >= 2 || ownTick) && (
+        <p className="mb-1 ml-9 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <span>
+            {times >= 2 ? (
+              <>
+                <span className="font-medium text-foreground">Watched {times}×</span>
+                {dayLabels.length > 0 && ` · ${dayLabels.join(", ")}`}
+              </>
+            ) : currentOn ? (
+              `Watched ${formatDayNumeric(currentOn)}`
+            ) : (
+              "Date unknown"
+            )}
+          </span>
+          {ownTick && (
+            <button
+              type="button"
+              onClick={() => setChanging(true)}
+              aria-label={`Change date for ${label}`}
+              className="underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              Change date
+            </button>
+          )}
         </p>
+      )}
+      {changing && (
+        <WatchedOnDialog
+          heading={`When did you watch ${label}?`}
+          description="Episodes with no day stay ticked, but aren't counted in Your year."
+          initial={currentOn}
+          onSave={onChangeDay}
+          onClose={() => setChanging(false)}
+        />
       )}
       {note && !rating && <p className="mb-1 ml-9 text-xs break-words text-muted-foreground">“{note}”</p>}
       {again && <EpisodeAgainPanel label={label} onSave={onWatchAgain} onClose={() => setAgain(false)} />}

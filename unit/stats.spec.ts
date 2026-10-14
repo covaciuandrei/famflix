@@ -416,6 +416,14 @@ test.describe("a person's year", () => {
     expect(personalStats(own([series], { bySeries: { [series.key]: 0 } }), 2026)).toMatchObject({ titles: 0, episodes: 0, minutes: 0 });
   });
 
+  test("a movie watched on a day nobody remembers has no day, so no year counts it, and neither does all time", () => {
+    const unknown = mine("Dune", { runtime: 155, days: [] });
+    const known = mine("Arrival", { runtime: 116 });
+    expect(personalStats(own([unknown, known]), 2026)).toMatchObject({ titles: 1, movies: 1, viewings: 1, minutes: 116 });
+    expect(personalStats(own([unknown, known]), null)).toMatchObject({ titles: 1, movies: 1, viewings: 1, minutes: 116 });
+    expect(personalStats(own([unknown]), null)).toMatchObject({ titles: 0, viewings: 0, minutes: 0 });
+  });
+
   test("a family's series watched together is a viewing but adds no hours of its own", () => {
     const series = mine("Chernobyl", { type: "tv", runtime: 60, days: ["2026-03-05"] });
     expect(personalStats(own([series]), 2026)).toMatchObject({ titles: 1, series: 1, viewings: 1, minutes: 0 });

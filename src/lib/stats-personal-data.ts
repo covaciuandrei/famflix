@@ -53,7 +53,6 @@ interface PersonalItemRow {
   media_id: string;
   status: "want" | "watched";
   watched_at: string | null;
-  created_at: string;
   media: MediaRow | null;
   ratings: MyRating[];
 }
@@ -68,9 +67,10 @@ const MEDIA_WITH_SERIES = `${MEDIA_SELECT}, series`;
 /**
  * Every title the signed-in person has watched, with each day they watched it and their own score: from My list (the ones
  * taken off it too), from their earlier viewings, and from what they watched with a family. A viewing that is in more than
- * one of these is one day. A series on My list that is followed by episode has no days of its own from My list (its
- * episodes are what was watched) and is told apart by the entry's id, which is what the episode counts are keyed by. Null
- * when something couldn't be read.
+ * one of these is one day. A viewing with no day (nobody remembers when) has no day to count: a title watched only like
+ * that has no days, and is left out. A series on My list that is followed by episode has no days of its own from My list
+ * (its episodes are what was watched) and is told apart by the entry's id, which is what the episode counts are keyed by.
+ * Null when something couldn't be read.
  */
 export async function getPersonalTitles(userId: string): Promise<PersonalTitle[] | null> {
   const supabase = await createClient();
@@ -78,7 +78,7 @@ export async function getPersonalTitles(userId: string): Promise<PersonalTitle[]
     readAll<PersonalItemRow>("your list", (from, to) =>
       supabase
         .from("list_items")
-        .select(`id, media_id, status, watched_at, created_at, media(${MEDIA_WITH_SERIES}), ratings(user_id, score)`)
+        .select(`id, media_id, status, watched_at, media(${MEDIA_WITH_SERIES}), ratings(user_id, score)`)
         .is("group_id", null)
         .eq("added_by", userId)
         .order("created_at")
@@ -134,7 +134,7 @@ export async function getPersonalTitles(userId: string): Promise<PersonalTitle[]
     const d = draft(item.media);
     d.listScore = myScore(item.ratings);
     if (parseSeriesInfo(item.media.series) !== null) d.episodeEntry = item.id;
-    else if (item.status === "watched") d.days.add((item.watched_at ?? item.created_at).slice(0, 10));
+    else if (item.status === "watched" && item.watched_at) d.days.add(item.watched_at.slice(0, 10));
   }
   for (const watch of familyWatches) {
     const item = watch.list_items;
@@ -147,7 +147,7 @@ export async function getPersonalTitles(userId: string): Promise<PersonalTitle[]
   const orphanMedia = onlyInHistory.length > 0 ? await loadMedia(supabase, onlyInHistory) : [];
   if (!orphanMedia) return null;
   for (const media of orphanMedia) draft(media);
-  for (const row of history) drafts.get(row.media_id)?.days.add(row.watched_on.slice(0, 10));
+  for (const row of history) if (row.watched_on) drafts.get(row.media_id)?.days.add(row.watched_on.slice(0, 10));
 
   return [...drafts.values()].map((d) => ({
     key: d.episodeEntry ?? d.media.id,

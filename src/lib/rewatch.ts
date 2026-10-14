@@ -7,6 +7,7 @@
  * once, and a viewing that is both in the history and still current (a family one on My list) counts once.
  */
 
+import { dayOf } from "@/lib/day";
 import { isWatchedTogether } from "@/lib/list-status";
 import { parseSeriesInfo } from "@/lib/series";
 import type { EarlierViewing, ListItemCard } from "@/lib/types";
@@ -15,21 +16,31 @@ import type { EarlierViewing, ListItemCard } from "@/lib/types";
 export interface HistoryRow {
   user_id: string;
   media_id: string;
-  watched_on: string;
+  /** Null for a viewing nobody remembers the day of. */
+  watched_on: string | null;
 }
 
-/** One title's history rows as viewings: one per day, newest first, with who watched that day. */
-export function groupEarlier(rows: { user_id: string; watched_on: string }[]): EarlierViewing[] {
+/**
+ * One title's history rows as viewings: one per day, newest first, with who watched that day. Then the viewings with no
+ * day, each of its own (nothing says two of them are the same one).
+ */
+export function groupEarlier(rows: { user_id: string; watched_on: string | null }[]): EarlierViewing[] {
   const days = new Map<string, Set<string>>();
+  const unknown: EarlierViewing[] = [];
   for (const r of rows) {
+    if (r.watched_on === null) {
+      unknown.push({ on: null, userIds: [r.user_id] });
+      continue;
+    }
     const day = r.watched_on.slice(0, 10);
     const people = days.get(day) ?? new Set<string>();
     people.add(r.user_id);
     days.set(day, people);
   }
-  return [...days]
+  const dated = [...days]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([on, people]) => ({ on, userIds: [...people].sort() }));
+  return [...dated, ...unknown];
 }
 
 /** Groups the history rows by title, so each card picks its own out. */
@@ -53,18 +64,22 @@ export function isWatchedNow(card: ListItemCard): boolean {
   return card.item.group_id ? isWatchedTogether(card) : card.item.status === "watched";
 }
 
-/** The viewing the list shows right now, as days and (on a family list) the people on them. */
-function currentViewings(card: ListItemCard): { on: string; userId: string | null }[] {
+/** The viewing the list shows right now, as days (none when it is not known) and (on a family list) the people on them. */
+function currentViewings(card: ListItemCard): { on: string | null; userId: string | null }[] {
   if (!isWatchedNow(card)) return [];
   if (card.item.group_id) return card.viewers.map((v) => ({ on: v.watched_on.slice(0, 10), userId: v.user_id }));
-  return [{ on: (card.item.watched_at ?? card.item.created_at).slice(0, 10), userId: null }];
+  return [{ on: dayOf(card.item.watched_at), userId: null }];
 }
 
-/** How many days the title has been watched on, the current viewing and the earlier ones together. */
+/** How many times the title has been watched: the days it was watched on, and every viewing with no day. */
 export function timesWatched(card: ListItemCard): number {
-  const days = new Set(currentViewings(card).map((v) => v.on));
-  for (const e of card.earlier) days.add(e.on);
-  return days.size;
+  const days = new Set<string>();
+  let unknown = 0;
+  for (const { on } of [...currentViewings(card), ...card.earlier]) {
+    if (on === null) unknown++;
+    else days.add(on);
+  }
+  return days.size + unknown;
 }
 
 /** A watched title can be put back on To watch, or logged again. */
@@ -96,11 +111,38 @@ export function canStartSeriesAgain(card: ListItemCard): boolean {
   return isEpisodeSeries(card) && card.item.status === "watched";
 }
 
-/** One line of a title's viewings: the day, and on a family list who watched. */
+/** One line of a title's viewings: the day (none when it is not known), and on a family list who watched. */
 export interface ViewingLine {
-  on: string;
+  on: string | null;
   /** Names, you first; empty on My list. */
   who: string[];
+}
+
+/** Viewings as lines: one per day, newest first, with who was there; then one for each viewing with no day. */
+function toLines(
+  viewings: { on: string | null; userId: string | null }[],
+  family: boolean,
+  me: string,
+  nameOf: (userId: string) => string,
+): ViewingLine[] {
+  const names = (ids: Iterable<string>) =>
+    [...ids]
+      .sort((a, b) => (a === me ? -1 : b === me ? 1 : nameOf(a).localeCompare(nameOf(b))))
+      .map((id) => (id === me ? "You" : nameOf(id)));
+  const days = new Map<string, Set<string>>();
+  const unknown: ViewingLine[] = [];
+  for (const { on, userId } of viewings) {
+    const who = family && userId ? [userId] : [];
+    if (on === null) {
+      unknown.push({ on: null, who: names(who) });
+      continue;
+    }
+    const people = days.get(on) ?? new Set<string>();
+    for (const id of who) people.add(id);
+    days.set(on, people);
+  }
+  const dated = [...days].sort(([a], [b]) => b.localeCompare(a)).map(([on, people]) => ({ on, who: names(people) }));
+  return [...dated, ...unknown];
 }
 
 /** Every viewing of the title, newest first. `nameOf` gives a family member's name (and is only used on family lists). */
@@ -111,38 +153,32 @@ export function viewingLines(
 ): ViewingLine[] {
   // A series followed by episode has its days by episode, on its page.
   if (isEpisodeSeries(card)) return [];
-  const family = card.item.group_id !== null;
-  const days = new Map<string, Set<string>>();
-  const add = (on: string, userId: string | null) => {
-    const people = days.get(on) ?? new Set<string>();
-    if (family && userId) people.add(userId);
-    days.set(on, people);
-  };
-  for (const v of currentViewings(card)) add(v.on, v.userId);
-  for (const e of card.earlier) for (const userId of e.userIds) add(e.on, userId);
+  const earlier = card.earlier.flatMap((e) => e.userIds.map((userId) => ({ on: e.on, userId })));
+  return toLines([...currentViewings(card), ...earlier], card.item.group_id !== null, me, nameOf);
+}
 
-  return [...days]
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([on, people]) => ({
-      on,
-      who: [...people]
-        .sort((a, b) => (a === me ? -1 : b === me ? 1 : nameOf(a).localeCompare(nameOf(b))))
-        .map((id) => (id === me ? "You" : nameOf(id))),
-    }));
+/** The viewing the list shows right now, as lines: its day (or none) and, on a family list, who watched on it. */
+export function currentViewingLines(
+  card: ListItemCard,
+  me: string,
+  nameOf: (userId: string) => string,
+): ViewingLine[] {
+  return toLines(currentViewings(card), card.item.group_id !== null, me, nameOf);
 }
 
 /**
- * The same for one person's own viewings of a title (its page): the day it is watched now, if it is, and the earlier
- * days. The chip is null when there is nothing to say.
+ * The same for one person's own viewings of a title (its page): the day it is watched now, if it is (`on` is null when
+ * nobody remembers it), and the earlier ones. The chip is null when there is nothing to say.
  */
 export function myViewings(
-  current: string | null,
+  current: { on: string | null } | null,
   earlier: EarlierViewing[],
 ): { chip: string | null; lines: ViewingLine[] } {
-  const days = new Set(earlier.map((e) => e.on));
-  if (current) days.add(current);
-  return {
-    chip: chipText(days.size, current !== null),
-    lines: [...days].sort((a, b) => b.localeCompare(a)).map((on) => ({ on, who: [] })),
-  };
+  const lines = toLines(
+    [...(current ? [current] : []), ...earlier].map(({ on }) => ({ on, userId: null })),
+    false,
+    "",
+    () => "",
+  );
+  return { chip: chipText(lines.length, current !== null), lines };
 }

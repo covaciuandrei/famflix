@@ -60,6 +60,7 @@ export interface ListItem {
   media_id: string;
   status: ListStatus;
   created_at: string;
+  /** When it was watched (the day is what matters); null on a title that is not watched, or watched on a day nobody remembers. */
   watched_at: string | null;
   /** On My list: the family title a Watched together log put this here from, if one did. */
   source_item_id: string | null;
@@ -69,14 +70,14 @@ export interface ListItem {
 export interface WatchedWith {
   /** The others on the log (not the signed-in person), by name. */
   names: string[];
-  /** The day, as YYYY-MM-DD. */
-  on: string;
+  /** The day, as YYYY-MM-DD; null when it isn't known. */
+  on: string | null;
 }
 
 /** An earlier viewing of a title: the day, and who watched it that day (everyone on a family list, you on My list). */
 export interface EarlierViewing {
-  /** The day, as YYYY-MM-DD. */
-  on: string;
+  /** The day, as YYYY-MM-DD; null for a viewing nobody remembers the day of (each of those is a viewing of its own). */
+  on: string | null;
   userIds: string[];
 }
 

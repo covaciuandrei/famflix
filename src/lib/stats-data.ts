@@ -3,7 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { earlierByTitle, type HistoryRow } from "@/lib/rewatch";
 import { mergeViewings, type FamilyInput, type FamilyTitle, type Viewing } from "@/lib/stats";
-import type { MediaType } from "@/lib/types";
+import type { EarlierViewing, MediaType } from "@/lib/types";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
@@ -77,6 +77,10 @@ function currentViewings(item: ItemRow): Viewing[] {
   }
   return [...days].map(([on, userIds]) => ({ on, userIds }));
 }
+
+/** A family's earlier viewings are all on a day (only a person's own can be on none), so those are the ones counted. */
+const withDays = (viewings: EarlierViewing[] | undefined): Viewing[] =>
+  (viewings ?? []).flatMap((v) => (v.on === null ? [] : [{ on: v.on, userIds: v.userIds }]));
 
 /** The details of titles that only the history knows (their list entry is gone), a few at a time. */
 export async function loadMedia(supabase: Client, ids: string[]): Promise<MediaRow[] | null> {
@@ -153,14 +157,14 @@ export async function getFamilyStatsInput(
       item.media
         ? [
             toTitle(item.media, {
-              viewings: mergeViewings(currentViewings(item), earlier.get(item.media_id) ?? []),
+              viewings: mergeViewings(currentViewings(item), withDays(earlier.get(item.media_id))),
               scores: item.ratings.flatMap((r) => (typeof r.score === "number" ? [{ userId: r.user_id, score: r.score }] : [])),
               likes: item.reactions.filter((r) => r.value === "like").length,
             }),
           ]
         : [],
     ),
-    ...orphanMedia.map((media) => toTitle(media, { viewings: mergeViewings(earlier.get(media.id) ?? []), scores: [], likes: 0 })),
+    ...orphanMedia.map((media) => toTitle(media, { viewings: mergeViewings(withDays(earlier.get(media.id))), scores: [], likes: 0 })),
   ];
 
   return { titles, nights: nights.map((n) => n.happened_on.slice(0, 10)), members };

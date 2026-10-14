@@ -19,7 +19,7 @@ interface ExportEntry {
 interface ExportEpisode {
   season: number;
   episode: number;
-  watched_on: string;
+  watched_on: string | null;
   score: number | null;
   note: string | null;
 }
@@ -35,7 +35,7 @@ export interface ExportDocument {
     episodes?: ExportEpisode[];
     earlier_episode_viewings?: ExportEpisode[];
   })[];
-  watch_history?: (ExportEntry & { watched_on: string; family: string | null })[];
+  watch_history?: (ExportEntry & { watched_on: string | null; family: string | null })[];
   family_lists?: {
     family: string;
     titles?: (ExportEntry & { i_watched_on: string | null; my_score: number | null; my_note: string | null })[];
@@ -43,7 +43,7 @@ export interface ExportDocument {
 }
 
 export interface Viewing {
-  /** YYYY-MM-DD, or empty when it isn't known. */
+  /** YYYY-MM-DD, or empty when nobody remembers it. */
   date: string;
   kind: "movie" | "series" | "episode";
   title: string;
@@ -64,8 +64,10 @@ const day = (value: string | null | undefined): string => (value ? value.slice(0
 /** Every viewing in the document, oldest first, with the ones that are the same viewing merged. */
 export function viewingsOf(doc: ExportDocument): Viewing[] {
   const found = new Map<string, Viewing>();
+  let undated = 0;
   const add = (v: Viewing, tmdbId: number) => {
-    const key = [v.kind === "episode" ? "series" : v.kind, tmdbId, v.season ?? "", v.episode ?? "", v.date].join("|");
+    // Nothing says two viewings with no day are the same one, so they are never merged.
+    const key = [v.kind === "episode" ? "series" : v.kind, tmdbId, v.season ?? "", v.episode ?? "", v.date || `none${undated++}`].join("|");
     const have = found.get(key);
     if (!have) {
       found.set(key, v);

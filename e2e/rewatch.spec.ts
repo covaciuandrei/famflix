@@ -117,8 +117,8 @@ test("My list: log a title again from its page, then put it back on To watch", a
 
   // Twice: the chip on its page lists both days.
   await page.getByRole("button", { name: "Watched 2×" }).click();
-  await expect(page.getByText(numeric(daysAgo(1)))).toBeVisible();
-  await expect(page.getByText(numeric(daysAgo(30)))).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: numeric(daysAgo(1)) })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: numeric(daysAgo(30)) })).toBeVisible();
 
   // Put it back on To watch: the page and My list both say it was seen twice.
   await page.getByRole("button", { name: "Watch again", exact: true }).click();

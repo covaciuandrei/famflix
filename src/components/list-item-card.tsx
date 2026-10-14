@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Star, Trash2, Users } from "lucide-react";
+import { CalendarDays, MessageSquare, Star, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 
@@ -15,12 +15,21 @@ import { WatchAgain } from "@/components/rewatch/watch-again";
 import { WatchedBefore } from "@/components/rewatch/watched-before";
 import { SeriesCardLine } from "@/components/series/series-card-line";
 import { Badge } from "@/components/ui/badge";
+import { WatchedOnLine } from "@/components/watched-on-line";
 import { WatchedToggle } from "@/components/watched-toggle";
 import { WatchedTogetherDialog } from "@/components/watched-together-dialog";
 import { mediaTypeLabel } from "@/lib/constants";
+import { dayOf } from "@/lib/day";
 import { formatDay, formatDayNumeric, formatScore } from "@/lib/format";
 import { isWatchedTogether } from "@/lib/list-status";
-import { canStartSeriesAgain, canWatchAgain, rewatchChip, viewingLines } from "@/lib/rewatch";
+import {
+  canStartSeriesAgain,
+  canWatchAgain,
+  currentViewingLines,
+  isEpisodeSeries,
+  rewatchChip,
+  viewingLines,
+} from "@/lib/rewatch";
 import type { ListItemCard as Card, MemberSummary } from "@/lib/types";
 
 export function ListItemCard({
@@ -49,6 +58,17 @@ export function ListItemCard({
     (v) => !answered.has(v.user_id) && !v.skipped_at,
   );
   const chip = rewatchChip(card);
+  const nameOf = (id: string) => memberById.get(id)?.display_name ?? "Someone";
+  // When it was watched, as a line: on My list the person's own day, which they can change (not one a family's watch put
+  // there, and not a series that has episodes ticked: its days are by episode); on a family list who was there, unless the
+  // chip below lists every viewing anyway.
+  const familyLines =
+    item.group_id && isWatchedTogether(card) && !chip ? currentViewingLines(card, currentUserId, nameOf) : [];
+  const ownDay =
+    !item.group_id &&
+    item.status === "watched" &&
+    !card.watchedWith &&
+    (!isEpisodeSeries(card) || card.series === null);
 
   function remove() {
     setRemoveError(null);
@@ -103,21 +123,31 @@ export function ListItemCard({
                     Watched
                     {card.watchedWith.names.length > 0
                       ? ` with ${card.watchedWith.names.join(", ")}`
-                      : ""}{" "}
-                    on {formatDayNumeric(card.watchedWith.on)}
+                      : ""}
+                    {card.watchedWith.on ? ` on ${formatDayNumeric(card.watchedWith.on)}` : ""}
                   </span>
                 </p>
               )}
+              {ownDay && (
+                <div className="mt-1.5">
+                  <WatchedOnLine itemId={item.id} title={media.title} day={dayOf(item.watched_at)} />
+                </div>
+              )}
+              {familyLines.map((line, i) => (
+                <p
+                  key={line.on ?? `unknown-${i}`}
+                  className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground"
+                >
+                  <CalendarDays className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>
+                    {line.on ? `Watched ${formatDayNumeric(line.on)}` : "Watched, date unknown"}
+                    {line.who.length > 0 ? ` · ${line.who.join(", ")}` : ""}
+                  </span>
+                </p>
+              ))}
               {chip && (
                 <div className="mt-1.5">
-                  <WatchedBefore
-                    chip={chip}
-                    lines={viewingLines(
-                      card,
-                      currentUserId,
-                      (id) => memberById.get(id)?.display_name ?? "Someone",
-                    )}
-                  />
+                  <WatchedBefore chip={chip} lines={viewingLines(card, currentUserId, nameOf)} />
                 </div>
               )}
             </div>
@@ -145,6 +175,7 @@ export function ListItemCard({
               title={media.title}
               myScore={card.myScore}
               myComment={card.myComment}
+              personal={!item.group_id}
             />
             {members && item.group_id && (
               <WatchedTogetherDialog

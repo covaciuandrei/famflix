@@ -209,4 +209,48 @@ test.describe("the viewings of a document", () => {
       ["2026-03-05", "Dune"],
     ]);
   });
+
+  test("viewings with no day have a blank date and are never merged into one", () => {
+    const doc: ExportDocument = {
+      my_list: [
+        { ...entry, title: "Dune", status: "watched", watched_at: null, my_score: 7, my_note: null, watched_with: null },
+      ],
+      watch_history: [
+        { ...entry, title: "Dune", watched_on: null, family: null },
+        { ...entry, title: "Dune", watched_on: null, family: null },
+        { ...entry, title: "Dune", watched_on: "2025-12-24", family: null },
+      ],
+    };
+    const found = viewingsOf(doc);
+    expect(found.map((v) => v.date)).toEqual(["", "", "", "2025-12-24"]);
+    expect(found.filter((v) => v.score === 7)).toHaveLength(1);
+    expect(toCsv(found).split("\r\n")[1]).toBe(",movie,Dune,,,2021,My list,,7,");
+  });
+
+  test("episodes ticked with no day are one row each, with a blank date", () => {
+    const doc: ExportDocument = {
+      my_list: [
+        {
+          ...entry,
+          type: "tv",
+          title: "Dark",
+          status: "want",
+          watched_at: null,
+          my_score: null,
+          my_note: null,
+          watched_with: null,
+          episodes: [
+            { season: 1, episode: 1, watched_on: null, score: null, note: null },
+            { season: 1, episode: 2, watched_on: "2026-01-02", score: null, note: null },
+          ],
+          earlier_episode_viewings: [{ season: 1, episode: 1, watched_on: null, score: null, note: null }],
+        },
+      ],
+    };
+    expect(viewingsOf(doc).map((v) => [v.date, v.season, v.episode])).toEqual([
+      ["", 1, 1],
+      ["", 1, 1],
+      ["2026-01-02", 1, 2],
+    ]);
+  });
 });

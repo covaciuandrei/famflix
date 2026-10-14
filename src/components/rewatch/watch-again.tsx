@@ -9,12 +9,11 @@ import { Input } from "@/components/ui/input";
 import { useWatchedPrompt } from "@/components/watched-prompt";
 import { WatchedTogetherModal } from "@/components/watched-together-modal";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
+import { localDay } from "@/lib/day";
 import type { MemberSummary, RatingWithProfile, Watch } from "@/lib/types";
 
 const DIALOG =
   "m-auto max-h-[85vh] w-[min(28rem,calc(100%-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-5 text-foreground shadow-xl outline-none backdrop:bg-black/60";
-
-const localToday = () => new Date().toLocaleDateString("en-CA");
 
 /**
  * "Watch again" on a title that is watched: put it back on To watch (for a movie night or next time), or log a new
@@ -208,7 +207,7 @@ function WatchedOnDialog({
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [today] = useState(localToday);
+  const [today] = useState(localDay);
   const [watchedOn, setWatchedOn] = useState(today);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);

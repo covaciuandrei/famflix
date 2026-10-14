@@ -9,6 +9,7 @@ import { MediaPoster } from "@/components/media-poster";
 import { MediaRow } from "@/components/media-row";
 import { WatchAgain } from "@/components/rewatch/watch-again";
 import { WatchedBefore } from "@/components/rewatch/watched-before";
+import { WatchedOnLine } from "@/components/watched-on-line";
 import { EpisodeTracker } from "@/components/series/episode-tracker";
 import { AgeBadge } from "@/components/title/age-badge";
 import { CastRow } from "@/components/title/cast-row";
@@ -235,6 +236,9 @@ export default async function MediaDetailPage({
               <SeenBy names={library?.seenBy} />
             </div>
             {again?.chip && <WatchedBefore chip={again.chip} lines={again.lines} />}
+            {onMyList && again && viewings.current?.own && (
+              <WatchedOnLine itemId={onMyList.itemId} title={details.title} day={viewings.current.on} />
+            )}
           </div>
         </div>
       </div>

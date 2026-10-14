@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { readPickedDay, watchedAtFor } from "@/lib/day";
 import { putOnList } from "@/lib/list-add";
+import { isUuid } from "@/lib/movie-night";
 import { saveTitle } from "@/lib/save-title";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { MediaType, ReactionValue } from "@/lib/types";
@@ -63,16 +65,27 @@ export async function restoreListItem(itemId: string): Promise<ActionResult> {
   return {};
 }
 
+/**
+ * Marks a title watched, or not. `watchedOn` is the day in the person's own time (a date, not a moment); without it the
+ * time is now. A day is only for a title on My list: its day is changed afterwards with setWatchedOn().
+ */
 export async function toggleWatched(
   itemId: string,
   watched: boolean,
+  watchedOn?: string,
 ): Promise<ActionResult> {
   const { supabase } = await requireUser();
+  let watchedAt: string | null = null;
+  if (watched) {
+    const picked = watchedOn === undefined ? { day: null } : readPickedDay(watchedOn);
+    if ("error" in picked) return picked;
+    watchedAt = picked.day ? watchedAtFor(picked.day) : new Date().toISOString();
+  }
   const { error } = await supabase
     .from("list_items")
     .update({
       status: watched ? "watched" : "want",
-      watched_at: watched ? new Date().toISOString() : null,
+      watched_at: watchedAt,
     })
     .eq("id", itemId);
   if (error) return { error: error.message };
@@ -80,12 +93,46 @@ export async function toggleWatched(
   return {};
 }
 
-/** Marks a title watched on My list from its page, adding it there (or restoring it) first. Returns the list item. */
+/**
+ * Changes the day a title on My list was watched on, or says nobody remembers it (null: it stays watched, and is not
+ * counted for any year). Only for a title the person marked watched themselves: when a family's watch put it there, its
+ * day is the family's.
+ */
+export async function setWatchedOn(itemId: string, day: string | null): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!isUuid(itemId)) return { error: "That title isn't valid." };
+  const picked = readPickedDay(day);
+  if ("error" in picked) return picked;
+  const { data, error } = await supabase
+    .from("list_items")
+    .update({ watched_at: picked.day ? watchedAtFor(picked.day) : null })
+    .eq("id", itemId)
+    .eq("added_by", user.id)
+    .is("group_id", null)
+    .is("source_item_id", null)
+    .is("deleted_at", null)
+    .eq("status", "watched")
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    return { error: "Its day can only be changed on a title you marked as watched yourself." };
+  }
+  revalidateApp();
+  return {};
+}
+
+/**
+ * Marks a title watched on My list from its page, adding it there (or restoring it) first. `watchedOn` is the day in the
+ * person's own time; without it the time is now. Returns the list item.
+ */
 export async function markWatched(input: {
   tmdbId: number;
   mediaType: MediaType;
+  watchedOn?: string;
 }): Promise<ActionResult & { itemId?: string }> {
   const { supabase, user } = await requireUser();
+  const picked = input.watchedOn === undefined ? { day: null } : readPickedDay(input.watchedOn);
+  if ("error" in picked) return picked;
 
   const saved = await saveTitle(user.id, input);
   if ("error" in saved) return { error: saved.error };
@@ -121,7 +168,7 @@ export async function markWatched(input: {
     .from("list_items")
     .update({
       status: "watched",
-      watched_at: new Date().toISOString(),
+      watched_at: picked.day ? watchedAtFor(picked.day) : new Date().toISOString(),
       deleted_at: null,
     })
     .eq("id", itemId);

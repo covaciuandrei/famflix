@@ -11,11 +11,7 @@ export function tooLong(text: string): boolean {
 }
 
 /** A real calendar day written as YYYY-MM-DD (not 2026-13-45). */
-export function isDay(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
+export { isDay } from "@/lib/day";
 
 /** Scores run from 1 to 10 with one decimal (6.7); returns undefined if out of range. */
 export function cleanScore(score: number | null): number | null | undefined {

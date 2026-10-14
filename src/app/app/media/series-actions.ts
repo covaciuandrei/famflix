@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
+import { readPickedDay } from "@/lib/day";
 import { isUuid } from "@/lib/movie-night";
 import { LIMITS, overRateLimit } from "@/lib/rate-limit";
 import { saveMedia } from "@/lib/save-media";
@@ -109,22 +110,23 @@ async function mySeries(
 
 /**
  * Ticks (or unticks) the episodes from one to another, both included: one episode, a season (to episode 20000), or
- * everything up to an episode. Ticking puts the series on My list if it isn't there. `on` is the day, in the
- * person's own time (a date, not a moment). The database checks it all and says if the series became Watched.
+ * everything up to an episode. Ticking puts the series on My list if it isn't there. `on` is the day, in the person's own
+ * time (a date, not a moment); left out it is today, and null says nobody remembers it (the episodes are watched, and
+ * are not counted for any year). The database checks it all and says if the series became Watched.
  */
 export async function tickEpisodes(input: {
   tmdbId: number;
   watched: boolean;
   from: EpisodeRef;
   to: EpisodeRef;
-  on?: string;
+  on?: string | null;
 }): Promise<EpisodeResult> {
   const { supabase, user } = await requireUser();
   if (
     typeof input?.watched !== "boolean" ||
     !isRef(input.from) ||
     !isRef(input.to) ||
-    (input.on !== undefined && !isDay(input.on))
+    (input.on !== undefined && input.on !== null && !isDay(input.on))
   ) {
     return { error: "Those episodes aren't valid." };
   }
@@ -141,28 +143,55 @@ export async function tickEpisodes(input: {
     p_from_episode: input.from.e,
     p_to_season: input.to.s,
     p_to_episode: input.to.e,
-    ...(input.on ? { p_on: input.on } : {}),
+    ...(input.on === undefined ? {} : { p_on: input.on }),
   });
   if (error) return { error: failure(error) };
   revalidatePath("/app", "layout");
   return { itemId: mine.itemId, completed: (data as { completed?: boolean } | null)?.completed === true };
 }
 
-/** Ticks the first aired episode that isn't ticked yet, putting the series on My list if it isn't there. */
-export async function tickNextEpisode(input: { tmdbId: number; on?: string }): Promise<EpisodeResult> {
+/** Ticks the first aired episode that isn't ticked yet, putting the series on My list if it isn't there. `on` is as for tickEpisodes(). */
+export async function tickNextEpisode(input: { tmdbId: number; on?: string | null }): Promise<EpisodeResult> {
   const { supabase, user } = await requireUser();
-  if (input?.on !== undefined && !isDay(input.on)) return { error: "That day isn't valid." };
+  if (input?.on !== undefined && input.on !== null && !isDay(input.on)) return { error: "That day isn't valid." };
 
   const mine = await mySeries(supabase, user.id, input?.tmdbId, true);
   if ("error" in mine) return mine;
 
   const { data, error } = await supabase.rpc("mark_next_episode", {
     p_item: mine.itemId,
-    ...(input.on ? { p_on: input.on } : {}),
+    ...(input.on === undefined ? {} : { p_on: input.on }),
   });
   if (error) return { error: failure(error) };
   revalidatePath("/app", "layout");
   return { itemId: mine.itemId ?? undefined, completed: (data as { completed?: boolean } | null)?.completed === true };
+}
+
+/**
+ * Gives the episodes that are ticked from one to another, both included, another day: the one they were really watched on,
+ * or none (null: nobody remembers it, so they are not counted for any year). It only changes ticks that are there.
+ */
+export async function redateEpisodes(input: {
+  itemId: string;
+  from: EpisodeRef;
+  to: EpisodeRef;
+  on: string | null;
+}): Promise<EpisodeResult> {
+  const { supabase } = await requireUser();
+  if (!isUuid(input?.itemId) || !isRef(input.from) || !isRef(input.to)) return { error: "Those episodes aren't valid." };
+  const picked = readPickedDay(input.on);
+  if ("error" in picked) return picked;
+  const { error } = await supabase.rpc("redate_episodes", {
+    p_item: input.itemId,
+    p_from_season: input.from.s,
+    p_from_episode: input.from.e,
+    p_to_season: input.to.s,
+    p_to_episode: input.to.e,
+    p_on: picked.day,
+  });
+  if (error) return { error: failure(error) };
+  revalidatePath("/app", "layout");
+  return { itemId: input.itemId };
 }
 
 /**

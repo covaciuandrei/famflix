@@ -38,6 +38,7 @@ database checks and 40+ browser scenarios on every push, and a free-tier deploym
 | **Watched together** | Log who was there. Everyone confirms their own score, and the title lands on each person's My list. |
 | **Series, episode by episode** | Tick episodes or whole seasons, score each one, see Watching, Caught up or Completed. |
 | **Watch again** | Put a title back on To watch, or log another viewing. The history is kept. |
+| **Watch dates** | Pick the day you watched something, or tick *I don't remember* (it stays watched, but isn't counted in Your year). Every watch shows its date, and a date can be changed later. |
 | **Discover** | Swipe through suggestions on your own. What you like goes on My list at once. |
 | **Stats** | A family's year in numbers, and a private *Your year*. |
 | **Your data** | Download everything FamFlix has about you (JSON or CSV), or delete your account. |
@@ -195,7 +196,7 @@ flowchart TD
 | Sign-in | [`login/actions.ts`](src/app/login/actions.ts), [`auth/callback`](src/app/auth/callback/route.ts), [`proxy.ts`](src/proxy.ts) | `handle_new_user` |
 | Lists, scores, reactions | [`app/actions.ts`](src/app/app/actions.ts), [`lib/data.ts`](src/lib/data.ts) | `ratings_follow_family`, `react_to_score` |
 | Watched together, watch again | [`app/actions.ts`](src/app/app/actions.ts), [`lib/rewatch.ts`](src/lib/rewatch.ts) | `log_watch`, `watched_again`, `watch_again`, `add_to_my_list_watched` |
-| Series by episode | [`series-actions.ts`](src/app/app/media/series-actions.ts), [`lib/series.ts`](src/lib/series.ts) | `mark_episodes`, `my_series_progress`, `watch_series_again` |
+| Series by episode | [`series-actions.ts`](src/app/app/media/series-actions.ts), [`lib/series.ts`](src/lib/series.ts) | `mark_episodes`, `redate_episodes`, `my_series_progress`, `watch_series_again` |
 | Movie night | [`movie-night/actions.ts`](src/app/app/movie-night/actions.ts), [`lib/deck.ts`](src/lib/deck.ts), [`api/movie-night`](src/app/api/movie-night) | `start_movie_night`, `cast_movie_night_votes`, `movie_night_state`, `pick_movie_night_card` |
 | Guests | [`lib/guest.ts`](src/lib/guest.ts), [`guest/`](src/app/guest) | `guest_join`, `guest_cast_votes`, `guest_movie_night_state` |
 | Plans and reminders | [`lib/movie-night-plans.ts`](src/lib/movie-night-plans.ts), [`components/movie-night`](src/components/movie-night) | `plan_movie_night`, `rsvp_movie_night_plan`, `due_movie_night_plans` |

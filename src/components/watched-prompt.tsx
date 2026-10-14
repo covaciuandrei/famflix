@@ -11,10 +11,11 @@ import {
   useTransition,
 } from "react";
 
-import { setRating } from "@/app/app/actions";
+import { setRating, setWatchedOn } from "@/app/app/actions";
 import { ScoreInput, SCORE_REACTION_HINT } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useWatchedOn, WatchedOnField } from "@/components/watched-on-field";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
 
 export interface WatchedPromptTarget {
@@ -23,6 +24,11 @@ export interface WatchedPromptTarget {
   /** Your current score and note on the item, if any. */
   score: number | null;
   comment: string | null;
+  /**
+   * The day it was just marked watched on My list, which the popup lets the person change (null: nobody remembers it).
+   * Left out where the day isn't theirs to pick here: a family's title, or a series that is ticked by episode.
+   */
+  watchedOn?: string | null;
 }
 
 const OpenWatchedPrompt = createContext<(target: WatchedPromptTarget) => void>(
@@ -90,16 +96,21 @@ function PromptForm({
   const [note, setNote] = useState(target.comment ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const watchedOn = useWatchedOn(target.watchedOn);
+  const withDay = target.watchedOn !== undefined;
 
-  const unchanged =
-    score === target.score && note.trim() === (target.comment ?? "").trim();
+  const ratingChanged = score !== target.score || note.trim() !== (target.comment ?? "").trim();
+  const dayChanged = withDay && watchedOn.day !== target.watchedOn;
 
   function save() {
-    if (unchanged) return onDone();
+    if (!ratingChanged && !dayChanged) return onDone();
     setError(null);
     start(async () => {
-      const res = await setRating(target.itemId, score, note);
-      if (res.error) setError(res.error);
+      const results: { error?: string }[] = [];
+      if (dayChanged) results.push(await setWatchedOn(target.itemId, watchedOn.day));
+      if (ratingChanged) results.push(await setRating(target.itemId, score, note));
+      const failed = results.find((res) => res.error);
+      if (failed) setError(failed.error ?? null);
       else onDone();
     });
   }
@@ -113,6 +124,8 @@ function PromptForm({
         Marked as watched. Give it a score and a note if you like. You can
         change them later.
       </p>
+
+      {withDay && <WatchedOnField state={watchedOn} className="mt-4" />}
 
       <div className="mt-4">
         <ScoreInput value={score} onChange={setScore} label="Your score" />
@@ -137,7 +150,7 @@ function PromptForm({
         <Button variant="ghost" onClick={onDone}>
           Later
         </Button>
-        <Button onClick={save} disabled={pending}>
+        <Button onClick={save} disabled={pending || (withDay && !watchedOn.valid)}>
           {pending && <Loader2 className="size-4 animate-spin" />}
           Save
         </Button>

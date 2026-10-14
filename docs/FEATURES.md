@@ -25,6 +25,16 @@ Your personal list, with To watch and Watched tabs. **Mark as watched** on a
 title's page puts it straight on My list as watched. Every list can be filtered
 by release date (2020s, 1990s, ...) and category (genre, movies or series).
 
+**When you watched it.** Marking a title watched opens the *How was it?* window,
+which also asks the day you watched it (today to start with). Watched it long
+ago and can't say when? Tick **I don't remember**: the title stays on your
+Watched list, but it has no day, so it isn't counted in Your year. A watched
+title says when ("Watched 12.03.2025", or "Date unknown") with a **Change date**
+button, on its card and on its page, so a title added with the wrong day, or
+none, is put right at any time. On a family list a watched title says the day
+and who was there, and a title the family watched together keeps the family's
+day on your My list (it isn't yours to change there).
+
 The people in your families can see it, so you can look at each other's lists
 and take titles from them: the titles, whether you watched them and when, and
 your score. Never your notes, reactions, ticked episodes or earlier viewings,
@@ -111,8 +121,9 @@ together tab, My list's Watched tab) and on its page.
 The viewing the title had is kept in the watch history, so nothing is lost: the
 card says "Watched 3×" and tapping it lists the days (a family's with who was
 there), and a title put back on To watch says "Watch again · seen 2×". Several
-viewings on one day count once. There is still one score and note per person per
-title (watching it again asks to update them).
+viewings on one day count once; each viewing with no day ("I don't remember",
+listed as "Date unknown") counts as a viewing of its own. There is still one
+score and note per person per title (watching it again asks to update them).
 
 ### Series, episode by episode
 
@@ -130,6 +141,13 @@ title (watching it again asks to update them).
 - Each episode also takes your own score (1–10, one decimal) and note (250
   characters): **Rate / note** under it. Rating an episode ticks it, and
   unticking one that has a score or note asks first, since that deletes them.
+- **When you watched it.** Ticking one episode is for today. Ticking several at
+  once (a season, the rest of a season, everything up to an episode) asks the day
+  first, with the same **I don't remember** tick, which is how you catch up on a
+  series you watched years ago without it counting as this month. A ticked
+  episode says when you watched it ("Watched 12.03.2025", or "Date unknown") with
+  **Change date**. A series marked Watched has one day for all of its episodes,
+  which you can change on its page.
 - On My list a series is still one card: once you have ticked an episode it shows
   where you are, a progress bar and a button for the next episode (**Watched
   S2E5**), and the series moves to a **Watching** tab (which is there while you
@@ -268,7 +286,9 @@ time you watched it, an episode's length for each episode), your average, lowest
 and highest score and your top 5, favourite genres, the busiest month with a
 chart, and what you watched again. It counts what is on your My list (the titles
 you took off it too), the times you watched something before, and what you
-watched with a family; your own score wins over the family's. **Share** sends a
+watched with a family; your own score wins over the family's. Titles and
+episodes you watched on a day you don't remember (**I don't remember**) have no
+day to count, so they are left out, in a year and in all time. **Share** sends a
 short text without anything private in it.
 
 ## The app and your data
@@ -284,7 +304,8 @@ short text without anything private in it.
   list with the episodes you ticked and the times you watched things again, your
   part of every family list, your movie nights and votes, the feed events you
   caused) or a CSV of your watch history, one row for every time you watched
-  something. Other people's scores, notes and e-mail addresses are never in it;
+  something (a viewing on a day you don't remember has an empty date). Other
+  people's scores, notes and e-mail addresses are never in it;
   the download is only for you, from FamFlix itself, up to five times an hour.
 - **Delete account**: **Settings → Delete account** deletes your account and
   data; your families keep the titles you added, without your name.

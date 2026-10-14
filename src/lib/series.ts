@@ -202,17 +202,22 @@ export function seriesStatus(info: SeriesInfo | null, ticks: Ticked, completed: 
 //  Ticking, as the page shows it at once (the database, in mark_episodes(), makes it so)
 // ---------------------------------------------------------------------------------------------------------------
 
-/** One ticked episode: the day, and the person's own score and note for it. */
+/** One ticked episode: the day (none when nobody remembers it), and the person's own score and note for it. */
 export interface EpisodeLog {
-  on: string;
+  on: string | null;
   score: number | null;
   comment: string | null;
 }
 
-/** A series entry's episodes as the page keeps them: the ticks by episodeKey(), and whether it is marked Watched. */
+/**
+ * A series entry's episodes as the page keeps them: the ticks by episodeKey(), and whether it is marked Watched. When it is,
+ * `completedOn` is the day it was marked (null when that isn't known), which the episodes it counts without a tick of their
+ * own have; left out, unticking takes the day of the change.
+ */
 export interface EpisodeState {
   ticks: ReadonlyMap<string, EpisodeLog>;
   completed: boolean;
+  completedOn?: string | null;
 }
 
 /** The listed episodes from one to another, both included, in order (`to` may run past a season's end: it stops there). */
@@ -247,14 +252,15 @@ function everyAiredTicked(info: SeriesInfo, ticks: Ticked): boolean {
 }
 
 /**
- * What ticking (or unticking) a range does, the way mark_episodes() does it: only aired episodes get ticked, ticking the
- * last aired episode of a series that has ended completes it, and unticking on a completed series first ticks every aired
- * episode, then takes the range off and reopens it. Unticking takes the episodes' scores and notes with them.
+ * What ticking (or unticking) a range does, the way mark_episodes() does it: only aired episodes get ticked (on `on`, or
+ * on no day when it is null), ticking the last aired episode of a series that has ended completes it, and unticking on a
+ * completed series first ticks every aired episode (on the day it was marked), then takes the range off and reopens it.
+ * Unticking takes the episodes' scores and notes with them.
  */
 export function applyMark(
   info: SeriesInfo,
   state: EpisodeState,
-  mark: { watched: boolean; from: EpisodeRef; to: EpisodeRef; on: string },
+  mark: { watched: boolean; from: EpisodeRef; to: EpisodeRef; on: string | null },
 ): EpisodeState {
   const range = episodesBetween(info, mark.from, mark.to);
   const ticks = new Map(state.ticks);
@@ -267,14 +273,32 @@ export function applyMark(
     if (!completed && isFinished(info)) completed = everyAiredTicked(info, ticks);
   } else {
     if (completed && range.some(({ s, e }) => e <= airedIn(info, s))) {
+      const on = state.completedOn === undefined ? mark.on : state.completedOn;
       for (const { s, e } of airedEpisodes(info)) {
-        if (!ticks.has(episodeKey(s, e))) ticks.set(episodeKey(s, e), { on: mark.on, score: null, comment: null });
+        if (!ticks.has(episodeKey(s, e))) ticks.set(episodeKey(s, e), { on, score: null, comment: null });
       }
       completed = false;
     }
     for (const { s, e } of range) ticks.delete(episodeKey(s, e));
   }
-  return { ticks, completed };
+  return { ...state, ticks, completed };
+}
+
+/**
+ * What giving ticked episodes another day does, the way redate_episodes() does it: only the ticks in the range change
+ * (nothing is ticked or unticked, their scores and notes stay), and `on` null is no day.
+ */
+export function applyRedate(
+  info: SeriesInfo,
+  state: EpisodeState,
+  change: { from: EpisodeRef; to: EpisodeRef; on: string | null },
+): EpisodeState {
+  const ticks = new Map(state.ticks);
+  for (const { s, e } of episodesBetween(info, change.from, change.to)) {
+    const log = ticks.get(episodeKey(s, e));
+    if (log) ticks.set(episodeKey(s, e), { ...log, on: change.on });
+  }
+  return { ...state, ticks };
 }
 
 /** A score (1 to 10, one decimal) and/or a note for one aired episode. */
@@ -306,18 +330,18 @@ export function applyRating(info: SeriesInfo, state: EpisodeState, rating: Episo
     ticks.set(key, { on: existing?.on ?? rating.on, score, comment });
   }
   const completed = state.completed || (isFinished(info) && everyAiredTicked(info, ticks));
-  return { ticks, completed };
+  return { ...state, ticks, completed };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 //  Watching again: the passes through a series, and the earlier viewings of an episode
 // ---------------------------------------------------------------------------------------------------------------
 
-/** An earlier viewing of an episode, from the history: the day, and the pass it was part of (null: watched again on its own). */
+/** An earlier viewing of an episode, from the history: the day (none when nobody remembers it), and the pass it was part of (null: watched again on its own). */
 export interface EarlierEpisode {
   s: number;
   e: number;
-  on: string;
+  on: string | null;
   pass: number | null;
 }
 
@@ -326,33 +350,42 @@ export function currentPass(history: readonly EarlierEpisode[]): number {
   return history.reduce((last, h) => Math.max(last, h.pass ?? 0), 0) + 1;
 }
 
-/** The earlier days of each episode by episodeKey(), newest first and each once. */
-export function earlierDays(history: readonly EarlierEpisode[]): Map<string, string[]> {
-  const days = new Map<string, Set<string>>();
+/** The earlier viewings of one episode: the days they were on (newest first, each once) and how many have no day. */
+export interface EpisodeEarlier {
+  days: string[];
+  unknown: number;
+}
+
+export const NO_EARLIER: EpisodeEarlier = { days: [], unknown: 0 };
+
+/** The earlier viewings of each episode by episodeKey(). */
+export function earlierDays(history: readonly EarlierEpisode[]): Map<string, EpisodeEarlier> {
+  const found = new Map<string, { days: Set<string>; unknown: number }>();
   for (const h of history) {
     const key = episodeKey(h.s, h.e);
-    const set = days.get(key) ?? new Set<string>();
-    set.add(h.on.slice(0, 10));
-    days.set(key, set);
+    const entry = found.get(key) ?? { days: new Set<string>(), unknown: 0 };
+    if (h.on === null) entry.unknown++;
+    else entry.days.add(h.on.slice(0, 10));
+    found.set(key, entry);
   }
-  return new Map([...days].map(([key, set]) => [key, [...set].sort((a, b) => b.localeCompare(a))]));
+  return new Map(
+    [...found].map(([key, { days, unknown }]) => [key, { days: [...days].sort((a, b) => b.localeCompare(a)), unknown }]),
+  );
 }
 
 /**
- * How many times an episode has been watched and on which days (newest first): the earlier days, plus the day it is
- * ticked on now. `currentOn` is null for an episode that isn't ticked, or one a series marked Watched counts without a
- * day of its own and the series' day isn't known; the latter still counts once. A day it has both now and before
- * counts once.
+ * How many times an episode has been watched, on which days (newest first) and how many of those have no day: the earlier
+ * viewings, plus the day it is ticked on now. `currentOn` is null for an episode that isn't ticked, or one that is ticked
+ * with no known day (or that a series marked Watched counts without a day of its own and the series' day isn't known); the
+ * latter still counts once. A day it has both now and before counts once.
  */
 export function episodeViewings(
-  earlier: readonly string[],
+  earlier: EpisodeEarlier,
   ticked: boolean,
   currentOn: string | null,
-): { times: number; days: string[] } {
-  const days = new Set(earlier);
+): { times: number; days: string[]; unknown: number } {
+  const days = new Set(earlier.days);
   if (ticked && currentOn) days.add(currentOn.slice(0, 10));
-  return {
-    times: days.size + (ticked && !currentOn ? 1 : 0),
-    days: [...days].sort((a, b) => b.localeCompare(a)),
-  };
+  const unknown = earlier.unknown + (ticked && !currentOn ? 1 : 0);
+  return { times: days.size + unknown, days: [...days].sort((a, b) => b.localeCompare(a)), unknown };
 }
