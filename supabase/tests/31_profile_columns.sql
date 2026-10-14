@@ -2,9 +2,9 @@
 \set as_pia  'reset role; select set_config(''request.jwt.claim.sub'', ''31313131-0000-0000-0000-000000000001'', false); set role authenticated;'
 \set as_anon 'reset role; select set_config(''request.jwt.claim.sub'', '''', false); set role anon;'
 
--- What a person may change on their own profile: the display name, and nothing else. The photo is the one Google gave
--- at sign-up and other people's browsers load it, so nobody can point it at a server of their own (which would show that
--- server who opens a family's page, and from where).
+-- What a person may change on their own profile: the display name and whether their families can see their list, and
+-- nothing else. The photo is the one Google gave at sign-up and other people's browsers load it, so nobody can point it
+-- at a server of their own (which would show that server who opens a family's page, and from where).
 reset role;
 insert into auth.users (id, email, raw_user_meta_data) values
   ('31313131-0000-0000-0000-000000000001', 'pia@x.test', '{"full_name":"Pia","avatar_url":"https://lh3.googleusercontent.com/a/pia=s96-c"}'),
@@ -16,6 +16,10 @@ select test.expect_eq((select avatar_url from public.profiles where id = '313131
 update public.profiles set display_name = 'Pia Q' where id = '31313131-0000-0000-0000-000000000001';
 select test.expect_eq((select display_name from public.profiles where id = '31313131-0000-0000-0000-000000000001'),
   'Pia Q'::text, 'a person can change their own display name');
+update public.profiles set share_my_list = false where id = '31313131-0000-0000-0000-000000000001';
+select test.expect_eq((select share_my_list from public.profiles where id = '31313131-0000-0000-0000-000000000001'),
+  false, 'and whether their families can see their list');
+select test.expect_error($$update public.profiles set share_my_list = null where id = '31313131-0000-0000-0000-000000000001'$$, 'null value');
 select test.expect_error($$update public.profiles set avatar_url = 'https://attacker.example/p.gif' where id = '31313131-0000-0000-0000-000000000001'$$, 'permission denied');
 select test.expect_error($$update public.profiles set display_name = 'Pia', avatar_url = null where id = '31313131-0000-0000-0000-000000000001'$$, 'permission denied');
 select test.expect_error($$update public.profiles set created_at = now() where id = '31313131-0000-0000-0000-000000000001'$$, 'permission denied');

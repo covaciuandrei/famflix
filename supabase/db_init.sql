@@ -1,6 +1,6 @@
 -- ============================================================================
 --  FamFlix — the whole database in one script: tables, row-level security,
---  functions and triggers (families and lists, ratings, watched together and
+--  functions and triggers (families and lists, who in a family may see your list, ratings, watched together and
 --  watching a title again, series episodes, the activity feed, rate limits, movie
 --  nights and their guests) and, at the end, exactly what each Supabase role may
 --  do with them.
@@ -22,7 +22,9 @@ create table public.profiles (
   id           uuid primary key references auth.users (id) on delete cascade,
   display_name text not null default '' check (char_length(display_name) <= 250),
   avatar_url   text,
-  created_at   timestamptz not null default now()
+  created_at   timestamptz not null default now(),
+  -- Whether the people in their families can see what is on their My list (member_list()). Theirs to switch.
+  share_my_list boolean not null default true
 );
 
 -- A "family"/circle. Users create or join one via its invite code.
@@ -2094,6 +2096,48 @@ begin
     )
   );
 end;
+$$;
+
+-- ---------------------------------------------------------------------------
+--  The lists of the people in your families
+-- ---------------------------------------------------------------------------
+
+-- What is on another person's My list, for someone who is in a family with them, unless they switched that off
+-- (profiles.share_my_list). Only what a list shows of a title and where it stands: the title, whether it is watched
+-- and when, and the owner's score; never their notes or reactions, and never a title they removed. Nothing for your own
+-- list (it is yours to read as it is), for someone you share no family with, or for a list that is not shared. The
+-- titles of the family lists are not here: every member reads those anyway. A function rather than a rule on
+-- list_items, so that what other people can read stays exactly this.
+create function public.member_list(p_user uuid)
+returns table (
+  tmdb_id      integer,
+  media_type   text,
+  title        text,
+  release_year integer,
+  poster_path  text,
+  tmdb_rating  numeric,
+  status       text,
+  watched_at   timestamptz,
+  added_at     timestamptz,
+  score        numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select m.tmdb_id, m.media_type, m.title, m.release_year, m.poster_path, m.tmdb_rating,
+         li.status, li.watched_at, li.created_at, r.score
+  from public.list_items li
+  join public.media m on m.id = li.media_id
+  left join public.ratings r on r.list_item_id = li.id and r.user_id = li.added_by
+  where li.group_id is null
+    and li.added_by = p_user
+    and li.deleted_at is null
+    and p_user is distinct from auth.uid()
+    and public.shares_group(auth.uid(), p_user)
+    and coalesce((select p.share_my_list from public.profiles p where p.id = p_user), false)
+  order by li.created_at desc, li.id;
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -4323,7 +4367,7 @@ begin
     'exported_at', now(),
     'account', (
       select jsonb_build_object('id', p.id, 'display_name', p.display_name, 'avatar_url', p.avatar_url,
-                                'created_at', p.created_at)
+                                'created_at', p.created_at, 'share_my_list_with_my_families', p.share_my_list)
       from public.profiles p
       where p.id = v_me
     ),
@@ -4541,9 +4585,9 @@ grant select on
   to authenticated;
 -- They write straight to a table only where the security rules allow it (their own rows); everything else goes
 -- through the functions below, so the feed, the movie nights and the rate limits can't be faked.
--- A profile is made at sign-up and its photo is Google's, which other people's browsers load: the only column people
--- may change on it is their own display name.
-grant update (display_name) on public.profiles to authenticated;
+-- A profile is made at sign-up and its photo is Google's, which other people's browsers load: the only columns people
+-- may change on it are their own display name and whether their families can see their My list.
+grant update (display_name, share_my_list) on public.profiles to authenticated;
 grant insert, update, delete on public.ratings, public.reactions to authenticated;
 -- A list item's list, movie and author are fixed once it's added; afterwards people only mark it watched or
 -- remove/restore it (the database fills in who removed it and when).
@@ -4612,6 +4656,7 @@ grant execute on function
   public.my_series_progress(),
   public.my_series_passes(),
   public.my_episode_counts(integer),
+  public.member_list(uuid),
   public.export_my_data(),
   public.get_movie_night_guest_link(uuid),
   public.replace_movie_night_guest_link(uuid),

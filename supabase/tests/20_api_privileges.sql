@@ -52,7 +52,7 @@ select test.expect_eq((select array_agg(c.relname || '.' || a.attname || ':' || 
   (select array_agg(x order by x collate "C") from unnest(array[
     'list_items.group_id:insert', 'list_items.added_by:insert', 'list_items.media_id:insert', 'list_items.status:insert',
     'list_items.status:update', 'list_items.watched_at:update', 'list_items.deleted_at:update',
-    'profiles.display_name:update',
+    'profiles.display_name:update', 'profiles.share_my_list:update',
     'watches.skipped_at:update']) x),
   'and only these columns where a table is not open to writes');
 select test.expect_eq((select array_agg(p.proname::text order by p.proname::text collate "C") from pg_proc p
@@ -65,7 +65,7 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname::text
     'add_movie_night_stack', 'reveal_movie_night', 'cancel_movie_night', 'movie_night_state', 'active_movie_nights',
     'add_movie_night_top_titles', 'pick_movie_night_card', 'pick_movie_night_title', 'update_movie_night', 'delete_movie_night',
     'mark_episodes', 'mark_next_episode', 'rate_episode', 'watch_series_again', 'watch_episode_again', 'my_series_progress',
-    'my_series_passes', 'my_episode_counts', 'export_my_data',
+    'my_series_passes', 'my_episode_counts', 'member_list', 'export_my_data',
     'plan_movie_night', 'rsvp_movie_night_plan', 'cancel_movie_night_plan', 'planned_movie_nights', 'due_movie_night_plans',
     'get_movie_night_guest_link', 'replace_movie_night_guest_link', 'turn_off_movie_night_guest_link',
     'remove_movie_night_guest', 'movie_night_guest_names']) x),
