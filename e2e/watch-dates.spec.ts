@@ -114,6 +114,7 @@ test("marking a title watched from its card with \"I don't remember\" keeps it w
   await signIn(context, ana);
   await page.goto(DUNE);
   await addTo(page, page, "My list");
+  await expect(page.getByRole("img", { name: /On My list/ })).toBeVisible();
   await page.goto("/app/mine");
   await expect(page.getByRole("button", { name: /^To watch 1$/ })).toBeVisible();
 
