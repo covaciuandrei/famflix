@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 
 import { addTo, admin, createUser, expect, listCard, openAs, startFamily, type TestUser } from "./helpers";
 
@@ -34,6 +34,21 @@ async function seed(
 
 /** The id of the family whose page the person is on. */
 const familyId = (url: string) => new URL(url).pathname.split("/")[3];
+
+/**
+ * Flips the "Let my families see my list" switch on the person's settings page and waits until the new setting is saved.
+ * The switch shows its new position at once and is saved a moment later: a page loaded before that still has the old one.
+ */
+async function setSharing(page: Page, user: TestUser, on: boolean) {
+  const share = page.getByRole("switch", { name: "Let my families see my list" });
+  await share.click();
+  await expect(share).toHaveAttribute("aria-checked", String(on));
+  await expect
+    .poll(async () => (await admin.from("profiles").select("share_my_list").eq("id", user.id).single()).data?.share_my_list)
+    .toBe(on);
+  // It is disabled while saving: the answer has come back and the page is done with it.
+  await expect(share).toBeEnabled();
+}
 
 test("the people in a family see each other's list, with no notes, and can take titles from it", async ({ browser }, testInfo) => {
   const ana = await createUser("Ana");
@@ -105,8 +120,7 @@ test("a person can switch their list off for their family, and on again, and My 
   await expect(share).toHaveAttribute("aria-checked", "true");
 
   // Off: saved, My list says it is only hers, and her family finds the list closed.
-  await share.click();
-  await expect(share).toHaveAttribute("aria-checked", "false");
+  await setSharing(anaPage, ana, false);
   await anaPage.reload();
   await expect(anaPage.getByRole("switch", { name: "Let my families see my list" })).toHaveAttribute("aria-checked", "false");
   await anaPage.goto("/app/mine");
@@ -121,8 +135,7 @@ test("a person can switch their list off for their family, and on again, and My 
 
   // On again.
   await anaPage.goto("/app/settings");
-  await anaPage.getByRole("switch", { name: "Let my families see my list" }).click();
-  await expect(anaPage.getByRole("switch", { name: "Let my families see my list" })).toHaveAttribute("aria-checked", "true");
+  await setSharing(anaPage, ana, true);
   await anaPage.reload();
   await expect(anaPage.getByRole("switch", { name: "Let my families see my list" })).toHaveAttribute("aria-checked", "true");
   await bogdanPage.goto(`/app/family/${group}?view=members`);
