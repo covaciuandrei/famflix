@@ -312,10 +312,12 @@ test("a row that is only looked at asks for nothing, and one that is scrolled lo
   expect(asked).toEqual([]);
 
   // One step along the row, a swipe or a click, and it loads two pages: forty cards beyond what a person has in view, so a
-  // quick run of clicks doesn't get to the end of what is there while the next page is on its way.
+  // quick run of clicks doesn't get to the end of what is there while the next page is on its way. TMDB's lists are live:
+  // a title can move from the end of one page to the start of the next between two requests, and is shown once, so two
+  // pages can bring a card or two fewer than forty. One page would only ever bring twenty.
   if (testInfo.project.name === "desktop") await row.getByRole("button", { name: `Next in ${title}` }).click();
   else await list.evaluate((el) => el.scrollBy({ left: 300 }));
-  await expect.poll(async () => (await addressesIn(list)).length, { timeout: 30_000 }).toBeGreaterThanOrEqual(own + 40);
+  await expect.poll(async () => (await addressesIn(list)).length, { timeout: 30_000 }).toBeGreaterThanOrEqual(own + 30);
   expect(asked.length).toBeGreaterThanOrEqual(2);
   const titles = await addressesIn(list);
   expect(new Set(titles).size, "no title is shown twice").toBe(titles.length);
