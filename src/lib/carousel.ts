@@ -16,11 +16,25 @@ export function scrollReach({ scrollLeft, clientWidth, scrollWidth }: RowMetrics
 const LOOK_AHEAD = 1.5;
 
 /**
- * Whether a row is scrolled close enough to its end for the titles after it to be fetched (a row that fits is at its end).
- * A row that is not laid out, such as a hidden one, never is.
+ * Once somebody has scrolled a row it keeps this many cards ahead of them. A page is twenty cards and takes a moment
+ * to come, which a quick run of clicks on the arrow, or a fling on a phone, gets through: so the next page is asked for
+ * while two pages' worth are still to be scrolled, and the one after that when the first of those arrives.
  */
-export function nearEnd({ scrollLeft, clientWidth, scrollWidth }: RowMetrics, ahead = LOOK_AHEAD) {
-  return clientWidth > 0 && scrollWidth - (scrollLeft + clientWidth) <= clientWidth * ahead;
+export const CARDS_AHEAD = 40;
+
+/**
+ * Whether a row is scrolled close enough to its end for the titles after it to be fetched (a row that fits is at its
+ * end). Nobody has scrolled it yet when `engaged` is false, and then it waits until it has to: a row that is only looked
+ * at doesn't load more than it shows. `pitch` is the distance from one card to the next. A row that is not laid out,
+ * such as a hidden one, never is near its end.
+ */
+export function nearEnd(
+  { scrollLeft, clientWidth, scrollWidth }: RowMetrics,
+  { engaged = false, pitch = 0 }: { engaged?: boolean; pitch?: number } = {},
+) {
+  if (clientWidth <= 0) return false;
+  const ahead = Math.max(clientWidth * LOOK_AHEAD, engaged ? pitch * CARDS_AHEAD : 0);
+  return scrollWidth - (scrollLeft + clientWidth) <= ahead;
 }
 
 /**

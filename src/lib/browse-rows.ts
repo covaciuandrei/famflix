@@ -8,14 +8,38 @@ import { findDecade } from "@/lib/decades";
 import { findGenre } from "@/lib/genres";
 import type { MediaType } from "@/lib/types";
 
+/**
+ * The fewest votes a title may have to be in a filtered row, strictest first. Vote minimums keep out obscure titles and
+ * ones rated by a handful of people (a "top rated" row most of all), but a narrow filter (westerns of the eighties) has
+ * few titles with many votes: so a row asks for the strictest minimum that still leaves it enough titles, and goes down
+ * these steps only as far as it has to. Series get fewer votes than movies, so theirs are lower.
+ */
+export const VOTE_STEPS = {
+  movie: { popular: [100, 30, 10, 5], top: [1000, 300, 100, 50] },
+  tv: { popular: [100, 30, 10, 5], top: [300, 100, 40, 15] },
+} as const satisfies Record<MediaType, Record<"popular" | "top", readonly number[]>>;
+
+/** How many titles a filtered row should have, when TMDB has that many, before it may ask for ones with fewer votes. */
+export const ENOUGH_TITLES = 200;
+
 /** Where a row's titles come from. */
 export type RowSource =
   /** What is trending this week (both kinds of title with no type). */
   | { kind: "trending"; type: MediaType | null }
   | { kind: "popular"; type: MediaType }
   | { kind: "top"; type: MediaType }
-  /** Popular or best rated titles, in a category (a Browse genre slug) and a decade (a decade value), either or both. */
-  | { kind: "discover"; type: MediaType; sort: "popular" | "top"; genre: string | null; decade: string | null }
+  /**
+   * Popular or best rated titles, in a category (a Browse genre slug) and a decade (a decade value), either or both,
+   * that have at least `votes` votes (one of VOTE_STEPS).
+   */
+  | {
+      kind: "discover";
+      type: MediaType;
+      sort: "popular" | "top";
+      genre: string | null;
+      decade: string | null;
+      votes: number;
+    }
   /** What TMDB recommends for one title ("Because you liked it", "More like this"). */
   | { kind: "like"; type: MediaType; id: number };
 
@@ -55,6 +79,7 @@ export function rowSourceToParams(source: RowSource): URLSearchParams {
     params.set("sort", source.sort);
     if (source.genre) params.set("genre", source.genre);
     if (source.decade) params.set("decade", source.decade);
+    params.set("votes", String(source.votes));
   }
   if (source.kind === "like") params.set("id", String(source.id));
   return params;
@@ -65,10 +90,18 @@ export function rowSourceKey(source: RowSource): string {
   return rowSourceToParams(source).toString();
 }
 
+/** The votes asked for: one of the row's steps, or (left out) the strictest, which is what every row had before it could ask for fewer. */
+function parseVotes(value: string | null, type: MediaType, sort: "popular" | "top"): number | null {
+  const steps: readonly number[] = VOTE_STEPS[type][sort];
+  if (value === null) return steps[0];
+  if (!/^[1-9]\d{0,3}$/.test(value)) return null;
+  return steps.find((step) => step === Number(value)) ?? null;
+}
+
 /**
- * Reads a source from address parameters, or null when they are not a row of ours: an unknown kind, sort, category or
- * decade, a category the type does not have, or an id that is not a plain positive whole number. Parameters a kind does
- * not use are ignored.
+ * Reads a source from address parameters, or null when they are not a row of ours: an unknown kind, sort, category,
+ * decade or vote minimum, a category the type does not have, or an id that is not a plain positive whole number.
+ * Parameters a kind does not use are ignored.
  */
 export function rowSourceFromParams(params: URLSearchParams): RowSource | null {
   const kind = params.get("kind");
@@ -91,7 +124,8 @@ export function rowSourceFromParams(params: URLSearchParams): RowSource | null {
       if (!known || known[type] === null) return null;
     }
     if (decade !== null && !findDecade(decade)) return null;
-    return { kind, type, sort, genre, decade };
+    const votes = parseVotes(params.get("votes"), type, sort);
+    return votes === null ? null : { kind, type, sort, genre, decade, votes };
   }
 
   if (kind === "like") {
@@ -101,8 +135,22 @@ export function rowSourceFromParams(params: URLSearchParams): RowSource | null {
   return null;
 }
 
-/** Series count their votes lower than movies, so a "best rated" list needs fewer of them to count. */
-const TOP_RATED_VOTES: Record<MediaType, string> = { movie: "1000", tv: "300" };
+/**
+ * The strictest of a row's vote minimums that still leaves it enough titles, or the loosest when none does. `totalAt`
+ * says how many titles a minimum leaves. A row ends when TMDB runs out of titles, and a strict minimum can leave a narrow
+ * filter with a handful. Every minimum is asked about at once, since the row is shown when the slowest has answered, and
+ * one that can't be asked about counts as not enough.
+ */
+export async function chooseVotes(
+  steps: readonly number[],
+  totalAt: (votes: number) => Promise<number>,
+): Promise<number> {
+  const totals = await Promise.all(
+    steps.slice(0, -1).map((votes) => (async () => totalAt(votes))().catch(() => 0)),
+  );
+  const enough = totals.findIndex((total) => total >= ENOUGH_TITLES);
+  return enough === -1 ? steps[steps.length - 1] : steps[enough];
+}
 
 /** The TMDB request for one page of a row, and the kind its titles are when TMDB doesn't say. */
 export function rowRequest(
@@ -134,9 +182,8 @@ export function rowRequest(
           ...(decade?.to != null && { [`${dateField}.lte`]: `${decade.to}-12-31` }),
           include_adult: "false",
           // Vote minimums keep out obscure titles and ones rated by a handful of people.
-          ...(source.sort === "popular"
-            ? { sort_by: "popularity.desc", "vote_count.gte": "100" }
-            : { sort_by: "vote_average.desc", "vote_count.gte": TOP_RATED_VOTES[source.type] }),
+          sort_by: source.sort === "popular" ? "popularity.desc" : "vote_average.desc",
+          "vote_count.gte": String(source.votes),
           ...paged,
         },
         fallbackType: source.type,

@@ -96,11 +96,42 @@ test("a row that fits is at its end, so what follows is asked for at once", () =
 test("a row that is not on screen is never near its end, or hidden rows would load for ever", () => {
   expect(nearEnd({ scrollLeft: 0, clientWidth: 0, scrollWidth: 0 })).toBe(false);
   expect(nearEnd({ scrollLeft: 0, clientWidth: 0, scrollWidth: 3000 })).toBe(false);
+  expect(nearEnd({ scrollLeft: 0, clientWidth: 0, scrollWidth: 3000 }, { engaged: true, pitch })).toBe(false);
 });
 
-test("how far ahead to look can be changed", () => {
-  expect(nearEnd(row(0), 3)).toBe(true);
-  expect(nearEnd(row(0), 2)).toBe(false);
-  expect(nearEnd(row(0), 0)).toBe(false);
-  expect(nearEnd(row(3500 - 984), 0)).toBe(true);
+test("a row nobody has scrolled yet waits until it has to, however many cards it keeps ahead later", () => {
+  // Twelve thousand pixels of cards: far more than a first page, so a row that is only looked at is nowhere near its end.
+  const long = (scrollLeft: number) => row(scrollLeft, 12_000);
+  expect(nearEnd(long(0), { engaged: false, pitch })).toBe(false);
+  expect(nearEnd(long(0), { pitch })).toBe(false);
+  // The pitch alone changes nothing: the same 1.5 windows as before, 12000 − 984 − 1476 = 9540.
+  expect(nearEnd(long(9539), { pitch })).toBe(false);
+  expect(nearEnd(long(9540), { pitch })).toBe(true);
+});
+
+test("once somebody has scrolled a row it keeps forty cards ahead of them, so a quick run of clicks doesn't catch up", () => {
+  // 40 cards of 156 are 6240; 12000 − 984 − 6240 = 4776 from the start is where the next page is asked for.
+  const long = (scrollLeft: number) => row(scrollLeft, 12_000);
+  expect(nearEnd(long(0), { engaged: true, pitch })).toBe(false);
+  expect(nearEnd(long(4775), { engaged: true, pitch })).toBe(false);
+  expect(nearEnd(long(4776), { engaged: true, pitch })).toBe(true);
+  expect(nearEnd(long(12_000 - 984), { engaged: true, pitch })).toBe(true);
+  // A first page of twenty cards is already inside that, so the first scroll asks for the next at once; before that, a row
+  // that is only looked at asks for nothing.
+  expect(nearEnd(row(0, 20 * pitch), { engaged: true, pitch })).toBe(true);
+  expect(nearEnd(row(0, 20 * pitch), { engaged: false, pitch })).toBe(false);
+  // On a phone (a narrow window, cards still a card wide) it is the same forty cards, not forty windows.
+  const phone = (scrollLeft: number) => ({ scrollLeft, clientWidth: 390, scrollWidth: 12_000 });
+  expect(nearEnd(phone(12_000 - 390 - 40 * 152 - 1), { engaged: true, pitch: 152 })).toBe(false);
+  expect(nearEnd(phone(12_000 - 390 - 40 * 152), { engaged: true, pitch: 152 })).toBe(true);
+});
+
+test("without a pitch to count cards with (fewer than two of them) a scrolled row looks ahead by windows like any other", () => {
+  const long = (scrollLeft: number) => row(scrollLeft, 12_000);
+  expect(nearEnd(long(9539), { engaged: true })).toBe(false);
+  expect(nearEnd(long(9540), { engaged: true })).toBe(true);
+  expect(nearEnd(long(9539), { engaged: true, pitch: 0 })).toBe(false);
+  // And a screen wide enough for forty cards at once never looks ahead less than it did.
+  expect(nearEnd(long(9539), { engaged: true, pitch: 1 })).toBe(false);
+  expect(nearEnd(long(9540), { engaged: true, pitch: 1 })).toBe(true);
 });

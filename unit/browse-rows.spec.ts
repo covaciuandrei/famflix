@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  ENOUGH_TITLES,
   MAX_PAGE,
+  VOTE_STEPS,
+  chooseVotes,
   hasMorePages,
   loadNextTitles,
   parsePage,
@@ -21,9 +24,10 @@ const SOURCES: RowSource[] = [
   { kind: "trending", type: "tv" },
   { kind: "popular", type: "movie" },
   { kind: "top", type: "tv" },
-  { kind: "discover", type: "movie", sort: "popular", genre: null, decade: null },
-  { kind: "discover", type: "tv", sort: "top", genre: "kids", decade: "2010s" },
-  { kind: "discover", type: "movie", sort: "top", genre: "horror", decade: "older" },
+  { kind: "discover", type: "movie", sort: "popular", genre: null, decade: null, votes: 100 },
+  { kind: "discover", type: "tv", sort: "top", genre: "kids", decade: "2010s", votes: 40 },
+  { kind: "discover", type: "movie", sort: "top", genre: "horror", decade: "older", votes: 1000 },
+  { kind: "discover", type: "movie", sort: "top", genre: "horror", decade: "older", votes: 50 },
   { kind: "like", type: "movie", id: 603 },
   { kind: "like", type: "tv", id: 87108 },
 ];
@@ -38,8 +42,8 @@ test("every source has its own key, and what a source does not use is left out o
   const keys = SOURCES.map(rowSourceKey);
   expect(new Set(keys).size).toBe(SOURCES.length);
   expect(rowSourceKey({ kind: "trending", type: null })).toBe("kind=trending");
-  expect(rowSourceKey({ kind: "discover", type: "movie", sort: "popular", genre: null, decade: null })).toBe(
-    "kind=discover&type=movie&sort=popular",
+  expect(rowSourceKey({ kind: "discover", type: "movie", sort: "popular", genre: null, decade: null, votes: 100 })).toBe(
+    "kind=discover&type=movie&sort=popular&votes=100",
   );
 });
 
@@ -68,6 +72,20 @@ test("an address that is not a row of ours is refused", () => {
     // A category the type does not have.
     "kind=discover&type=tv&sort=popular&genre=horror",
     "kind=discover&type=movie&sort=popular&genre=kids",
+    // Vote minimums: only the steps a row of that type and sort has.
+    "kind=discover&type=movie&sort=popular&votes=",
+    "kind=discover&type=movie&sort=popular&votes=0",
+    "kind=discover&type=movie&sort=popular&votes=7",
+    "kind=discover&type=movie&sort=popular&votes=1000",
+    "kind=discover&type=movie&sort=top&votes=100%26with_keywords%3D1",
+    "kind=discover&type=movie&sort=top&votes=1e3",
+    "kind=discover&type=movie&sort=top&votes=0300",
+    "kind=discover&type=movie&sort=top&votes=%2B300",
+    "kind=discover&type=movie&sort=top&votes=-300",
+    "kind=discover&type=movie&sort=top&votes=300.5",
+    "kind=discover&type=movie&sort=top&votes=30",
+    "kind=discover&type=tv&sort=top&votes=1000",
+    "kind=discover&type=tv&sort=top&votes=50",
     // Like: a plain positive whole number.
     "kind=like&type=movie",
     "kind=like&type=movie&id=0",
@@ -85,12 +103,48 @@ test("an address that is not a row of ours is refused", () => {
 });
 
 test("what a kind of row does not use is ignored, not passed on", () => {
-  expect(parse("kind=trending&type=movie&genre=drama&decade=2010s&id=5&sort=top")).toEqual({
+  expect(parse("kind=trending&type=movie&genre=drama&decade=2010s&id=5&sort=top&votes=100")).toEqual({
     kind: "trending",
     type: "movie",
   });
-  expect(parse("kind=popular&type=tv&genre=drama&id=7")).toEqual({ kind: "popular", type: "tv" });
-  expect(parse("kind=like&type=movie&id=603&genre=drama&sort=top")).toEqual({ kind: "like", type: "movie", id: 603 });
+  expect(parse("kind=popular&type=tv&genre=drama&id=7&votes=100")).toEqual({ kind: "popular", type: "tv" });
+  expect(parse("kind=like&type=movie&id=603&genre=drama&sort=top&votes=100")).toEqual({
+    kind: "like",
+    type: "movie",
+    id: 603,
+  });
+});
+
+test("a filtered row with no vote minimum in its address has the strictest, which every row had before", () => {
+  expect(parse("kind=discover&type=movie&sort=popular")).toEqual({
+    kind: "discover",
+    type: "movie",
+    sort: "popular",
+    genre: null,
+    decade: null,
+    votes: 100,
+  });
+  expect(parse("kind=discover&type=movie&sort=top&genre=drama")).toMatchObject({ votes: 1000 });
+  expect(parse("kind=discover&type=tv&sort=top&decade=2010s")).toMatchObject({ votes: 300 });
+});
+
+test("a vote minimum is one of the steps of its row, whatever the others have", () => {
+  for (const [type, sort] of [
+    ["movie", "popular"],
+    ["movie", "top"],
+    ["tv", "popular"],
+    ["tv", "top"],
+  ] as const) {
+    const steps: readonly number[] = VOTE_STEPS[type][sort];
+    // Strictest first, each step looser than the one before, and every one of them can be asked for.
+    expect(steps, `${type} ${sort}`).toEqual([...steps].sort((a, b) => b - a));
+    expect(new Set(steps).size).toBe(steps.length);
+    for (const votes of steps) {
+      expect(parse(`kind=discover&type=${type}&sort=${sort}&votes=${votes}`), `${type} ${sort} ${votes}`).toMatchObject({ votes });
+    }
+  }
+  // Series are voted on less than movies, so what a series needs is lower.
+  expect(VOTE_STEPS.tv.top[0]).toBeLessThan(VOTE_STEPS.movie.top[0]);
 });
 
 test("a page is a plain whole number from 1 to TMDB's last", () => {
@@ -152,7 +206,7 @@ test("a title's recommendations ask TMDB for the page", () => {
 
 test("discover asks for what is popular or best rated in a category and decade, as the first page always did", () => {
   expect(
-    rowRequest({ kind: "discover", type: "movie", sort: "popular", genre: "drama", decade: "2010s" }, 2),
+    rowRequest({ kind: "discover", type: "movie", sort: "popular", genre: "drama", decade: "2010s", votes: 100 }, 2),
   ).toEqual({
     path: "/discover/movie",
     params: {
@@ -169,7 +223,7 @@ test("discover asks for what is popular or best rated in a category and decade, 
 
   // Series: their own date field and category id, and no talk, news, reality or soaps.
   expect(
-    rowRequest({ kind: "discover", type: "tv", sort: "popular", genre: "action", decade: "1990s" }, 1).params,
+    rowRequest({ kind: "discover", type: "tv", sort: "popular", genre: "action", decade: "1990s", votes: 100 }, 1).params,
   ).toEqual({
     with_genres: "10759",
     without_genres: "10763,10764,10766,10767",
@@ -181,29 +235,96 @@ test("discover asks for what is popular or best rated in a category and decade, 
     page: "1",
   });
 
-  // Best rated needs more votes for a movie than for a series; no category or decade leaves both out.
-  expect(rowRequest({ kind: "discover", type: "movie", sort: "top", genre: null, decade: null }, 5).params).toEqual({
+  // Best rated asks for the votes its source says (the strictest step has more for a movie than for a series), and a looser
+  // step of the same row is the same request with only that changed; no category or decade leaves both out.
+  expect(
+    rowRequest({ kind: "discover", type: "movie", sort: "top", genre: null, decade: null, votes: 1000 }, 5).params,
+  ).toEqual({
     include_adult: "false",
     sort_by: "vote_average.desc",
     "vote_count.gte": "1000",
     page: "5",
   });
-  expect(rowRequest({ kind: "discover", type: "tv", sort: "top", genre: null, decade: null }, 1).params).toEqual({
+  expect(
+    rowRequest({ kind: "discover", type: "movie", sort: "top", genre: null, decade: null, votes: 50 }, 5).params,
+  ).toEqual({
+    include_adult: "false",
+    sort_by: "vote_average.desc",
+    "vote_count.gte": "50",
+    page: "5",
+  });
+  expect(
+    rowRequest({ kind: "discover", type: "tv", sort: "top", genre: null, decade: null, votes: 300 }, 1).params,
+  ).toEqual({
     without_genres: "10763,10764,10766,10767",
     include_adult: "false",
     sort_by: "vote_average.desc",
     "vote_count.gte": "300",
     page: "1",
   });
+  expect(
+    rowRequest({ kind: "discover", type: "tv", sort: "popular", genre: null, decade: null, votes: 5 }, 1).params,
+  ).toMatchObject({ sort_by: "popularity.desc", "vote_count.gte": "5" });
 });
 
 test("a decade open on one side only limits the other", () => {
-  const since = rowRequest({ kind: "discover", type: "movie", sort: "popular", genre: null, decade: "2020s" }, 1).params;
+  const since = rowRequest({ kind: "discover", type: "movie", sort: "popular", genre: null, decade: "2020s", votes: 100 }, 1)
+    .params;
   expect(since["primary_release_date.gte"]).toBe("2020-01-01");
   expect(since).not.toHaveProperty("primary_release_date.lte");
-  const before = rowRequest({ kind: "discover", type: "tv", sort: "popular", genre: null, decade: "older" }, 1).params;
+  const before = rowRequest({ kind: "discover", type: "tv", sort: "popular", genre: null, decade: "older", votes: 100 }, 1)
+    .params;
   expect(before["first_air_date.lte"]).toBe("1979-12-31");
   expect(before).not.toHaveProperty("first_air_date.gte");
+});
+
+test("a row asks for the strictest vote minimum that leaves it enough titles, and the loosest when none does", async () => {
+  const steps = [1000, 300, 100, 50];
+  const totals = (byVotes: Record<number, number>) => async (votes: number) => byVotes[votes] ?? 0;
+
+  // Plenty at the strictest: nothing looser is needed.
+  expect(await chooseVotes(steps, totals({ 1000: ENOUGH_TITLES, 300: 900, 100: 2000, 50: 3000 }))).toBe(1000);
+  // Not enough there, enough at the next, and the ones after that are not wanted just because they have more.
+  expect(await chooseVotes(steps, totals({ 1000: ENOUGH_TITLES - 1, 300: ENOUGH_TITLES, 100: 2000, 50: 3000 }))).toBe(300);
+  expect(await chooseVotes(steps, totals({ 1000: 12, 300: 90, 100: 450, 50: 3000 }))).toBe(100);
+  // Not enough anywhere: the loosest, which is the most titles it can have, asked about or not.
+  expect(await chooseVotes(steps, totals({ 1000: 0, 300: 3, 100: 40, 50: 120 }))).toBe(50);
+  expect(await chooseVotes(steps, totals({}))).toBe(50);
+  // The loosest is not asked about (nothing is looser to fall back to), and a single step is just that step.
+  const asked: number[] = [];
+  await chooseVotes(steps, async (votes) => {
+    asked.push(votes);
+    return 0;
+  });
+  expect(asked.sort((a, b) => b - a)).toEqual([1000, 300, 100]);
+  expect(await chooseVotes([100], totals({ 100: 5 }))).toBe(100);
+});
+
+test("every minimum is asked about at once, and one that can't be asked about is not enough", async () => {
+  const started: number[] = [];
+  const release: (() => void)[] = [];
+  const pending = chooseVotes([1000, 300, 100, 50], (votes) => {
+    started.push(votes);
+    return new Promise<number>((resolve) => release.push(() => resolve(ENOUGH_TITLES)));
+  });
+  // None has answered yet, and all of the three that could be chosen have been asked.
+  await Promise.resolve();
+  expect(started).toEqual([1000, 300, 100]);
+  for (const answer of release) answer();
+  expect(await pending).toBe(1000);
+
+  // A minimum that fails is skipped, not fatal, whether it throws at once or later.
+  const flaky = async (votes: number) => {
+    if (votes === 1000) throw new Error("TMDB had a moment");
+    if (votes === 300) return Promise.reject(new Error("and again"));
+    return votes === 100 ? ENOUGH_TITLES + 1 : 0;
+  };
+  expect(await chooseVotes([1000, 300, 100, 50], flaky)).toBe(100);
+  expect(
+    await chooseVotes([1000, 300, 100, 50], () => {
+      throw new Error("not even a promise");
+    }),
+  ).toBe(50);
 });
 
 test("a page's new titles are the ones not shown yet, and are counted as shown", () => {

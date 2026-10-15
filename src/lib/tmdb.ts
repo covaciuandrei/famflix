@@ -1,6 +1,6 @@
 import "server-only";
 
-import { hasMorePages, rowRequest, type RowSource } from "@/lib/browse-rows";
+import { chooseVotes, hasMorePages, rowRequest, VOTE_STEPS, type RowSource } from "@/lib/browse-rows";
 import type { Decade } from "@/lib/decades";
 import { findGenre, type BrowseGenre } from "@/lib/genres";
 import { interleave } from "@/lib/deck-compose";
@@ -102,6 +102,11 @@ export class TmdbError extends Error {
  */
 const cache = new Map<string, { expires: number; value: Promise<unknown> }>();
 const MAX_CACHED = 500;
+/**
+ * How long TMDB gets to answer. A request that is never answered would otherwise stay in the cache as the answer for
+ * everyone who asks for that page, and hang them all as long as the platform lets it.
+ */
+const TMDB_TIMEOUT_MS = 10_000;
 
 async function tmdbFetch<T>(
   path: string,
@@ -123,6 +128,7 @@ async function tmdbFetch<T>(
         Accept: "application/json",
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(TMDB_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new TmdbError(res.status, path);
@@ -188,15 +194,15 @@ export async function searchMedia(query: string, only?: MediaType): Promise<Tmdb
 }
 
 /**
- * One page of a row: its titles (a recommendation row leaves out titles without a poster, and the title itself) and
- * whether TMDB has pages after it. Throws if TMDB can't be reached.
+ * One page of a row: its titles (a recommendation row leaves out titles without a poster, and the title itself),
+ * whether TMDB has pages after it, and how many titles the whole row has. Throws if TMDB can't be reached.
  */
 export async function getRowPage(
   source: RowSource,
   page: number,
-): Promise<{ items: TmdbItem[]; hasMore: boolean }> {
+): Promise<{ items: TmdbItem[]; hasMore: boolean; total: number }> {
   const { path, params, fallbackType } = rowRequest(source, page);
-  const data = await tmdbFetch<{ results: RawResult[]; total_pages?: number }>(
+  const data = await tmdbFetch<{ results: RawResult[]; total_pages?: number; total_results?: number }>(
     path,
     params,
     // What TMDB recommends for a title hardly changes.
@@ -209,12 +215,14 @@ export async function getRowPage(
         ? items.filter((i) => i.posterPath && !(i.mediaType === source.type && i.tmdbId === source.id))
         : items,
     hasMore: hasMorePages(page, data.total_pages),
+    total: data.total_results ?? 0,
   };
 }
 
 /** A row as it is first shown: its first page, and what is needed to ask for the rest. */
 async function firstPageOf(title: string, source: RowSource): Promise<TmdbRow> {
-  return { title, source, ...(await getRowPage(source, 1)) };
+  const { items, hasMore } = await getRowPage(source, 1);
+  return { title, source, items, hasMore };
 }
 
 /** Curated browse rows for the discover page, or with a type only that kind of title. */
@@ -238,7 +246,8 @@ export async function getBrowseRows(type: MediaType | null = null): Promise<Tmdb
 
 /**
  * Popular and top rated movies and series in a Browse category, release decade, or both; with a type, only that kind
- * of title.
+ * of title. Each row asks for the strictest vote minimum that still leaves it enough titles (see chooseVotes), so a
+ * narrow filter doesn't end after a few of them.
  */
 export async function getDiscoverRows({
   genre,
@@ -256,22 +265,29 @@ export async function getDiscoverRows({
       ? ` from before ${decade.to + 1}`
       : ` from the ${decade.label}`;
 
-  const discover = (mediaType: MediaType, sort: "popular" | "top"): RowSource => ({
-    kind: "discover",
-    type: mediaType,
-    sort,
-    genre: genre?.slug ?? null,
-    decade: decade?.value ?? null,
-  });
+  const discover = async (mediaType: MediaType, sort: "popular" | "top"): Promise<RowSource> => {
+    const row = {
+      kind: "discover",
+      type: mediaType,
+      sort,
+      genre: genre?.slug ?? null,
+      decade: decade?.value ?? null,
+    } as const;
+    const votes = await chooseVotes(VOTE_STEPS[mediaType][sort], async (minimum) => {
+      const { total } = await getRowPage({ ...row, votes: minimum }, 1);
+      return total;
+    });
+    return { ...row, votes };
+  };
 
   const movies = type !== "tv" && (!genre || genre.movie !== null);
   const series = type !== "movie" && (!genre || genre.tv !== null);
-  const rows: [string, RowSource][] = [];
-  if (movies) rows.push([`Popular ${what}movies${when}`, discover("movie", "popular")]);
-  if (series) rows.push([`Popular ${what}series${when}`, discover("tv", "popular")]);
-  if (movies) rows.push([`Top rated ${what}movies${when}`, discover("movie", "top")]);
-  if (series) rows.push([`Top rated ${what}series${when}`, discover("tv", "top")]);
-  return Promise.all(rows.map(([title, source]) => firstPageOf(title, source)));
+  const rows: [string, MediaType, "popular" | "top"][] = [];
+  if (movies) rows.push([`Popular ${what}movies${when}`, "movie", "popular"]);
+  if (series) rows.push([`Popular ${what}series${when}`, "tv", "popular"]);
+  if (movies) rows.push([`Top rated ${what}movies${when}`, "movie", "top"]);
+  if (series) rows.push([`Top rated ${what}series${when}`, "tv", "top"]);
+  return Promise.all(rows.map(async ([title, mediaType, sort]) => firstPageOf(title, await discover(mediaType, sort))));
 }
 
 /** Spreads a stack's seed over TMDB's first few pages, so asking again for the same mood gives other titles. */

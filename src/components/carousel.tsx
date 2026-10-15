@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { nearEnd, pageTarget, scrollReach } from "@/lib/carousel";
 import { cn } from "@/lib/utils";
 
+/** The distance from one card of a row to the next (its width and the gap), or 0 when there are fewer than two. */
+function cardPitch(row: HTMLElement): number {
+  const first = row.children[0] as HTMLElement | undefined;
+  const second = row.children[1] as HTMLElement | undefined;
+  return first && second ? second.offsetLeft - first.offsetLeft : 0;
+}
+
 /**
  * A row of cards that scrolls sideways. A touch screen swipes it. With a mouse there is nothing to grab: the scrollbar
  * is hidden and a wheel only scrolls the page up and down. So previous/next arrows sit on its edges there, each shown
@@ -36,6 +43,8 @@ export function Carousel({
   useEffect(() => {
     nearEndRef.current = onNearEnd;
   });
+  // Whether anybody has scrolled, swiped or reached into the row yet: until then it only loads what it has to.
+  const engaged = useRef(false);
 
   useEffect(() => {
     const row = list.current;
@@ -43,16 +52,29 @@ export function Carousel({
     const measure = () => {
       const next = scrollReach(row);
       setReach((now) => (now.back === next.back && now.forward === next.forward ? now : next));
-      if (nearEnd(row)) nearEndRef.current?.();
+      if (nearEnd(row, { engaged: engaged.current, pitch: cardPitch(row) })) nearEndRef.current?.();
     };
-    row.addEventListener("scroll", measure, { passive: true });
+    const engage = () => {
+      if (engaged.current) return;
+      engaged.current = true;
+      measure();
+    };
+    const scrolled = () => {
+      engaged.current = true;
+      measure();
+    };
+    row.addEventListener("scroll", scrolled, { passive: true });
+    row.addEventListener("pointerdown", engage, { passive: true });
+    row.addEventListener("focusin", engage);
     // Watching a row measures it once, then again whenever its size or its cards change (a resize, new filters, a loaded page).
     const resized = new ResizeObserver(measure);
     resized.observe(row);
     const changed = new MutationObserver(measure);
     changed.observe(row, { childList: true });
     return () => {
-      row.removeEventListener("scroll", measure);
+      row.removeEventListener("scroll", scrolled);
+      row.removeEventListener("pointerdown", engage);
+      row.removeEventListener("focusin", engage);
       resized.disconnect();
       changed.disconnect();
     };
@@ -61,11 +83,8 @@ export function Carousel({
   function go(direction: -1 | 1) {
     const row = list.current;
     if (!row) return;
-    const first = row.children[0] as HTMLElement | undefined;
-    const second = row.children[1] as HTMLElement | undefined;
-    const pitch = first && second ? second.offsetLeft - first.offsetLeft : 0;
     const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    row.scrollTo({ left: pageTarget(row, direction, pitch), behavior: calm ? "auto" : "smooth" });
+    row.scrollTo({ left: pageTarget(row, direction, cardPitch(row)), behavior: calm ? "auto" : "smooth" });
   }
 
   return (

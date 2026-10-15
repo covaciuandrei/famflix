@@ -34,6 +34,14 @@ test("the route behind a row's next pages is for people signed in, only knows ro
     "kind=discover&type=tv&sort=popular&genre=horror&page=2",
     "kind=discover&type=movie&sort=popular&genre=drama%26with_keywords%3D1&page=2",
     "kind=discover&type=movie&sort=popular&decade=1850s&page=2",
+    // A vote minimum is one of the steps of that row, and nothing else.
+    "kind=discover&type=movie&sort=popular&votes=7&page=2",
+    "kind=discover&type=movie&sort=popular&votes=1000&page=2",
+    "kind=discover&type=movie&sort=top&votes=30&page=2",
+    "kind=discover&type=tv&sort=top&votes=50&page=2",
+    "kind=discover&type=movie&sort=top&votes=100%26with_keywords%3D1&page=2",
+    "kind=discover&type=movie&sort=top&votes=1e3&page=2",
+    "kind=discover&type=movie&sort=top&votes=&page=2",
     "kind=like&type=movie&id=603%2F..%2F..%2Fperson%2F1&page=2",
     "kind=like&type=movie&id=0&page=2",
   ]) {
@@ -62,6 +70,14 @@ test("the route behind a row's next pages is for people signed in, only knows ro
   const filtered = await ask("kind=discover&type=tv&sort=top&genre=kids&decade=2010s&page=1");
   expect(filtered.status()).toBe(200);
   expect((await filtered.json()).items.length).toBeGreaterThan(0);
+
+  // A row asks for the votes its address says: fewer votes leave more titles (best rated documentaries of the nineties had
+  // none with a thousand), and without any it is the strictest, which is what every row asked for before.
+  const loose = await (await ask("kind=discover&type=movie&sort=top&genre=documentary&decade=1990s&votes=50&page=1")).json();
+  const strict = await (await ask("kind=discover&type=movie&sort=top&genre=documentary&decade=1990s&page=1")).json();
+  expect(loose.items.length).toBeGreaterThan(10);
+  expect(strict.items.length).toBeLessThan(loose.items.length);
+  expect(loose.hasMore).toBe(true);
 
   // TMDB answers no page after the 500th, so the row is told that is the end.
   expect((await (await ask("kind=trending&type=movie&page=500")).json()).hasMore).toBe(false);

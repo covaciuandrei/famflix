@@ -288,7 +288,138 @@ test("a page that can't be loaded is said so, isn't asked for again by itself, a
   await expect(retry).toBeHidden();
   await expect.poll(async () => (await addressesIn(list)).length).toBeGreaterThan(known);
   await expect(row.getByRole("status")).toHaveText("");
-  expect(asked).toBe(2);
+  // The try again, and then the row goes on loading ahead of the person, as any row they have scrolled does.
+  expect(asked).toBeGreaterThanOrEqual(2);
+});
+
+test("a row that is only looked at asks for nothing, and one that is scrolled loads ahead of where they are", async ({ page, context }, testInfo) => {
+  await signIn(context, await createUser("Tess"));
+  const asked: string[] = [];
+  page.on("request", (request) => {
+    if (MORE_TITLES.test(request.url())) asked.push(request.url());
+  });
+  await page.goto("/app/browse");
+
+  const title = "Popular movies";
+  const row = rowOf(page, title);
+  const list = row.getByRole("list").first();
+  await expect(list.getByRole("listitem").first()).toBeVisible();
+  const own = (await addressesIn(list)).length;
+  expect(own).toBeGreaterThanOrEqual(15);
+
+  // Nobody has touched it: a row that is only looked at doesn't load more than it shows.
+  await page.waitForTimeout(1_500);
+  expect(asked).toEqual([]);
+
+  // One step along the row, a swipe or a click, and it loads two pages: forty cards beyond what a person has in view, so a
+  // quick run of clicks doesn't get to the end of what is there while the next page is on its way.
+  if (testInfo.project.name === "desktop") await row.getByRole("button", { name: `Next in ${title}` }).click();
+  else await list.evaluate((el) => el.scrollBy({ left: 300 }));
+  await expect.poll(async () => (await addressesIn(list)).length, { timeout: 30_000 }).toBeGreaterThanOrEqual(own + 40);
+  expect(asked.length).toBeGreaterThanOrEqual(2);
+  const titles = await addressesIn(list);
+  expect(new Set(titles).size, "no title is shown twice").toBe(titles.length);
+
+  // And it is not asking for more than it needs: with all of that ahead, it waits for the person to come closer.
+  const settled = asked.length;
+  await page.waitForTimeout(1_500);
+  expect(asked.length).toBe(settled);
+});
+
+test("a page the server had trouble with is asked for again by itself, and only said so if the second try fails too", async ({ page, context }) => {
+  await signIn(context, await createUser("Tess"));
+  // Each row's pages are told apart by what they ask for, so one row's loading doesn't count for the other's.
+  const MOVIE_PAGES = /\/api\/browse\/rows\?kind=popular&type=movie&/;
+  const SERIES_PAGES = /\/api\/browse\/rows\?kind=popular&type=tv&/;
+  let moviePages = 0;
+  await page.route(MOVIE_PAGES, (route) => {
+    moviePages++;
+    return moviePages === 1
+      ? route.fulfill({ status: 502, json: { error: "Couldn't load more titles right now." } })
+      : route.continue();
+  });
+  let seriesPages = 0;
+  await page.route(SERIES_PAGES, (route) => {
+    seriesPages++;
+    return route.fulfill({ status: 503, json: { error: "TMDB is busy." } });
+  });
+  await page.goto("/app/browse");
+
+  const row = rowOf(page, "Popular movies");
+  const list = row.getByRole("list").first();
+  const retry = row.getByRole("button", { name: "Try again" });
+  await expect(list.getByRole("listitem").first()).toBeVisible();
+  const known = (await addressesIn(list)).length;
+
+  // The first try fails and the second works: the person sees the cards arrive, and nothing about it.
+  await scrollToEnd(list);
+  await expect.poll(async () => (await addressesIn(list)).length, { timeout: 30_000 }).toBeGreaterThan(known);
+  await expect(retry).toHaveCount(0);
+  await expect(row.getByRole("status")).toHaveText("");
+  expect(moviePages).toBeGreaterThanOrEqual(2);
+
+  // A row whose pages fail twice says so, and then waits to be asked.
+  const series = rowOf(page, "Popular series");
+  const seriesList = series.getByRole("list").first();
+  const seriesRetry = series.getByRole("button", { name: "Try again" });
+  await expect(seriesList.getByRole("listitem").first()).toBeVisible();
+  await scrollToEnd(seriesList);
+  await expect(seriesRetry).toBeVisible({ timeout: 30_000 });
+  await expect(seriesList.getByRole("listitem").filter({ has: page.getByRole("button", { name: "Try again" }) })).toContainText(
+    "TMDB is busy.",
+  );
+  expect(seriesPages).toBe(2);
+  await scrollToEnd(seriesList);
+  await page.waitForTimeout(500);
+  expect(seriesPages).toBe(2);
+});
+
+test("a narrow filter doesn't end after a few titles: its rows ask for fewer votes until they have enough, and stay strict where there are plenty", async ({ page, context }) => {
+  test.setTimeout(120_000);
+  await signIn(context, await createUser("Tess"));
+  const asked: URLSearchParams[] = [];
+  page.on("request", (request) => {
+    if (MORE_TITLES.test(request.url())) asked.push(new URL(request.url()).searchParams);
+  });
+  // What the rows of one filter asked for (a request from the page before it, still on its way, is not theirs).
+  const votesOf = (sort: string, genre: string) =>
+    asked.find((query) => query.get("sort") === sort && query.get("genre") === genre)?.get("votes");
+
+  // Documentaries of the nineties: nothing has a thousand votes, so their best rated row used to be missing altogether, and
+  // the popular one ended after a page. Now each asks for as few votes as it takes to have a good many titles.
+  await page.goto("/app/browse?type=movie&genre=documentary&decade=1990s");
+  const best = rowOf(page, "Top rated documentary movies from the 1990s");
+  const popular = rowOf(page, "Popular documentary movies from the 1990s");
+  await expect(best).toBeVisible();
+  await expect(popular).toBeVisible();
+  const bestList = best.getByRole("list").first();
+  const popularList = popular.getByRole("list").first();
+  await expect(bestList.getByRole("listitem").first()).toBeVisible();
+  const bestFirst = (await addressesIn(bestList)).length;
+  expect(bestFirst).toBeGreaterThanOrEqual(15);
+
+  await scrollToEnd(bestList);
+  await scrollToEnd(popularList);
+  await expect.poll(async () => (await addressesIn(bestList)).length, { timeout: 30_000 }).toBeGreaterThan(bestFirst);
+  await expect.poll(() => votesOf("popular", "documentary"), { timeout: 30_000 }).toBeDefined();
+  expect(votesOf("top", "documentary")).toBe("50");
+  expect(votesOf("popular", "documentary")).toBe("10");
+  const sent = asked.find((query) => query.get("sort") === "top" && query.get("genre") === "documentary")!;
+  expect([sent.get("kind"), sent.get("type"), sent.get("genre"), sent.get("decade")]).toEqual(["discover", "movie", "documentary", "1990s"]);
+
+  // Action movies of the 2010s have plenty: the strictest minimums are kept, so the best rated row is still the well known ones.
+  asked.length = 0;
+  await page.goto("/app/browse?type=movie&genre=action&decade=2010s");
+  const strictBest = rowOf(page, "Top rated action movies from the 2010s").getByRole("list").first();
+  const strictPopular = rowOf(page, "Popular action movies from the 2010s").getByRole("list").first();
+  await expect(strictBest.getByRole("listitem").first()).toBeVisible();
+  await scrollToEnd(strictBest);
+  await scrollToEnd(strictPopular);
+  await expect
+    .poll(() => votesOf("popular", "action") !== undefined && votesOf("top", "action") !== undefined, { timeout: 30_000 })
+    .toBe(true);
+  expect(votesOf("top", "action")).toBe("1000");
+  expect(votesOf("popular", "action")).toBe("100");
 });
 
 test("the titles a page adds come after the row's own, none twice, and show your lists like the rest", async ({ page, context }) => {

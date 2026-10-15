@@ -8,26 +8,17 @@ import { RowCard, RowCardSkeleton, RowNotice } from "@/components/row-card";
 import { Button } from "@/components/ui/button";
 import { type CardItem, type RowSource, loadNextTitles, rowSourceToParams } from "@/lib/browse-rows";
 import { libraryKey } from "@/lib/constants";
+import { fetchRowPage, RowLoadError, UNAVAILABLE } from "@/lib/row-pages";
 import type { LibraryIndex } from "@/lib/types";
-
-const UNAVAILABLE = "Couldn't load more titles right now.";
-
-/** One page of the row, from the server. */
-async function fetchPage(query: string, page: number, signal: AbortSignal) {
-  const response = await fetch(`/api/browse/rows?${query}&page=${page}`, { signal });
-  const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : UNAVAILABLE);
-  if (!Array.isArray(data?.items) || typeof data.hasMore !== "boolean") throw new Error(UNAVAILABLE);
-  return data as { items: CardItem[]; hasMore: boolean };
-}
 
 type Status = "idle" | "loading" | "failed";
 
 /**
  * A row of titles that has no last card until TMDB runs out: it shows the first page, which the server rendered
  * (`children`), and fetches the next page when scrolled near its end, by swiping, with the wheel or with the arrows.
- * Cards that are already on show are not shown twice. A page that fails to load stops the row asking until the person
- * says to try again.
+ * Once somebody scrolls it, it keeps loading until there are a good many cards ahead of them, so the next ones are
+ * already there when they get to them. Cards that are already on show are not shown twice. A page that fails to load
+ * (after a second try, where that may help) stops the row asking until the person says to try again.
  */
 export function PagedRow({
   label,
@@ -78,7 +69,7 @@ export function PagedRow({
     request.current = controller;
     try {
       const loaded = await loadNextTitles({
-        fetchPage: (page) => fetchPage(query, page, controller.signal),
+        fetchPage: (page) => fetchRowPage(query, page, controller.signal),
         afterPage: lastPage.current,
         seen: (seen.current ??= new Set(first.current)),
       });
@@ -94,13 +85,7 @@ export function PagedRow({
         return;
       }
       failed.current = true;
-      setProblem(
-        error instanceof TypeError
-          ? "You seem to be offline. Check your connection."
-          : error instanceof Error
-            ? error.message
-            : UNAVAILABLE,
-      );
+      setProblem(error instanceof RowLoadError ? error.message : UNAVAILABLE);
       setStatus("failed");
     } finally {
       loading.current = false;

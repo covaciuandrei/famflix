@@ -61,12 +61,24 @@ series), decade and category (Comedy, Horror, Kids, ...); the filters work
 together, and only offer the categories the chosen type has. A row of titles
 scrolls sideways: swipe it on a phone, or use the arrows at its edges with a
 mouse (they show only while there is more to see that way). A row has no last
-card: as you near its end the next page of titles is loaded from TMDB (a few
-placeholders hold the place meanwhile, and a failed page says so and waits for
-"Try again"), without repeating a title, for as long as TMDB has more. The
-"Because you liked ..." rows and "More like this" on a title's page keep going the
-same way; the cast and a film's collection are short and don't. Trailers play from
-YouTube only once you press play.
+card: as you near its end the next page of titles is loaded from TMDB, without
+repeating a title, for as long as TMDB has more. A row nobody has touched only
+loads what it shows; once you scroll it, it stays about forty cards ahead of you,
+so the next titles are usually there before you get to them (a few placeholders
+hold the place when you outrun it). A page that fails to load is tried once more
+by itself, and if that fails too the row says so and waits for "Try again".
+The "Because you liked ..." rows and "More like this" on a title's page keep going
+the same way; the cast and a film's collection are short and don't. Trailers play
+from YouTube only once you press play.
+
+**Filtered rows don't end early.** Rows made by a filter are the most popular or the
+best rated titles, and keep out obscure ones by asking for a minimum number of votes
+(a thousand for the best rated movies, say). A narrow filter, such as westerns of
+the eighties, has few titles with that many votes, so such a row asks for the strictest
+minimum that still leaves it about two hundred titles, and goes down to fewer votes
+only as far as it has to (series, which get fewer votes, start lower). Rows with
+plenty of titles keep the strict minimum, so what you see first is still the well
+known ones.
 
 ### A title's page
 
