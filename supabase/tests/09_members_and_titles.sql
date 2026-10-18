@@ -85,5 +85,20 @@ select test.expect_eq(public.join_group((select invite_code from public.groups w
 reset role;
 select test.expect_eq((select count(*) from public.group_members where user_id = '63636363-0000-0000-0000-000000000003'), 0::bigint, 'still out until someone shares the new code');
 
+-- The common family lock must precede admission, permission checks and membership changes.
+select test.expect_eq((select position('for no key update' in prosrc) > 0
+    and position('for no key update' in prosrc) < position('insert into public.group_members' in prosrc)
+  from pg_proc where oid = 'public.join_group(text)'::regprocedure),
+  true, 'joining locks and revalidates the invite before adding a member');
+select test.expect_eq((select bool_and(position('for no key update' in prosrc) > 0
+    and position('for no key update' in prosrc) < position('if not public.is_group_owner' in prosrc))
+  from pg_proc where oid in ('public.rename_group(uuid,text)'::regprocedure,
+    'public.regenerate_invite_code(uuid)'::regprocedure, 'public.remove_member(uuid,uuid)'::regprocedure)),
+  true, 'owner operations lock the family before checking ownership');
+select test.expect_eq((select position('for no key update' in prosrc) > 0
+    and position('for no key update' in prosrc) < position('select role into v_role' in prosrc)
+  from pg_proc where oid = 'public.leave_group(uuid)'::regprocedure),
+  true, 'leaving takes the same family lock before membership changes');
+
 reset role;
 do $$ begin raise notice 'ALL SECURITY (MEMBERS) TESTS PASSED'; end $$;

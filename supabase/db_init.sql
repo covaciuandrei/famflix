@@ -870,7 +870,8 @@ begin
 
   select id, invite_code_expires_at into g_id, g_expires
   from public.groups
-  where invite_code = upper(trim(p_invite_code));
+  where invite_code = upper(trim(p_invite_code))
+  for no key update;
 
   if g_id is null then
     return null;
@@ -910,6 +911,7 @@ security definer
 set search_path = public
 as $$
 begin
+  perform 1 from public.groups where id = p_group for no key update;
   if not public.is_group_owner(p_group, auth.uid()) then
     raise exception 'Only the family owner can do this';
   end if;
@@ -933,6 +935,7 @@ as $$
 declare
   v_code text := public.new_invite_code();
 begin
+  perform 1 from public.groups where id = p_group for no key update;
   if not public.is_group_owner(p_group, auth.uid()) then
     raise exception 'Only the family owner can do this';
   end if;
@@ -952,6 +955,8 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Lock the family before membership rows, as joining and leaving do.
+  perform 1 from public.groups where id = p_group for no key update;
   if not public.is_group_owner(p_group, auth.uid()) then
     raise exception 'Only the family owner can do this';
   end if;
@@ -981,6 +986,7 @@ declare
   v_role text;
   v_next uuid;
 begin
+  perform 1 from public.groups where id = p_group for no key update;
   select role into v_role from public.group_members
   where group_id = p_group and user_id = auth.uid();
   if v_role is null then
