@@ -37,7 +37,7 @@ export interface ExportDocument {
   })[];
   watch_history?: (ExportEntry & { watched_on: string | null; family: string | null })[];
   family_lists?: {
-    family: string;
+    family: string | null;
     titles?: (ExportEntry & { i_watched_on: string | null; my_score: number | null; my_note: string | null })[];
   }[];
 }
@@ -149,7 +149,7 @@ export function viewingsOf(doc: ExportDocument): Viewing[] {
           season: null,
           episode: null,
           year: t.year,
-          where: list.family,
+          where: list.family ?? MY_LIST,
           with: [],
           score: t.my_score,
           note: t.my_note,

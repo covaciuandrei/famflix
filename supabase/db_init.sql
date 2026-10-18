@@ -4426,6 +4426,7 @@ create trigger ratings_react_to_score
 -- where they watched something with the caller and only for a family the caller is still in; their scores, notes,
 -- reactions and e-mail addresses never do, nor do guests, invite codes or the temporary rate-limit counters (the
 -- document lists what it leaves out). A family the caller has left shows what they did there, with no other names.
+-- Its current name, list status/removals, night outcomes and plan status are withheld: they can change after departure.
 -- One value, so the API's cap on rows doesn't cut it short.
 create function public.export_my_data()
 returns jsonb
@@ -4515,7 +4516,7 @@ begin
     ),
     'family_lists', (
       select coalesce(jsonb_agg(jsonb_build_object(
-          'family', g.name,
+          'family', case when public.is_group_member(g.id, v_me) then g.name end,
           'still_a_member', public.is_group_member(g.id, v_me),
           'titles', (
             select coalesce(jsonb_agg(jsonb_build_object(
@@ -4525,8 +4526,8 @@ begin
                 'year', m.release_year,
                 'added_by_me', li.added_by = v_me,
                 'added_at', li.created_at,
-                'status', li.status,
-                'removed_at', li.deleted_at,
+                'status', case when public.is_group_member(g.id, v_me) then li.status end,
+                'removed_at', case when public.is_group_member(g.id, v_me) then li.deleted_at end,
                 'my_score', r.score,
                 'my_note', r.comment,
                 'score_entered_by', case when r.id is null then null
@@ -4551,7 +4552,7 @@ begin
             where li.group_id = g.id
               and (li.added_by = v_me or r.id is not null or x.list_item_id is not null or w.list_item_id is not null)
           )
-        ) order by g.name), '[]'::jsonb)
+        ) order by case when public.is_group_member(g.id, v_me) then g.name end, g.id), '[]'::jsonb)
       from public.groups g
       where g.id in (
         select gm.group_id from public.group_members gm where gm.user_id = v_me
@@ -4566,14 +4567,14 @@ begin
     ),
     'movie_nights', (
       select coalesce(jsonb_agg(jsonb_build_object(
-          'family', g.name,
+          'family', case when public.is_group_member(g.id, v_me) then g.name end,
           'started_at', n.created_at,
           'started_by_me', n.started_by = v_me,
           'source', n.source,
-          'status', n.status,
+          'status', case when public.is_group_member(g.id, v_me) then n.status end,
           'mood', to_jsonb(n.genres),
-          'happened_on', n.happened_on,
-          'picked_title', pm.title,
+          'happened_on', case when public.is_group_member(g.id, v_me) then n.happened_on end,
+          'picked_title', case when public.is_group_member(g.id, v_me) then pm.title end,
           'i_joined_at', mm.joined_at,
           'i_watched_it', mm.watched,
           'stacks_i_finished', (select count(*) from public.movie_night_finishes f
@@ -4598,9 +4599,9 @@ begin
     ),
     'movie_night_plans', (
       select coalesce(jsonb_agg(jsonb_build_object(
-          'family', g.name,
+          'family', case when public.is_group_member(g.id, v_me) then g.name end,
           'starts_at', p.starts_at,
-          'status', p.status,
+          'status', case when public.is_group_member(g.id, v_me) then p.status end,
           'mood', to_jsonb(p.genres),
           'planned_by_me', p.created_by is not distinct from v_me,
           'note', case when p.created_by = v_me then p.note end,
@@ -4614,7 +4615,7 @@ begin
     ),
     'feed_events', (
       select coalesce(jsonb_agg(jsonb_build_object(
-          'family', g.name,
+          'family', case when public.is_group_member(g.id, v_me) then g.name end,
           'kind', a.kind,
           'title', a.media_title,
           'at', a.created_at,

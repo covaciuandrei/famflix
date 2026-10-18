@@ -238,12 +238,12 @@ flowchart TD
 | --- | --- |
 | Sign-in | Google only; e-mail and password sign-up is switched off in Supabase. [`proxy.ts`](src/proxy.ts) refreshes the session on every request and keeps signed-out visitors out of `/app`. |
 | Row-level security | On for every table. My list is readable only by its owner through the tables; the people in their families get a narrower view through one function, `member_list()` (title, whether and when it was watched, the owner's score: never notes or reactions), which the owner can switch off. A family's data is readable only by its members. |
-| Database functions | Anything beyond "may I read or write this row" (log a watch, start a night, vote, pick, plan, export) is a SQL function that re-checks who is asking, the dates, the scores and the limits. |
+| Database functions | Anything beyond "may I read or write this row" (log a watch, start a night, vote, pick, plan, export) is a SQL function that re-checks who is asking, the dates, the scores and the limits. Admission, removal and ownership changes serialize on the same family row before checking access. |
 | Explicit grants | Supabase no longer hands new tables and functions to the API roles. [`db_init.sql`](supabase/db_init.sql) grants exactly what each role needs, and the database tests run it under the older and the newer defaults, with an inventory that fails when a table or function is left out. |
 | Guests | A guest has no account and no direct access: the server speaks for them through functions only the service role may run. Their link is a secret (`no-referrer`, `noindex`), limited to one night, and stops working when the night ends. |
 | Secrets | The service-role key and the TMDB token are server-only (`import "server-only"`), never in a `NEXT_PUBLIC_` variable. |
 | HTTP hardening | `Content-Security-Policy` (`frame-ancestors 'none'`, `object-src 'none'`), `X-Frame-Options: DENY`, `nosniff`, a strict `Referrer-Policy` and `Permissions-Policy`, no `X-Powered-By`. Posters load straight from TMDB, so the server's image optimiser stays off. |
-| Your data | **Settings → Account** downloads everything FamFlix keeps about you, or deletes your account and data. |
+| Your data | **Settings → Account** downloads everything FamFlix keeps about you, or deletes your account and data. After family membership ends, the export keeps personal contributions but withholds mutable family state and subsequent viewing outcomes. |
 
 Per-person limits, kept in the database so every server instance shares them:
 

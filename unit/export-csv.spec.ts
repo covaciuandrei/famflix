@@ -210,6 +210,17 @@ test.describe("the viewings of a document", () => {
     ]);
   });
 
+  test("a former family's redacted name does not remove the person's own viewing", () => {
+    const doc: ExportDocument = {
+      family_lists: [{
+        family: null,
+        titles: [{ ...entry, title: "Dune", i_watched_on: "2026-03-05", my_score: 8.5, my_note: "My own note" }],
+      }],
+    };
+    expect(viewingsOf(doc)).toEqual([viewing({ score: 8.5, note: "My own note" })]);
+    expect(toCsv(viewingsOf(doc))).toContain("2026-03-05,movie,Dune,,,2021,My list,,8.5,My own note\r\n");
+  });
+
   test("viewings with no day have a blank date and are never merged into one", () => {
     const doc: ExportDocument = {
       my_list: [

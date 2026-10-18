@@ -319,6 +319,10 @@ short text without anything private in it.
   something (a viewing on a day you don't remember has an empty date). Other
   people's scores, notes and e-mail addresses are never in it;
   the download is only for you, from FamFlix itself, up to five times an hour.
+  After you leave a family or are removed, your own contributions remain in
+  the download, but its current name, list status changes, movie-night outcomes
+  and plan status are withheld. Your own viewing dates, scores and notes stay
+  available; the CSV labels a former family's redacted name as **My list**.
 - **Delete account**: **Settings → Delete account** deletes your account and
   data; your families keep the titles you added, without your name.
 - **Limits against abuse**: names and notes are at most 250 characters, and each
