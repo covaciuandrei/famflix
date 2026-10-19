@@ -3,7 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { earlierByTitle, type HistoryRow } from "@/lib/rewatch";
 import { mergeViewings, type FamilyInput, type FamilyTitle, type Viewing } from "@/lib/stats";
-import type { EarlierViewing, MediaType } from "@/lib/types";
+import type { EarlierViewing, GuestRating, MediaType } from "@/lib/types";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
@@ -57,12 +57,13 @@ interface ItemRow {
   status: "want" | "watched";
   media: MediaRow | null;
   ratings: { user_id: string; score: number | null }[];
+  guest_ratings: GuestRating[];
   reactions: { user_id: string; value: "like" | "dislike" }[];
-  watches: { user_id: string; watched_on: string }[];
+  watches: { user_id: string; watched_on: string | null }[];
 }
 
 export const MEDIA_SELECT = "id, media_type, title, runtime, genres";
-const ITEM_SELECT = `id, media_id, status, media(${MEDIA_SELECT}), ratings(user_id, score), reactions(user_id, value), watches(user_id, watched_on)`;
+const ITEM_SELECT = `id, media_id, status, media(${MEDIA_SELECT}), ratings(user_id, score), guest_ratings(score,guest_id,guest:family_guests(id,name,account_id)), reactions(user_id, value), watches(user_id, watched_on)`;
 
 export const genreNames = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((g): g is string => typeof g === "string") : [];
@@ -72,6 +73,7 @@ function currentViewings(item: ItemRow): Viewing[] {
   if (item.status !== "watched") return [];
   const days = new Map<string, string[]>();
   for (const watch of item.watches) {
+    if (watch.watched_on === null) continue;
     const day = watch.watched_on.slice(0, 10);
     days.set(day, [...(days.get(day) ?? []), watch.user_id]);
   }
@@ -116,14 +118,14 @@ export async function getFamilyStatsInput(
       (from, to) =>
         supabase
           .from("watch_history")
-          .select("user_id, media_id, watched_on")
+          .select("user_id, media_id, watched_on, viewing_id")
           .eq("group_id", groupId)
           .order("watched_on")
           .order("id")
           .range(from, to),
       ["PGRST205"],
     ),
-    readAll<{ happened_on: string }>("the family's movie nights", (from, to) =>
+    readAll<{ happened_on: string | null }>("the family's movie nights", (from, to) =>
       supabase
         .from("movie_nights")
         .select("happened_on")
@@ -158,7 +160,10 @@ export async function getFamilyStatsInput(
         ? [
             toTitle(item.media, {
               viewings: mergeViewings(currentViewings(item), withDays(earlier.get(item.media_id))),
-              scores: item.ratings.flatMap((r) => (typeof r.score === "number" ? [{ userId: r.user_id, score: r.score }] : [])),
+              scores: [
+                ...item.ratings.flatMap((r) => (typeof r.score === "number" ? [{ userId: r.user_id, score: r.score }] : [])),
+                ...item.guest_ratings.flatMap((r) => r.guest?.account_id === null ? [{ userId: `guest:${r.guest_id}`, score: r.score }] : []),
+              ],
               likes: item.reactions.filter((r) => r.value === "like").length,
             }),
           ]
@@ -167,6 +172,5 @@ export async function getFamilyStatsInput(
     ...orphanMedia.map((media) => toTitle(media, { viewings: mergeViewings(withDays(earlier.get(media.id))), scores: [], likes: 0 })),
   ];
 
-  return { titles, nights: nights.map((n) => n.happened_on.slice(0, 10)), members };
+  return { titles, nights: nights.flatMap((n) => n.happened_on ? [n.happened_on.slice(0, 10)] : []), members };
 }
-

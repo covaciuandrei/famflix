@@ -369,15 +369,15 @@ test.describe("whoWatched", () => {
     ...extra,
   });
 
-  test("is the family members who were ticked, then every guest of the night", () => {
+  test("lists actual member and guest attendees, not guests who only voted", () => {
     const members = [
-      person("g-yan", "Yan", { guest: true }),
+      person("g-yan", "Yan", { guest: true, watched: true }),
       person("u-ana", "Ana", { watched: true }),
       person("u-ben", "Ben"),
       person("g-zoe", "Zoe", { guest: true }),
       person("u-cara", "Cara", { watched: true }),
     ];
-    expect(whoWatched(members).map((m) => m.name)).toEqual(["Ana", "Cara", "Yan", "Zoe"]);
+    expect(whoWatched(members).map((m) => m.name)).toEqual(["Ana", "Cara", "Yan"]);
   });
 
   test("is nobody for a night with no ticked members and no guests", () => {

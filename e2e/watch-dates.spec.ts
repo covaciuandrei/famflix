@@ -212,7 +212,7 @@ test("a family's watch shows its day with who was there, and a member's My list 
   await anaPage.getByRole("button", { name: "Watched together", exact: true }).click();
   const log = anaPage.getByRole("dialog", { name: /Who watched Dune/ });
   await log.locator('input[type="date"]').fill(daysAgo(10));
-  await log.getByRole("checkbox").nth(1).check();
+  await log.getByRole("checkbox", { name: "Bogdan" }).check();
   await log.getByRole("button", { name: "Save" }).click();
   await expect(log).toBeHidden();
 

@@ -24,7 +24,7 @@ test("a family logs a title again, then puts it back on To watch", async ({ brow
   await anaPage.getByRole("button", { name: "Watched together", exact: true }).click();
   const first = anaPage.getByRole("dialog", { name: /Who watched Dune/ });
   await first.locator('input[type="date"]').fill(daysAgo(10));
-  await first.getByRole("checkbox").nth(1).check();
+  await first.getByRole("checkbox", { name: "Bogdan" }).check();
   await first.getByRole("button", { name: "Save" }).click();
   await expect(first).toBeHidden();
 
@@ -41,8 +41,8 @@ test("a family logs a title again, then puts it back on To watch", async ({ brow
     .getByRole("button", { name: /We watched it again/ })
     .click();
   const again = anaPage.getByRole("dialog", { name: /Who watched Dune/ });
-  await expect(again.getByRole("checkbox").nth(0)).toBeChecked();
-  await expect(again.getByRole("checkbox").nth(1)).toBeChecked();
+  await expect(again.getByRole("checkbox", { name: /Ana/ })).toBeChecked();
+  await expect(again.getByRole("checkbox", { name: "Bogdan" })).toBeChecked();
   await again.getByRole("button", { name: "Log it" }).click();
   await expect(again).toBeHidden();
 

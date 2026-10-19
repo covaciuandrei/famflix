@@ -7,6 +7,7 @@ import { useState, useTransition } from "react";
 import { removeListItem } from "@/app/app/actions";
 import { AddToListButton, type AddTarget } from "@/components/add-to-list-button";
 import { Avatar } from "@/components/avatar";
+import { FamilyFeedbackButton } from "@/components/family-feedback";
 import { MediaPoster } from "@/components/media-poster";
 import { RatingPanel } from "@/components/rating-panel";
 import { ReactionButtons } from "@/components/reaction-buttons";
@@ -106,13 +107,29 @@ export function ListItemCard({
                 <Badge>{mediaTypeLabel(media.media_type)}</Badge>
                 {media.release_year && <span>{media.release_year}</span>}
                 {card.avgScore !== null && (
-                  <span className="inline-flex items-center gap-1 text-star">
-                    <Star className="size-3.5 fill-current" />
-                    {formatScore(card.avgScore)}/10
-                    <span className="text-muted-foreground">
-                      ({card.ratingCount})
+                  item.group_id ? (
+                    <FamilyFeedbackButton
+                      card={card}
+                      currentUserId={currentUserId}
+                      members={members}
+                      kind="ratings"
+                      className="-mx-1.5 text-star"
+                    >
+                      <Star className="size-3.5 fill-current" aria-hidden />
+                      {formatScore(card.avgScore)}/10
+                      <span className="text-muted-foreground">
+                        ({card.ratingCount})
+                      </span>
+                    </FamilyFeedbackButton>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-star">
+                      <Star className="size-3.5 fill-current" />
+                      {formatScore(card.avgScore)}/10
+                      <span className="text-muted-foreground">
+                        ({card.ratingCount})
+                      </span>
                     </span>
-                  </span>
+                  )
                 )}
               </div>
               {/* A title the family watched together, on a viewer's My list: with whom, and when. */}
@@ -124,7 +141,7 @@ export function ListItemCard({
                     {card.watchedWith.names.length > 0
                       ? ` with ${card.watchedWith.names.join(", ")}`
                       : ""}
-                    {card.watchedWith.on ? ` on ${formatDayNumeric(card.watchedWith.on)}` : ""}
+                    {card.watchedWith.on ? ` on ${formatDayNumeric(card.watchedWith.on)}` : " · Date unknown"}
                   </span>
                 </p>
               )}
@@ -180,6 +197,7 @@ export function ListItemCard({
             {members && item.group_id && (
               <WatchedTogetherDialog
                 itemId={item.id}
+                groupId={item.group_id}
                 title={media.title}
                 members={members}
                 viewers={card.viewers}
@@ -192,7 +210,7 @@ export function ListItemCard({
               <WatchAgain
                 itemId={item.id}
                 title={media.title}
-                family={{ members, viewers: card.viewers, ratings: card.ratings, currentUserId }}
+                family={{ groupId: item.group_id, members, viewers: card.viewers, ratings: card.ratings, currentUserId }}
               />
             )}
             {canWatchAgain(card) && !item.group_id && (
@@ -223,6 +241,18 @@ export function ListItemCard({
               dislikeCount={card.dislikeCount}
               mine={card.myReaction}
             />
+            {item.group_id && (
+              <FamilyFeedbackButton
+                card={card}
+                currentUserId={currentUserId}
+                members={members}
+                kind="reactions"
+                className="text-muted-foreground"
+              >
+                <Users className="size-3.5" aria-hidden />
+                Who reacted?
+              </FamilyFeedbackButton>
+            )}
             <button
               type="button"
               onClick={() => setOpen((o) => !o)}
@@ -307,6 +337,7 @@ export function ListItemCard({
             ratings={card.ratings}
             currentUserId={currentUserId}
             members={members}
+            groupId={item.group_id ?? undefined}
           />
         </div>
       )}

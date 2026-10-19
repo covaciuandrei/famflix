@@ -11,6 +11,7 @@ import {
 } from "@/app/app/movie-night/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FamilyGuests } from "@/components/guest/family-guests";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { guestPath, MAX_GUESTS } from "@/lib/movie-night";
 
@@ -28,10 +29,12 @@ type LinkState =
  */
 export function GuestLinkDialog({
   nightId,
+  groupId,
   groupName,
   onClose,
 }: {
   nightId: string;
+  groupId: string;
   groupName: string;
   onClose: () => void;
 }) {
@@ -205,6 +208,9 @@ export function GuestLinkDialog({
         </p>
       )}
 
+      <div className="mt-5 border-t border-border pt-4">
+        <FamilyGuests groupId={groupId} nightId={nightId} />
+      </div>
       <div className="mt-5 flex justify-end">
         <Button variant="ghost" onClick={() => dialogRef.current?.close()}>
           Done

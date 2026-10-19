@@ -10,7 +10,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy policy"
-      updated="October 15, 2026"
+      updated="October 19, 2026"
       intro={
         <p>
           FamFlix is a small, private watchlist for families and friends, run
@@ -65,10 +65,15 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong className="text-foreground">Guests:</strong> a family can
-            invite someone to vote in one movie night with a link, without an
-            account. That person gives a name, which is kept with their votes
-            in that night and shown to the family, also in the list of who
-            took part or watched. FamFlix keeps nothing else about them.
+            save a guest&apos;s name for reuse, record which viewings they
+            attended (with a date or no known date), and enter an optional
+            movie score on their behalf. A guest can also join one night
+            through a general or person-specific link and vote without an
+            account. Voting and actual attendance are recorded separately.
+            Family members can correct guest names and attendance. A separate
+            invitation can connect that guest history to a Google-authenticated
+            account only after the person confirms; existing account data is
+            kept and duplicate attendance/scores are not counted twice.
           </li>
           <li>
             <strong className="text-foreground">Counters:</strong> how often
@@ -108,7 +113,11 @@ export default function PrivacyPage() {
             A guest&apos;s name and votes are shown to the members of the
             family whose night it is, and to the other people in that night. A
             guest sees that one night (its titles, who is taking part and the
-            votes), never the family&apos;s lists or history.
+            votes), never the family&apos;s lists, saved guest directory or
+            history. A valid personal invitation can show the invited guest
+            name and family name, but does not expose their past history.
+            Saved guest profiles and scores are visible only within that
+            family until the person explicitly joins with an account.
           </li>
           <li>
             FamFlix doesn&apos;t sell your data, show ads, or use analytics or
@@ -161,6 +170,14 @@ export default function PrivacyPage() {
       </Section>
 
       <Section title="Deleting your data">
+        <p>
+          Leaving a guest voting session removes that session and its votes,
+          not attendance that the family recorded separately or the reusable
+          guest profile. Guests without an account can ask their family to
+          correct their name or attendance, or contact us about deleting their
+          stored guest data. Linking a guest profile to an account brings that
+          data under the account&apos;s existing download and deletion controls.
+        </p>
         <p>
           You can change your name in Settings, remove titles, delete your
           scores and notes, and leave a family at any time (which also removes

@@ -32,10 +32,19 @@ export interface ExportDocument {
     my_score: number | null;
     my_note: string | null;
     watched_with: { family: string; people: string[] } | null;
+    viewing_id?: string | null;
     episodes?: ExportEpisode[];
     earlier_episode_viewings?: ExportEpisode[];
   })[];
-  watch_history?: (ExportEntry & { watched_on: string | null; family: string | null })[];
+  watch_history?: (ExportEntry & { watched_on: string | null; family: string | null; viewing_id?: string | null })[];
+  family_viewings?: (ExportEntry & {
+    viewing_id: string;
+    watched_on: string | null;
+    family: string | null;
+    people: string[];
+    score: number | null;
+    note: string | null;
+  })[];
   family_lists?: {
     family: string | null;
     titles?: (ExportEntry & { i_watched_on: string | null; my_score: number | null; my_note: string | null })[];
@@ -65,9 +74,9 @@ const day = (value: string | null | undefined): string => (value ? value.slice(0
 export function viewingsOf(doc: ExportDocument): Viewing[] {
   const found = new Map<string, Viewing>();
   let undated = 0;
-  const add = (v: Viewing, tmdbId: number) => {
+  const add = (v: Viewing, tmdbId: number, viewingId?: string | null) => {
     // Nothing says two viewings with no day are the same one, so they are never merged.
-    const key = [v.kind === "episode" ? "series" : v.kind, tmdbId, v.season ?? "", v.episode ?? "", v.date || `none${undated++}`].join("|");
+    const key = [v.kind === "episode" ? "series" : v.kind, tmdbId, v.season ?? "", v.episode ?? "", v.date || (viewingId ? `view:${viewingId}` : `none${undated++}`)].join("|");
     const have = found.get(key);
     if (!have) {
       found.set(key, v);
@@ -116,8 +125,17 @@ export function viewingsOf(doc: ExportDocument): Viewing[] {
           note: entry.my_note,
         },
         entry.tmdb_id,
+        entry.viewing_id,
       );
     }
+  }
+
+  for (const entry of doc.family_viewings ?? []) {
+    add({
+      date: day(entry.watched_on), kind: kindOf(entry.type), title: entry.title,
+      season: null, episode: null, year: entry.year,
+      where: entry.family ?? MY_LIST, with: entry.people, score: entry.score, note: entry.note,
+    }, entry.tmdb_id, entry.viewing_id);
   }
 
   for (const h of doc.watch_history ?? []) {
@@ -135,6 +153,7 @@ export function viewingsOf(doc: ExportDocument): Viewing[] {
         note: null,
       },
       h.tmdb_id,
+      h.viewing_id,
     );
   }
 

@@ -72,7 +72,7 @@ export default async function MovieNightListPage({
         </nav>
       )}
 
-      <MovieNight key={current.id} cards={cards} seed={seed} />
+      <MovieNight key={current.id} cards={cards} seed={seed} currentUserId={user.id} />
     </div>
   );
 }

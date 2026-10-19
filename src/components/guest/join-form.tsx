@@ -20,6 +20,7 @@ export function JoinForm({
   familyName,
   full,
   openInApp,
+  guestName,
 }: {
   token: string;
   familyName: string;
@@ -27,6 +28,7 @@ export function JoinForm({
   full: boolean;
   /** Where a signed-in member of this family can open the night in the app. */
   openInApp: string | null;
+  guestName?: string;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -38,7 +40,7 @@ export function JoinForm({
     if (pending) return;
     setError(null);
     startTransition(async () => {
-      const res = await joinAsGuest(token, name);
+      const res = await joinAsGuest(token, guestName ?? name);
       if (res.error) setError(res.error);
       else router.refresh();
     });
@@ -70,7 +72,7 @@ export function JoinForm({
         </p>
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {guestName ? <p className="text-sm">This invitation is for <strong>{guestName}</strong>. Continue only if that is you; your participation will use that saved guest profile.</p> : <label className="flex flex-col gap-1.5 text-sm font-medium">
             Your name
             <Input
               value={name}
@@ -81,22 +83,23 @@ export function JoinForm({
               placeholder="Who should we say you are?"
               className="font-normal"
             />
-          </label>
+          </label>}
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
-          <Button type="submit" disabled={pending || name.trim() === ""}>
+          <Button type="submit" disabled={pending || (!guestName && name.trim() === "")}>
             {pending && <Loader2 className="size-4 animate-spin" />}
-            Join the movie night
+            {guestName ? `Join as ${guestName}` : "Join the movie night"}
           </Button>
         </form>
       )}
 
       <p className="text-center text-xs text-muted-foreground">
-        Your name and votes stay in this movie night and are only shown to {familyName}. You can leave any time from the
-        menu, and they go with you.{" "}
+        Your guest name is saved by {familyName} so they can reuse it for future invitations and attendance. Your votes
+        belong to this night; leaving removes this night&apos;s voting session, not the family&apos;s attendance records. You
+        cannot see the family&apos;s history without joining with an account.{" "}
         <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
           Privacy
         </Link>

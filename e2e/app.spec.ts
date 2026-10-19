@@ -167,12 +167,21 @@ test("watched together: the others confirm their score and add a note", async ({
   // The card's button (the family list also has a "Watched together" tab, with a count).
   await anaPage.getByRole("button", { name: "Watched together", exact: true }).click();
   const dialog = anaPage.getByRole("dialog", { name: /Who watched Dune/ });
-  await dialog.getByRole("checkbox").nth(1).check();
+  await dialog.getByRole("checkbox", { name: "Bogdan" }).check();
   const bogdanRow = dialog.locator("li", { hasText: "Bogdan" });
   await setSlider(bogdanRow.locator('input[type="range"]'), 8.5);
   await dialog.getByRole("textbox", { name: "Your note" }).fill("Ana's note");
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
+
+  await anaPage.getByRole("button", { name: /^Watched together \d+$/ }).click();
+  await listCard(anaPage, "Dune").getByRole("button", { name: /^View family ratings/ }).click();
+  const familyRatings = anaPage.getByRole("dialog", { name: "Family ratings", exact: true });
+  await expect(familyRatings.getByRole("listitem")).toHaveCount(1);
+  await expect(familyRatings.getByRole("listitem")).toContainText("Bogdan");
+  await expect(familyRatings.getByRole("listitem")).toContainText("8.5/10");
+  await expect(familyRatings.getByText("Filled in by Ana", { exact: true })).toBeVisible();
+  await familyRatings.getByRole("button", { name: "Close", exact: true }).click();
 
   // Who has seen it is told on the title's own page...
   await anaPage.goto("/app/media/movie/438631");
@@ -258,8 +267,8 @@ test("I wasn't there, or deleting an account: the title goes back to To watch on
     await openFamily(page, "Test family");
     await page.getByRole("button", { name: "Watched together", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: /Who watched Dune/ });
-    await dialog.getByRole("checkbox").nth(0).setChecked(who.ana);
-    await dialog.getByRole("checkbox").nth(1).setChecked(who.bogdan);
+    await dialog.getByRole("checkbox", { name: /Ana/ }).setChecked(who.ana);
+    await dialog.getByRole("checkbox", { name: "Bogdan" }).setChecked(who.bogdan);
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog).toBeHidden();
   }

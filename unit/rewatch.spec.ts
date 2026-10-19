@@ -73,6 +73,8 @@ function card(o: Options = {}): ListItemCard {
     },
     addedBy: null,
     ratings: [],
+    reactions: [],
+    guestRatings: [],
     likeCount: 0,
     dislikeCount: 0,
     avgScore: null,

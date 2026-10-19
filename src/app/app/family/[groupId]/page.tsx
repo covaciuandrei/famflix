@@ -6,6 +6,7 @@ import { ActivityFeed } from "@/components/activity-feed";
 import { Avatar } from "@/components/avatar";
 import { InviteCode } from "@/components/invite-code";
 import { MemberLists } from "@/components/member-lists";
+import { FamilyGuests } from "@/components/guest/family-guests";
 import { RemovedItems } from "@/components/removed-items";
 import { FamilyNightLink } from "@/components/movie-night/family-night-link";
 import { FamilyStatsView } from "@/components/stats/family-stats";
@@ -175,6 +176,7 @@ export default async function FamilyPage({
           <ActivityFeed events={events} currentUserId={user.id} />
         </div>
       ) : showMembers ? (
+        <div className="flex flex-col gap-8">
         <MemberLists
           groupId={group.id}
           meId={user.id}
@@ -186,6 +188,8 @@ export default async function FamilyPage({
             owner: m.role === "owner",
           }))}
         />
+        <FamilyGuests groupId={group.id} />
+        </div>
       ) : showStats ? (
         stats ? (
           <FamilyStatsView stats={stats} years={years} groupId={group.id} />

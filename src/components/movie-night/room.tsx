@@ -329,12 +329,12 @@ export function Room({
     night.status === "closed" && night.source === "logged" ? (
       <p>
         <strong>{night.ended_by_name ?? "Someone"}</strong> logged <strong>{night.picked_title ?? "a title"}</strong> as
-        watched together on {formatDay(night.happened_on)}.
+        watched together{night.happened_on ? ` on ${formatDay(night.happened_on)}` : " (date unknown)"}.
       </p>
     ) : night.status === "closed" ? (
       <p>
-        <strong>{night.ended_by_name ?? "Someone"}</strong> picked <strong>{night.picked_title ?? "a title"}</strong> on{" "}
-        {formatDay(night.happened_on)}. The best titles joined {night.group_name}&apos;s list.
+        <strong>{night.ended_by_name ?? "Someone"}</strong> picked <strong>{night.picked_title ?? "a title"}</strong>
+        {night.happened_on ? ` on ${formatDay(night.happened_on)}` : " (date unknown)"}. The best titles joined {night.group_name}&apos;s list.
       </p>
     ) : night.status === "cancelled" ? (
       <p>
@@ -368,6 +368,7 @@ export function Room({
           {ended}
           <div className="flex flex-wrap items-center gap-2">
             {night.status === "closed" && night.picked_title && <SharePick title={night.picked_title} />}
+            {night.can_edit && <Button size="sm" variant="outline" onClick={openEdit} disabled={busy !== null}>Edit participants</Button>}
             {night.status === "closed" && night.picked_tmdb_id && night.picked_media_type && (
               <Link
                 href={`/app/media/${night.picked_media_type}/${night.picked_tmdb_id}`}
@@ -501,6 +502,7 @@ export function Room({
       {pickCandidate && (
         <PickDialog
           groupName={night.group_name}
+          groupId={night.group_id}
           title={pickCandidate.title}
           members={members}
           meId={me}
@@ -511,7 +513,7 @@ export function Room({
         />
       )}
       {canAct && inviting && (
-        <GuestLinkDialog nightId={night.id} groupName={night.group_name} onClose={() => setInviting(false)} />
+        <GuestLinkDialog nightId={night.id} groupId={night.group_id} groupName={night.group_name} onClose={() => setInviting(false)} />
       )}
       {canAct && searching && (
         <TitleSearchDialog
@@ -525,6 +527,7 @@ export function Room({
       {canAct && otherTitle && (
         <PickDialog
           groupName={night.group_name}
+          groupId={night.group_id}
           title={otherTitle.title}
           members={members}
           meId={me}
@@ -557,7 +560,7 @@ export function Room({
           title={night.picked_title}
           day={night.happened_on}
           groupName={night.group_name}
-          canUndo={Boolean(night.can_edit) && members.some((m) => !m.guest && m.watched)}
+          canUndo={Boolean(night.can_undo) && members.some((m) => !m.guest && m.watched)}
           onDelete={deleteThisNight}
           onClose={() => setDeleting(false)}
         />

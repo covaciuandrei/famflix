@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { validGuestSelections } from "@/lib/attendance";
 import { readPickedDay, watchedAtFor } from "@/lib/day";
 import { putOnList } from "@/lib/list-add";
 import { isUuid } from "@/lib/movie-night";
 import { saveTitle } from "@/lib/save-title";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { MediaType, ReactionValue } from "@/lib/types";
-import { cleanScore, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
+import type { GuestSelection, MediaType, ReactionValue } from "@/lib/types";
+import { cleanScore, MAX_TEXT, tooLong } from "@/lib/watch-input";
 
 export interface ActionResult {
   error?: string;
@@ -257,8 +258,9 @@ export async function setReaction(
 /** Log that family members watched a family title together, optionally filling in their scores. */
 export async function logWatchTogether(input: {
   itemId: string;
-  watchedOn: string;
+  watchedOn: string | null;
   viewers: { userId: string; score: number | null }[];
+  guests?: GuestSelection[];
   /** The signed-in user's own note, when they're among the viewers and changed it. */
   note?: string;
 }): Promise<ActionResult> {
@@ -271,8 +273,9 @@ export async function logWatchTogether(input: {
  */
 export async function watchedAgain(input: {
   itemId: string;
-  watchedOn: string;
+  watchedOn: string | null;
   viewers?: { userId: string; score: number | null }[];
+  guests?: GuestSelection[];
   note?: string;
 }): Promise<ActionResult> {
   return logViewing("watched_again", input);
@@ -291,12 +294,16 @@ async function logViewing(
   fn: "log_watch" | "watched_again",
   input: {
     itemId: string;
-    watchedOn: string;
+    watchedOn: string | null;
     viewers?: { userId: string; score: number | null }[];
+    guests?: GuestSelection[];
     note?: string;
   },
 ): Promise<ActionResult> {
-  const { supabase, user } = await requireUser();
+  const { supabase } = await requireUser();
+  if (!input || !isUuid(input.itemId) || (input.viewers !== undefined && !Array.isArray(input.viewers))
+    || input.viewers?.some((v) => !v || !isUuid(v.userId))
+    || (input.guests !== undefined && !validGuestSelections(input.guests))) return { error: "This viewing isn't valid." };
   const viewers = input.viewers?.map((v) => ({
     user_id: v.userId,
     score: cleanScore(v.score),
@@ -304,19 +311,23 @@ async function logViewing(
   if (viewers?.some((v) => v.score === undefined)) {
     return { error: "Scores must be between 1 and 10." };
   }
-  // The database checks membership, the date and the scores.
+  if (input.viewers) {
+    const guests = input.guests ?? [];
+    const { error } = await supabase.rpc("save_family_watch", {
+      p_item: input.itemId, p_on: input.watchedOn, p_members: viewers,
+      p_guests: guests.map((g) => ({ guest_id: g.guestId, score: cleanScore(g.score) })),
+      p_again: fn === "watched_again", p_note: input.note ?? null,
+    });
+    if (error) return { error: error.message };
+    revalidateApp();
+    return {};
+  }
   const { error } = await supabase.rpc(fn, {
     p_item: input.itemId,
     p_watched_on: input.watchedOn,
     p_viewers: viewers ?? null,
   });
   if (error) return { error: error.message };
-
-  // Only your own note: nobody writes notes for the others, they add theirs when they're asked to rate.
-  if (input.note !== undefined && input.viewers?.some((v) => v.userId === user.id)) {
-    const res = await saveOwnNote(supabase, input.itemId, user.id, input.note);
-    if (res.error) return res;
-  }
 
   revalidateApp();
   return {};

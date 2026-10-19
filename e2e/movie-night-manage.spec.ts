@@ -155,16 +155,16 @@ test("a person who was left out is added to a night, and the day is put right", 
   );
 
   // Cora was left out, and it was two days ago, not three.
-  await choose(anaPage, "Edit who watched");
+  await choose(anaPage, "Edit participants");
   const dialog = editDialog(anaPage, night);
   await expect(dialog.getByRole("checkbox", { name: "Ana" })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: "Bogdan" })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: "Cora" })).not.toBeChecked();
   await expect(dialog.locator('input[type="date"]')).toHaveValue(daysAgo(3));
-  // Only the people who are added are asked for a score.
+  // Attendance editing does not edit member scores.
   await expect(dialog.getByLabel("Score for Bogdan")).toHaveCount(0);
   await dialog.getByRole("checkbox", { name: "Cora" }).check();
-  await expect(dialog.getByLabel("Score for Cora")).toBeVisible();
+  await expect(dialog.getByLabel("Score for Cora")).toHaveCount(0);
   await dialog.locator('input[type="date"]').fill(daysAgo(2));
   await dialog.getByRole("button", { name: "Save changes" }).click();
   await expect(dialog).toBeHidden();
@@ -213,7 +213,7 @@ test("someone who rated it can only take themselves off, anyone else can be take
   );
 
   await openNight(anaPage, night);
-  await choose(anaPage, "Edit who watched");
+  await choose(anaPage, "Edit participants");
   const dialog = editDialog(anaPage, night);
   // Bogdan rated it: his box stays ticked, with the reason. Cora didn't, so she can be taken off.
   const bogdanBox = dialog.getByRole("checkbox", { name: "Bogdan" });
@@ -258,7 +258,7 @@ test("someone who only left a note stays on the night, even when a score was fil
   expect(row).toMatchObject({ score: 8, comment: "Loved the ending", rated_by: ana.id });
 
   await openNight(anaPage, night);
-  await choose(anaPage, "Edit who watched");
+  await choose(anaPage, "Edit participants");
   const dialog = editDialog(anaPage, night);
   // Her box is locked up front, with the reason, although the score is Ana's; Bogdan, who has nothing of his own, isn't.
   const coraBox = dialog.getByRole("checkbox", { name: "Cora" });
@@ -291,7 +291,7 @@ test("an edit made over somebody else's change is refused, and the night is read
   const night = await loggedNight(await familyOf(ana), ana, [ana, bogdan], 2);
 
   await openNight(anaPage, night);
-  await choose(anaPage, "Edit who watched");
+  await choose(anaPage, "Edit participants");
   const dialog = editDialog(anaPage, night);
   await expect(dialog.getByRole("checkbox", { name: "Ana" })).toBeChecked();
 
@@ -306,7 +306,7 @@ test("an edit made over somebody else's change is refused, and the night is read
   );
   await dialog.locator('input[type="date"]').fill(daysAgo(1));
   await dialog.getByRole("button", { name: "Save changes" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("Someone changed this movie night");
+  await expect(dialog.getByRole("alert")).toContainText("Someone changed this viewing");
   // Nothing of Ana's was saved, and the page caught up with Bogdan's edit.
   expect(must(await admin.from("movie_nights").select("happened_on").eq("id", night.nightId).single(), "night").happened_on).toBe(
     daysAgo(2),
@@ -316,7 +316,7 @@ test("an edit made over somebody else's change is refused, and the night is read
   await expect(dialog).toBeHidden();
 
   // Opened again, it starts from what the night is now.
-  await choose(anaPage, "Edit who watched");
+  await choose(anaPage, "Edit participants");
   await expect(dialog.getByRole("checkbox", { name: "Cora" })).toBeChecked();
   await closeAll([anaPage]);
 });
@@ -332,7 +332,7 @@ test("who may delete a night: its starter and the owner, not a member who had no
   // Cora can put right who watched it, but can't delete it.
   await openNight(coraPage, night);
   await menu(coraPage).click();
-  await expect(coraPage.getByRole("menuitem", { name: "Edit who watched" })).toBeVisible();
+  await expect(coraPage.getByRole("menuitem", { name: "Edit participants" })).toBeVisible();
   await expect(coraPage.getByRole("menuitem", { name: "Delete movie night" })).toHaveCount(0);
   await coraPage.keyboard.press("Escape");
 
@@ -414,7 +414,7 @@ test("deleting a night can put the title back on To watch, once nobody who rated
   await closeAll([anaPage]);
 });
 
-test("a night of an earlier viewing can't be edited, but can still be deleted", async ({ browser }, testInfo) => {
+test("an earlier viewing can be edited, while deleting its night does not undo the archived viewing", async ({ browser }, testInfo) => {
   const {
     users: [ana, bogdan],
     pages: [anaPage],
@@ -425,7 +425,7 @@ test("a night of an earlier viewing can't be edited, but can still be deleted", 
 
   await openNight(anaPage, night);
   await menu(anaPage).click();
-  await expect(anaPage.getByRole("menuitem", { name: "Edit who watched" })).toHaveCount(0);
+  await expect(anaPage.getByRole("menuitem", { name: "Edit participants" })).toBeVisible();
   await anaPage.getByRole("menuitem", { name: "Delete movie night" }).click();
   const dialog = deleteDialog(anaPage);
   await expect(dialog.getByText(/Also put .* back on To watch/)).toHaveCount(0);

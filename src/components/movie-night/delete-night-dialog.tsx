@@ -24,7 +24,7 @@ export function DeleteNightDialog({
 }: {
   /** The title the night picked, if it picked one. */
   title: string | null;
-  day: string;
+  day: string | null;
   groupName: string;
   /** Offer to take the title off Watched together as well. */
   canUndo: boolean;

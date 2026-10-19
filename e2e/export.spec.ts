@@ -27,7 +27,7 @@ test("download my data: everything of mine, as JSON and as a CSV of what I watch
   await openFamily(anaPage, "Export family");
   await anaPage.getByRole("button", { name: "Watched together", exact: true }).click();
   const dialog = anaPage.getByRole("dialog", { name: /Who watched Dune/ });
-  await dialog.getByRole("checkbox").nth(1).check();
+  await dialog.getByRole("checkbox", { name: "Bogdan" }).check();
   await setSlider(dialog.locator("li", { hasText: "Bogdan" }).locator('input[type="range"]'), 8.5);
   await dialog.getByRole("textbox", { name: "Your note" }).fill("=ANA-NOTE-FOR-DUNE");
   await dialog.getByRole("button", { name: "Save" }).click();

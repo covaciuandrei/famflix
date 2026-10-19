@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { validGuestSelections } from "@/lib/attendance";
+import { readPickedDay } from "@/lib/day";
 import { getMovieNightState } from "@/lib/data";
 import { buildFamilyCandidates, type LikeTitle } from "@/lib/deck";
 import {
@@ -20,7 +22,8 @@ import { MAX_PLAN_NOTE, PLAN_ANSWERS, planTimeProblem, type PlanAnswer } from "@
 import { putOnList } from "@/lib/list-add";
 import { saveTitle } from "@/lib/save-title";
 import type { createClient } from "@/lib/supabase/server";
-import type { MediaType, MemberSummary, RatingWithProfile } from "@/lib/types";
+import type { GuestSelection, MediaType, ViewingDetails } from "@/lib/types";
+import { viewingDetails } from "./attendance-actions";
 import { cleanScore, isDay, MAX_TEXT, saveOwnNote, tooLong } from "@/lib/watch-input";
 
 export interface ActionResult {
@@ -367,8 +370,9 @@ export async function requestMoreStack(input: {
 /** What every pick sends: the night, the day, who watched (with a score for anyone who had none) and the picker's note. */
 interface PickInput {
   nightId: string;
-  watchedOn: string;
+  watchedOn: string | null;
   viewers: { userId: string; score: number | null }[];
+  guests?: GuestSelection[];
   /** The signed-in user's own note, when they are among the viewers and wrote one. */
   note?: string;
 }
@@ -380,11 +384,12 @@ function checkPick(
   const viewers = Array.isArray(input?.viewers) ? input.viewers : [];
   if (
     !UUID.test(String(input?.nightId)) ||
-    !isDay(input?.watchedOn) ||
+    "error" in readPickedDay(input?.watchedOn) ||
     viewers.length === 0 ||
     viewers.length > MAX_VIEWERS ||
     viewers.some((v) => !UUID.test(String(v?.userId))) ||
     new Set(viewers.map((v) => v.userId)).size !== viewers.length
+    || (input.guests !== undefined && !validGuestSelections(input.guests))
   ) {
     return { error: "Pick at least one person who watched it, and a date." };
   }
@@ -421,18 +426,23 @@ async function finishPick(
  * that someone already picked gets "Ana already picked Dune".
  */
 export async function pickCard(input: PickInput & { candidateId: string }): Promise<ActionResult> {
-  const { supabase, user } = await requireUser();
+  const { supabase } = await requireUser();
   const checked = UUID.test(String(input?.candidateId)) ? checkPick(input) : { error: "Pick at least one person who watched it, and a date." };
   if ("error" in checked) return checked;
 
-  const { data: itemId, error } = await supabase.rpc("pick_movie_night_card", {
+  const guests = input.guests ?? [];
+  const { error } = await supabase.rpc("save_family_watch", {
+    p_item: null,
     p_night: input.nightId,
     p_candidate: input.candidateId,
-    p_watched_on: input.watchedOn,
-    p_viewers: checked.viewers,
+    p_on: input.watchedOn,
+    p_members: checked.viewers,
+    p_guests: guests.map((g) => ({ guest_id: g.guestId, score: cleanScore(g.score) })),
+    p_note: checked.note ?? null,
   });
   if (error) return { error: error.message };
-  return finishPick(supabase, user.id, itemId as string, checked.viewers, checked.note);
+  revalidatePath("/app", "layout");
+  return {};
 }
 
 /**
@@ -450,18 +460,23 @@ export async function pickTitle(
   const saved = await saveTitle(user.id, { tmdbId: input?.tmdbId, mediaType: input?.mediaType });
   if ("error" in saved) return { error: saved.error };
 
-  const { data: itemId, error } = await supabase.rpc("pick_movie_night_title", {
+  const guests = input.guests ?? [];
+  const { error } = await supabase.rpc("save_family_watch", {
+    p_item: null,
     p_night: input.nightId,
     p_media: saved.id,
-    p_watched_on: input.watchedOn,
-    p_viewers: checked.viewers,
+    p_on: input.watchedOn,
+    p_members: checked.viewers,
+    p_guests: guests.map((g) => ({ guest_id: g.guestId, score: cleanScore(g.score) })),
+    p_note: checked.note ?? null,
   });
   if (error) {
     // PGRST202: the database doesn't have the function yet (the app was updated before it).
     if (error.code === "PGRST202") return { error: "Picking another title isn't available yet. Please try again in a little while." };
     return { error: error.message };
   }
-  return finishPick(supabase, user.id, itemId as string, checked.viewers, checked.note);
+  revalidatePath("/app", "layout");
+  return {};
 }
 
 /**
@@ -530,14 +545,7 @@ function manageFriendly(error: { code?: string; message: string }): string {
 }
 
 /** What the "Who watched?" window of a night needs: the family, who is on the record now, and the scores they have. */
-export interface NightEditInfo {
-  /** The day it is for now. */
-  watchedOn: string;
-  members: MemberSummary[];
-  /** Members of the family who are on the title's record now. */
-  viewerIds: string[];
-  ratings: RatingWithProfile[];
-}
+export type NightEditInfo = ViewingDetails;
 
 /**
  * Reads what the edit window starts from, as the signed-in member may see it (row level security keeps everyone else
@@ -547,36 +555,14 @@ export interface NightEditInfo {
 export async function getNightEditInfo(nightId: string): Promise<ActionResult & { info?: NightEditInfo }> {
   const { supabase } = await requireUser();
   if (!UUID.test(String(nightId))) return { error: "That isn't a movie night." };
-  const { data: night } = await supabase
+  const { data: night, error } = await supabase
     .from("movie_nights")
-    .select("group_id, picked_list_item_id, happened_on")
+    .select("viewing_id")
     .eq("id", nightId)
     .maybeSingle();
-  const row = night as { group_id: string; picked_list_item_id: string | null; happened_on: string } | null;
-  if (!row?.picked_list_item_id) return { error: "This movie night isn't available." };
-
-  const [members, watches, ratings] = await Promise.all([
-    supabase.from("group_members").select("user_id, profiles(id, display_name, avatar_url)").eq("group_id", row.group_id),
-    supabase.from("watches").select("user_id").eq("list_item_id", row.picked_list_item_id),
-    supabase.from("ratings").select("*, profiles(id, display_name, avatar_url)").eq("list_item_id", row.picked_list_item_id),
-  ]);
-  if (members.error || watches.error || ratings.error) {
-    console.error("Could not read a movie night to edit:", members.error?.message ?? watches.error?.message ?? ratings.error?.message);
-    return { error: "Couldn't open this movie night. Please try again." };
-  }
-  const family = ((members.data ?? []) as unknown as { user_id: string; profiles: MemberSummary | null }[])
-    .map((m) => m.profiles)
-    .filter((profile): profile is MemberSummary => profile !== null)
-    .sort((a, b) => a.display_name.localeCompare(b.display_name));
-  const inFamily = new Set(family.map((m) => m.id));
-  return {
-    info: {
-      watchedOn: row.happened_on,
-      members: family,
-      viewerIds: ((watches.data ?? []) as { user_id: string }[]).map((w) => w.user_id).filter((id) => inFamily.has(id)),
-      ratings: (ratings.data ?? []) as unknown as RatingWithProfile[],
-    },
-  };
+  if (error) return { error: error.message };
+  if (!night?.viewing_id) return { error: "This movie night isn't available." };
+  return viewingDetails(night.viewing_id);
 }
 
 /**

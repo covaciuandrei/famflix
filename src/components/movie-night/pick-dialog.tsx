@@ -11,6 +11,7 @@ import type { MemberProgress } from "@/lib/movie-night";
  */
 export function PickDialog({
   groupName,
+  groupId,
   title,
   members,
   meId,
@@ -20,6 +21,7 @@ export function PickDialog({
   onClose,
 }: {
   groupName: string;
+  groupId: string;
   title: string;
   members: MemberProgress[];
   meId: string;
@@ -31,27 +33,20 @@ export function PickDialog({
   onFailed: () => void;
   onClose: () => void;
 }) {
-  // Guests have no account to log a watch on, so they can't be ticked; the night lists them as watching anyway.
   const family = members.filter((m) => !m.guest);
-  const guests = members.filter((m) => m.guest).map((m) => m.name);
   return (
     <WatchedTogetherModal
       title={title}
+      groupId={groupId}
       intro={
         <>
           Saving adds {title} to {groupName}&apos;s list if it isn&apos;t there yet, marks it watched together and ends
           this movie night.
-          {guests.length > 0 && (
-            <>
-              {" "}
-              Guests ({guests.join(", ")}) can&apos;t be ticked, as they have no account, but the night lists them as
-              watching it.
-            </>
-          )}
         </>
       }
       members={family.map((m) => ({ id: m.user_id, display_name: m.name, avatar_url: m.avatar_url }))}
       initialChecked={[meId, ...family.filter((m) => m.joined).map((m) => m.user_id)]}
+      initialGuestIds={members.filter((m) => m.guest && m.joined && m.profile_id).map((m) => m.profile_id!)}
       ratings={[]}
       currentUserId={meId}
       onSubmit={async (input) => {

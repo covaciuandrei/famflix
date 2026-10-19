@@ -1,8 +1,8 @@
 "use client";
 
-import { editNight, type NightEditInfo } from "@/app/app/movie-night/actions";
+import type { NightEditInfo } from "@/app/app/movie-night/actions";
+import { editViewing } from "@/app/app/movie-night/attendance-actions";
 import { WatchedTogetherModal } from "@/components/watched-together-modal";
-import { ownRaters } from "@/lib/movie-night";
 
 /**
  * "Who watched?" for a night that is over, to put right someone who was left out (or ticked by mistake) and the day.
@@ -11,7 +11,6 @@ import { ownRaters } from "@/lib/movie-night";
  * unticked here: only they can take themselves off it. Show it only while it is wanted (and drop it from `onClose`).
  */
 export function EditNightDialog({
-  nightId,
   title,
   groupName,
   info,
@@ -20,7 +19,7 @@ export function EditNightDialog({
   onFailed,
   onClose,
 }: {
-  nightId: string;
+  nightId?: string;
   title: string;
   groupName: string;
   info: NightEditInfo;
@@ -31,15 +30,16 @@ export function EditNightDialog({
   onFailed: () => void;
   onClose: () => void;
 }) {
-  const rated = ownRaters(info.ratings);
   const locked = Object.fromEntries(
     info.viewerIds
-      .filter((id) => rated.has(id))
+      .filter((id) => info.lockedIds.includes(id))
       .map((id) => [id, "Rated it or left a note, so only they can take themselves off it."]),
   );
   return (
     <WatchedTogetherModal
       title={title}
+      groupId={info.groupId}
+      editing
       intro={
         <>
           This changes who watched {title} and when for {groupName}. Anyone you take off it loses it from their My list.
@@ -49,16 +49,16 @@ export function EditNightDialog({
       members={info.members}
       initialChecked={info.viewerIds}
       initialDate={info.watchedOn}
+      initialGuestIds={info.guestIds}
       locked={locked}
       noScoreFor={info.viewerIds}
       ratings={info.ratings}
       currentUserId={meId}
       onSubmit={async (input) => {
-        const res = await editNight({
-          nightId,
+        const res = await editViewing({
           ...input,
-          expectedOn: info.watchedOn,
-          expectedViewers: info.viewerIds,
+          viewingId: info.viewingId,
+          revision: info.revision,
         });
         if (res.error) onFailed();
         else onSaved();

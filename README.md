@@ -134,8 +134,12 @@ stack, or everyone does as soon as any member reveals the results.
 
 ### Guests: voting without an account
 
-Any member can share a link to a night. The guest gives a name and votes on the same cards. The server speaks for
-them with functions that only it may run, and they can reach nothing else.
+Any member can share a general link for a new guest or a person-specific link
+for a saved guest. The server speaks for that voting session through restricted
+functions; the guest can reach only that night. Reusable guest profiles and
+per-viewing attendance belong to the family, independently of voting sessions.
+A separate, confirmed account invitation can import a guest's own history after
+their active night ends, without overwriting existing account data.
 
 ```mermaid
 flowchart TD
@@ -228,6 +232,14 @@ flowchart TD
     PL --> RS["movie_night_plan_rsvps<br/>Going, Maybe, Can't"]
     N --> ST["movie_night_stacks"]
     N --> GU["movie_night_guests"]
+    G --> FG["family_guests<br/>reusable people"]
+    FG --> GU
+    N --> FV["family_viewings<br/>stable viewing identity"]
+    FV --> FM["family_viewing_members"]
+    FV --> FVG["family_viewing_guests"]
+    FG --> FVG
+    FG --> GR["guest_ratings<br/>one score per title"]
+    FG --> GI["guest_invitations<br/>night or account scope"]
     ST --> CA["movie_night_candidates<br/>the cards"]
     CA --> V["movie_night_votes"]
 ```
@@ -388,6 +400,28 @@ request.
 3. **The database is deployed separately.** Pushing deploys code, not SQL: run new SQL in the SQL Editor before
    pushing code that needs it, and keep `supabase/db_init.sql` up to date so a fresh database gets everything. If
    the code does get there first, pages degrade instead of breaking ("Planning movie nights isn't set up yet").
+
+For the attendance and reusable-guests update, existing installations must first
+back up their database and run
+[`supabase/upgrade_movie_night_attendance.sql`](supabase/upgrade_movie_night_attendance.sql)
+once in the SQL Editor, then deploy the matching application. It adds stable
+viewing records, nullable family viewing dates, saved guests, scoped invitations
+and account linking without resetting users or lists. Existing same-name guest
+sessions are kept distinct for family review; they are never silently merged.
+Fresh installations continue to use `db_init.sql` only, which includes the same
+definitions. Do not run the upgrade a second time or run `db_init.sql` on a live
+database. If an upgrade fails, its transaction rolls back; correct the reported
+problem before retrying. Restore the backup rather than dropping new tables to
+roll back a deployed installation with newly recorded attendance.
+
+If the attendance upgrade was already applied before the release-guard
+correction, run
+[`supabase/upgrade_attendance_release_guards.sql`](supabase/upgrade_attendance_release_guards.sql)
+instead of rerunning the large upgrade. This rerunnable, function-only correction
+carries forward the family-admission and former-family export guards and applies
+the same admission lock to guest account linking. It does not recreate tables or
+rewrite viewing data. The database tests exercise both older deployed guards and
+repeated execution of this correction.
 
 The [deployment guide](docs/DEPLOYMENT-GUIDE.md) explains the complete setup for beginners: infrastructure, secrets,
 DNS, HTTPS, authentication, limits and troubleshooting.

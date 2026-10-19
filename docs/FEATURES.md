@@ -105,6 +105,20 @@ Rate 1–10 with one decimal (8.5) using a slider, and add a note. Marking a tit
 watched asks for both right away. A score over 7 also likes the title and under 6
 dislikes it; you can still change the thumbs yourself.
 
+On a family list, tap the star score to see each person's rating, including your
+own. Scores filled in for someone else say who entered them; notes without a
+score do not count as ratings. **Who reacted?** beside the thumbs shows separate
+lists of who liked and disliked the title. Looking at either breakdown never
+changes your rating or reaction. The same breakdowns are available from the
+scores and reaction counts in the movie-night To watch list.
+
+Saved guests can have a score too, entered by a family member. It counts in the
+family average and is labelled Guest with who entered it. There is one current
+score per person and title, not one contribution for each time they watched it.
+Use **Record a guest score** under the card's rating panel to add one, or **Edit**
+beside their score in the family breakdown to change or clear it. Guest scores
+do not create swipe votes or likes/dislikes.
+
 ### Watched together
 
 - Log who watched a title with you and add your own note.
@@ -207,53 +221,58 @@ watched together doesn't make a night in the history).
 
 ### Edit or delete a night
 
-Forgot to tick someone, or ticked the wrong day? Open the night from the
-family's list (a night that is over opens its page) and use its menu.
+Open a completed night and use **Edit participants**, beside the attendance
+summary or in its menu. It changes the people who watched and the viewing date,
+not swipe votes, rankings, the picked movie, or member ratings and notes.
 
-- **Edit who watched** is for any member of the family, on a night that picked
-  a title (a pick, or a Watched together log). Tick someone who was left out
-  and the title goes on their My list as watched and they are asked how they
-  liked it; untick someone and it comes off their My list; change the day and
-  everyone's My list follows. It needs one person at least, and the day can't be
-  in the future or before an earlier viewing of the title.
-- People who rated the title, left a note on it or reacted to it themselves stay
-  ticked: only they can take themselves off it ("I wasn't there" on the family
-  list), so nobody can wipe out another person's score or note. If someone else
-  changed the night while the window was open, nothing is saved and the page
-  reads it again.
-- **Delete movie night** is for the family's owner and for whoever started or
-  ended the night; a night still going is cancelled first. It removes the night
-  from the history for everyone, with its votes, guests and guest link. The title,
-  its viewing and everyone's My list stay as they are. Tick **Also put the title
-  back on To watch** to take it off Watched together too, which works while the
-  night is the title's latest viewing and nobody on it has rated, noted or reacted to it.
-  A plan that started the night stays started. A night whose starter has since
-  deleted their account can be deleted by the family's owner only.
-- A night can't be edited (but can be deleted) when it isn't unmistakably the
-  title's current viewing: the title was put back on the list to watch again
-  since, it was removed from the family list, another night picked it on the same
-  day, people were logged on different days, or the night no longer lists the
-  same people as the title's record, as with an older night left behind when the
-  same people were logged again later. A night recorded for a title, by logging
-  it or by picking it, lists everyone on the title's record for that day. The
-  feed gets a line for every edit and deletion (the name of someone who deletes
-  their account leaves it), and one person can make 60 edits and 30 deletions
-  an hour.
+- Family members and saved guests can be added retrospectively, even if they
+  never opened a link. At least one family member must remain selected.
+- The date and attendees start from that exact viewing. **I don't remember**
+  keeps it watched with **Date unknown**, not today's date. The same control is
+  available when logging Watched together, picking a movie, or watching again.
+- Older viewings can be corrected too. Changing their date shows a non-blocking
+  notice; a date before another viewing, or on the same day, is allowed. Invalid
+  or future dates are not. Each viewing has its own identity, so editing one
+  does not overwrite another viewing or an independently managed personal list.
+- People with protected feedback remain ticked: only they can take themselves
+  off through **I wasn't there**. If someone changed this viewing while the
+  window was open, the save is refused rather than overwriting their edit.
+- Reopening an already completed **Watched together** record edits it. Use
+  **Watch again** to explicitly record a new viewing.
+- **Delete movie night** retains its existing permissions and removes the night,
+  not its underlying viewing. **Also put the title back on To watch** remains a
+  separate, stricter operation for the latest, unprotected viewing. A saved guest
+  profile is reusable even after one night is deleted.
 
 ### Guests
 
-Someone without an account can vote in one movie night. Any member opens the
-night's menu → **Invite a guest** and shares the link (copy or share, **New
-link** to replace it, **Turn off link**). The guest opens it anywhere, gives a
-name, and swipes the same cards and sees the leaderboard; they can't pick,
-cancel, invite or see anything else of FamFlix or the family.
+Each family has **Saved guests** under **Members**. Select a returning person,
+add a new one, or correct an unregistered guest's name across that family's
+history. Guests need no account or invitation to be recorded as having watched.
+Duplicate old guest records can be explicitly combined by the family; names
+alone do not prove that two records belong to the same person.
 
-Guests show in the people list marked Guest (any member can take one out) and
-their votes count like everyone's. They can't be ticked in "Who watched?" (they
-have no account to log a watch on), but a night lists them with the family, as
-having watched it or taken part, on its page and in the family's history. The
-link stops working when the night is over. A night takes 10 guests, with names of
-up to 30 characters.
+**Invite a guest** is visible on an active night's header as well as in its
+menu. The general link lets a new guest give a name. **Invite a returning guest**
+creates a private link for one saved person and that night, keeping their
+history connected without matching identities by name. A duplicate name on a
+general link requires a distinct name or a returning-guest invitation.
+
+Guests swipe and see that night's leaderboard, but cannot pick, cancel, invite,
+or see the family's lists, guest directory, or history. Joining or voting is not
+proof of watching: confirm the actual guest attendees in **Who watched?**. Taking
+someone out of an active voting session removes its votes, as before; editing
+attendance does not. A night takes 10 guests, with names up to 30 characters.
+Links can be revoked and stop working when the night ends; personal invitations
+also expire after 24 hours.
+
+**Invite to FamFlix** gives a saved guest a separate, single-use account
+invitation. After Google sign-in and explicit confirmation, they join the family
+as a member and import missing attendance and scores. Existing account ratings,
+notes, reactions and personal-list status are kept; a person and their score
+never count twice. Active guest nights must finish before linking is completed.
+Historical votes are not rewritten. Registered members control their own
+account names. Invitations are copied/shared links, not automated emails.
 
 ### Plan a movie night
 

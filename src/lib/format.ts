@@ -63,7 +63,8 @@ export function shortMonth(number: number): string {
 }
 
 /** "2026-10-03" -> "Oct 3, 2026", identical on server and client (no time-zone or locale shifts). */
-export function formatDay(isoDate: string): string {
+export function formatDay(isoDate: string | null): string {
+  if (isoDate === null) return "Date unknown";
   const [year, month, day] = isoDate.split("-").map(Number);
   return `${MONTHS[month - 1]} ${day}, ${year}`;
 }

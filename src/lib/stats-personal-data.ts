@@ -140,7 +140,7 @@ export async function getPersonalTitles(userId: string): Promise<PersonalTitle[]
     const item = watch.list_items;
     if (!item?.media) continue;
     const d = draft(item.media);
-    d.days.add(watch.watched_on.slice(0, 10));
+    if (watch.watched_on) d.days.add(watch.watched_on.slice(0, 10));
     d.familyScore ??= myScore(item.ratings);
   }
   const onlyInHistory = [...new Set(history.map((h) => h.media_id))].filter((id) => !drafts.has(id));

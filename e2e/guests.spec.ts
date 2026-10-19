@@ -41,6 +41,18 @@ async function inviteLink(page: Page, action?: "New link" | "Turn off link"): Pr
   return url;
 }
 
+async function returningGuestLink(page: Page, name: string): Promise<string> {
+  await page.getByRole("button", { name: "Invite a guest", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Invite a guest", exact: true });
+  const returning = dialog.getByRole("region", { name: "Invite a returning guest" });
+  await returning.getByRole("listitem").filter({ hasText: name })
+    .getByRole("button", { name: "Invite to this night" }).click();
+  const link = await returning.getByRole("textbox", { name: "Personal invitation link" }).inputValue();
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  return link;
+}
+
 /** Opens a guest link and joins with a name; waits for the first card. */
 async function joinAs(guest: Page, link: string, name: string) {
   await guest.goto(link);
@@ -132,12 +144,12 @@ test("members invite guests from the night's menu: a link to copy, replace and t
   await rows(anaPage).first().getByRole("button").first().click();
   await expect(rows(anaPage).first()).toContainText("Zoe (guest)");
 
-  // "We watched this" is for the family: a guest isn't offered as someone who watched.
+  // Voting guests are offered as attendees, but can be unticked independently of their votes.
   await rows(anaPage).first().getByRole("button", { name: "We watched this" }).click();
   const watched = anaPage.getByRole("dialog", { name: /^Who watched/ });
   await expect(watched.getByText("Ana (you)", { exact: true })).toBeVisible();
   await expect(watched.getByText("Ben", { exact: true })).toBeVisible();
-  await expect(watched.getByText("Zoe", { exact: true })).toHaveCount(0);
+  await expect(watched.getByRole("checkbox", { name: /Zoe/ })).toBeChecked();
   await watched.getByRole("button", { name: "Cancel" }).click();
   await expect(watched).toBeHidden();
 
@@ -295,15 +307,16 @@ test("the family keeps control of the link, and a guest hears when the night is 
   await expect(cara.getByRole("heading", { name: "Control Crew's movie night" })).toBeVisible();
   await expect(cara.getByRole("link", { name: "Open the night in the app" })).toHaveCount(0);
 
-  // Anyone in the family can take a guest out; the guest is told on their next check, and with the link still on they
-  // could join again.
+  // A returning person rejoins through a profile-bound invitation, never by claiming a name on the general link.
   await finishStack(anaPage);
   await anaPage.getByRole("button", { name: "Take Zoe out of this movie night" }).click();
   await expect(personIn(anaPage, "Zoe")).toHaveCount(0);
   await expect(zoe.getByRole("heading", { name: "You're not in this movie night any more" })).toBeVisible({ timeout: 30_000 });
   await zoe.reload();
   await expect(zoe.getByRole("heading", { name: "Control Crew's movie night" })).toBeVisible();
-  await joinAs(zoe, link, "Zoe");
+  await zoe.goto(await returningGuestLink(anaPage, "Zoe"));
+  await zoe.getByRole("button", { name: "Join as Zoe", exact: true }).click();
+  await expect(topCard(zoe)).toBeVisible({ timeout: TMDB });
   expect(await guests()).toEqual(["Zoe"]);
 
   // A new link stops the old one for anybody new, and a guest who is in carries on with the address they have.
@@ -344,7 +357,7 @@ test("the family keeps control of the link, and a guest hears when the night is 
   await closeAll([...pages, cara, zoe, late]);
 });
 
-test("guests can't be ticked as having watched, but a night that ended with a pick lists them, on its page and in the history", async ({ browser }, testInfo) => {
+test("guest attendees can be confirmed independently of voting and appear on the night and in history", async ({ browser }, testInfo) => {
   test.setTimeout(300_000);
   const { pages } = await makeFamily(browser, testInfo.project, "Pick Crew", ["Ana", "Ben"]);
   const [anaPage] = pages;
@@ -361,16 +374,18 @@ test("guests can't be ticked as having watched, but a night that ended with a pi
   await finishStack(anaPage);
   await expect(personIn(anaPage, "Zoe")).toContainText("Guest", { timeout: 30_000 });
 
-  // Picking: the window offers the family to tick, not the guests, and says why.
+  // Joined guests start selected, but the picker can correct their actual attendance.
   const top = rows(anaPage).first();
   const title = (await top.getByRole("button").first().innerText()).trim();
   await top.getByRole("button").first().click();
   await top.getByRole("button", { name: "We watched this" }).click();
   const dialog = anaPage.getByRole("dialog", { name: /^Who watched / });
-  await expect(dialog.getByRole("checkbox")).toHaveCount(2);
   await expect(dialog.getByRole("checkbox", { name: /Ana/ })).toBeChecked();
   await expect(dialog.getByRole("checkbox", { name: /Ben/ })).not.toBeChecked();
-  await expect(dialog.getByText("Guests (Yan, Zoe) can't be ticked")).toBeVisible();
+  const guests = dialog.getByRole("region", { name: "Guest participants" });
+  await expect(guests.getByRole("checkbox")).toHaveCount(2);
+  await expect(guests.getByRole("checkbox", { name: /Yan/ })).toBeChecked();
+  await expect(guests.getByRole("checkbox", { name: /Zoe/ })).toBeChecked();
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
   await expect(anaPage.getByRole("status").filter({ hasText: "picked" })).toContainText(title);

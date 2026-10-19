@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 import { APP_HOME } from "@/lib/constants";
+import { AUTH_RETURN_COOKIE, AUTH_RETURN_PATH, localReturnPath } from "@/lib/attendance";
 import { createClient } from "@/lib/supabase/server";
 
 /** Exchanges an OAuth / email-confirmation code for a session. */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  let next = searchParams.get("next") ?? APP_HOME;
-  // Paths only: appended to the origin, "@evil.com" would turn the address into evil.com.
-  if (!next.startsWith("/") || next.startsWith("//")) next = APP_HOME;
+  const jar = await cookies();
+  const next = localReturnPath(jar.get(AUTH_RETURN_COOKIE)?.value ?? searchParams.get("next"), APP_HOME);
+  jar.set(AUTH_RETURN_COOKIE, "", { path: AUTH_RETURN_PATH, maxAge: 0, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
 
   let failure = searchParams.get("error_description");
 
@@ -30,6 +32,6 @@ export async function GET(request: Request) {
 
   const reason = failure ?? "Could not sign in. Please try again.";
   return NextResponse.redirect(
-    `${base}/login?error=${encodeURIComponent(reason)}`,
+    `${base}/login?next=${encodeURIComponent(next)}&error=${encodeURIComponent(reason)}`,
   );
 }

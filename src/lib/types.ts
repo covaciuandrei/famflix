@@ -64,6 +64,7 @@ export interface ListItem {
   watched_at: string | null;
   /** On My list: the family title a Watched together log put this here from, if one did. */
   source_item_id: string | null;
+  source_viewing_id?: string | null;
 }
 
 /** A title on My list that a Watched together log put there: who else was on the log, and the day. */
@@ -72,6 +73,7 @@ export interface WatchedWith {
   names: string[];
   /** The day, as YYYY-MM-DD; null when it isn't known. */
   on: string | null;
+  viewingId?: string;
 }
 
 /** An earlier viewing of a title: the day, and who watched it that day (everyone on a family list, you on My list). */
@@ -79,6 +81,7 @@ export interface EarlierViewing {
   /** The day, as YYYY-MM-DD; null for a viewing nobody remembers the day of (each of those is a viewing of its own). */
   on: string | null;
   userIds: string[];
+  viewingId?: string;
 }
 
 export interface Rating {
@@ -105,6 +108,10 @@ export interface Reaction {
   created_at: string;
 }
 
+export interface ReactionWithProfile extends Reaction {
+  profiles: Pick<Profile, "id" | "display_name" | "avatar_url"> | null;
+}
+
 export type MemberSummary = Pick<Profile, "id" | "display_name" | "avatar_url">;
 
 /** One title on another person's My list, as member_list() gives it: what a list shows of a title, and nothing private. */
@@ -126,16 +133,17 @@ export interface MemberTitle {
 /** A family member marked as having watched a family-list title. */
 export interface Watch {
   user_id: string;
-  watched_on: string;
+  watched_on: string | null;
   logged_by: string | null;
   skipped_at: string | null;
+  viewing_id?: string | null;
 }
 
 /** A family title you were marked as having watched but haven't rated yourself or skipped. */
 export interface PendingRating {
   list_item_id: string;
   group_name: string;
-  watched_on: string;
+  watched_on: string | null;
   logged_by: string | null;
   logged_by_name: string | null;
   media_type: MediaType;
@@ -212,7 +220,8 @@ export interface ListItemWithDetails extends ListItem {
   media: Media | null;
   profiles: Pick<Profile, "id" | "display_name" | "avatar_url"> | null;
   ratings: RatingWithProfile[];
-  reactions: Reaction[];
+  reactions: ReactionWithProfile[];
+  guest_ratings: GuestRating[];
   watches: Watch[];
 }
 
@@ -230,6 +239,8 @@ export interface ListItemCard {
   media: Media;
   addedBy: Pick<Profile, "id" | "display_name" | "avatar_url"> | null;
   ratings: RatingWithProfile[];
+  reactions: ReactionWithProfile[];
+  guestRatings: GuestRating[];
   likeCount: number;
   dislikeCount: number;
   avgScore: number | null;
@@ -246,6 +257,41 @@ export interface ListItemCard {
   earlier: EarlierViewing[];
   /** Only on My list, for a series with episodes: how many times through it are in the history (0 when never started again). */
   passes: number;
+}
+
+export interface FamilyGuest {
+  id: string;
+  group_id: string;
+  name: string;
+  account_id: string | null;
+}
+
+export interface GuestRating {
+  id: string;
+  list_item_id: string;
+  guest_id: string;
+  score: number;
+  rated_by: string | null;
+  guest: Pick<FamilyGuest, "id" | "name" | "account_id"> | null;
+  entered_by: MemberSummary | null;
+}
+
+export interface GuestSelection {
+  guestId: string;
+  score: number | null;
+}
+
+export interface ViewingDetails {
+  viewingId: string;
+  groupId: string;
+  itemId: string;
+  watchedOn: string | null;
+  revision: number;
+  members: MemberSummary[];
+  viewerIds: string[];
+  guestIds: string[];
+  lockedIds: string[];
+  ratings: RatingWithProfile[];
 }
 
 export type SortKey =

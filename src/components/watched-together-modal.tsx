@@ -4,25 +4,20 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 
 import { Avatar } from "@/components/avatar";
+import { GuestPicker } from "@/components/guest/guest-picker";
 import { ScoreInput } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useWatchedOn, WatchedOnField } from "@/components/watched-on-field";
 import { closeOnBackdrop, openModal } from "@/lib/dialog";
 import { formatScore } from "@/lib/format";
-import type { MemberSummary, RatingWithProfile } from "@/lib/types";
-
-function localToday(): string {
-  const d = new Date();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${month}-${day}`;
-}
+import type { GuestSelection, MemberSummary, RatingWithProfile } from "@/lib/types";
 
 /** What the form hands over: when, who was there (with a score for anyone who had none), and the user's own note. */
 export interface WatchedTogetherInput {
-  watchedOn: string;
+  watchedOn: string | null;
   viewers: { userId: string; score: number | null }[];
+  guests: GuestSelection[];
   /** Only your own note, and only when it changed: everyone else adds theirs when asked to rate it. */
   note?: string;
 }
@@ -34,11 +29,14 @@ export interface WatchedTogetherInput {
  */
 export function WatchedTogetherModal({
   title,
+  groupId,
   intro,
   submitLabel = "Save",
   members,
   initialChecked,
   initialDate,
+  initialGuestIds = [],
+  editing = false,
   locked,
   noScoreFor,
   ratings,
@@ -47,13 +45,16 @@ export function WatchedTogetherModal({
   onClose,
 }: {
   title: string;
+  groupId: string;
   intro?: ReactNode;
   submitLabel?: string;
   members: MemberSummary[];
   /** Who starts ticked. */
   initialChecked: readonly string[];
   /** The day it starts at (today when there is none), for changing a day that was already logged. */
-  initialDate?: string;
+  initialDate?: string | null;
+  initialGuestIds?: string[];
+  editing?: boolean;
   /** People who can't be unticked, by id, each with the reason: for editing a night, whom only they can take off. */
   locked?: Readonly<Record<string, string>>;
   /** People who are not asked for a score: for editing a night, those who were there already (only people who are added get one). */
@@ -72,8 +73,9 @@ export function WatchedTogetherModal({
   const [checked, setChecked] = useState<Set<string>>(() => new Set(initialChecked));
   const [scores, setScores] = useState<Record<string, number | null>>({});
   const [note, setNote] = useState(myComment);
-  const [today] = useState(localToday);
-  const [watchedOn, setWatchedOn] = useState(initialDate ?? today);
+  const watchedOn = useWatchedOn(initialDate);
+  const [guests, setGuests] = useState<GuestSelection[]>(() => initialGuestIds.map((guestId) => ({ guestId, score: null })));
+  const [guestsReady, setGuestsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const selected = members.filter((m) => checked.has(m.id));
@@ -96,12 +98,13 @@ export function WatchedTogetherModal({
     setError(null);
     start(async () => {
       const res = await onSubmit({
-        watchedOn,
+        watchedOn: watchedOn.day,
         viewers: selected.map((m) => ({
           userId: m.id,
           score: existingScore(m.id) === null ? (scores[m.id] ?? null) : null,
         })),
-        note: checked.has(currentUserId) && note.trim() !== myComment.trim() ? note : undefined,
+        guests,
+        note: !editing && checked.has(currentUserId) && note.trim() !== myComment.trim() ? note : undefined,
       });
       if (res?.error) setError(res.error);
       else dialogRef.current?.close();
@@ -121,22 +124,18 @@ export function WatchedTogetherModal({
         Who watched {title}?
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Tick everyone who was there: it goes on each of their My lists as watched. You can fill in a score for anyone
-        who hasn&apos;t rated it yet, and add your own note. The others are asked to confirm their score and add their
-        note.
+        {editing
+          ? "Correct who was there and the date. Votes, member ratings, notes and reactions are not edited here."
+          : "Tick everyone who was there. Family members get the title on My list; guests need no account. You can fill in missing scores and add your own note."}
       </p>
       {intro && <div className="mt-2 text-sm text-muted-foreground">{intro}</div>}
 
-      <label className="mt-4 flex items-center gap-3 text-sm">
-        <span className="font-medium">Date</span>
-        <Input
-          type="date"
-          value={watchedOn}
-          max={today || undefined}
-          onChange={(e) => setWatchedOn(e.target.value)}
-          className="h-9 w-auto"
-        />
-      </label>
+      <WatchedOnField state={watchedOn} label="Date" className="mt-4" />
+      {editing && initialDate !== undefined && watchedOn.day !== initialDate && (
+        <p role="status" className="mt-2 rounded-md bg-muted p-2 text-xs text-muted-foreground">
+          Changing the original date updates this viewing only and may change its position in history and statistics. Other viewings stay as they are.
+        </p>
+      )}
 
       <ul className="mt-4 flex flex-col gap-2">
         {members.map((m) => {
@@ -165,7 +164,7 @@ export function WatchedTogetherModal({
                 )}
               </div>
               {lockedReason !== undefined && <p className="mt-1 text-xs text-muted-foreground">{lockedReason}</p>}
-              {isChecked && existing === null && !noScoreFor?.includes(m.id) && (
+              {!editing && isChecked && existing === null && !noScoreFor?.includes(m.id) && (
                 <div className="mt-2">
                   <ScoreInput
                     compact
@@ -175,7 +174,7 @@ export function WatchedTogetherModal({
                   />
                 </div>
               )}
-              {isChecked && m.id === currentUserId && (
+              {!editing && isChecked && m.id === currentUserId && (
                 <Textarea
                   maxLength={250}
                   value={note}
@@ -191,6 +190,7 @@ export function WatchedTogetherModal({
         })}
       </ul>
 
+      <GuestPicker groupId={groupId} value={guests} onChange={setGuests} onReady={setGuestsReady} scores={!editing} />
       {error && (
         <p role="alert" className="mt-3 text-sm text-destructive">
           {error}
@@ -201,7 +201,7 @@ export function WatchedTogetherModal({
         <Button variant="ghost" onClick={() => dialogRef.current?.close()}>
           Cancel
         </Button>
-        <Button onClick={save} disabled={pending || selected.length === 0 || !watchedOn}>
+        <Button onClick={save} disabled={pending || selected.length === 0 || !watchedOn.valid || !guestsReady}>
           {pending && <Loader2 className="size-4 animate-spin" />}
           {submitLabel}
         </Button>

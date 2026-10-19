@@ -1,10 +1,11 @@
 "use client";
 
-import { Clapperboard, Dices, Shuffle, Star, ThumbsUp } from "lucide-react";
+import { Clapperboard, Dices, Shuffle, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { CategoryChips } from "@/components/category-chips";
+import { FamilyFeedbackButton } from "@/components/family-feedback";
 import { MediaPoster } from "@/components/media-poster";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { listCategories, matchesCategory } from "@/lib/categories";
@@ -23,9 +24,11 @@ function detailHref(card: ListItemCard) {
 export function MovieNight({
   cards,
   seed: initialSeed,
+  currentUserId,
 }: {
   cards: ListItemCard[];
   seed: number;
+  currentUserId: string;
 }) {
   const [seed, setSeed] = useState(initialSeed);
   const [decade, setDecade] = useState(ANY_YEAR);
@@ -153,34 +156,59 @@ export function MovieNight({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {shown.map((card) => (
-          <Link
+          <div
             key={card.item.id}
-            href={detailHref(card)}
             className={cn(
               "flex flex-col gap-1.5 rounded-xl p-1.5 transition-colors hover:bg-muted",
               card.item.id === pickedId && "ring-2 ring-primary",
             )}
           >
-            <MediaPoster path={card.media.poster_path} alt={card.media.title} />
-            <span className="line-clamp-1 text-sm font-medium">
-              {card.media.title}
-            </span>
-            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Link href={detailHref(card)} className="flex flex-col gap-1.5">
+              <MediaPoster path={card.media.poster_path} alt={card.media.title} />
+              <span className="line-clamp-1 text-sm font-medium">
+                {card.media.title}
+              </span>
+            </Link>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               {mediaTypeLabel(card.media.media_type)}
               {card.avgScore !== null && (
-                <span className="inline-flex items-center gap-0.5 text-star">
-                  <Star className="size-3 fill-current" />
-                  {formatScore(card.avgScore)}
-                </span>
+                card.item.group_id ? (
+                  <FamilyFeedbackButton
+                    card={card}
+                    currentUserId={currentUserId}
+                    kind="ratings"
+                    className="-mx-1.5 text-star"
+                  >
+                    <Star className="size-3 fill-current" aria-hidden />
+                    {formatScore(card.avgScore)}
+                  </FamilyFeedbackButton>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 text-star">
+                    <Star className="size-3 fill-current" />
+                    {formatScore(card.avgScore)}
+                  </span>
+                )
               )}
-              {card.likeCount > 0 && (
+              {card.item.group_id ? (
+                <FamilyFeedbackButton
+                  card={card}
+                  currentUserId={currentUserId}
+                  kind="reactions"
+                  className="-mx-1.5 text-muted-foreground"
+                >
+                  <ThumbsUp className="size-3 text-like" aria-hidden />
+                  {card.likeCount}
+                  <ThumbsDown className="ml-1 size-3 text-dislike" aria-hidden />
+                  {card.dislikeCount}
+                </FamilyFeedbackButton>
+              ) : card.likeCount > 0 && (
                 <span className="inline-flex items-center gap-0.5">
                   <ThumbsUp className="size-3" />
                   {card.likeCount}
                 </span>
               )}
-            </span>
-          </Link>
+            </div>
+          </div>
         ))}
       </div>
     </div>

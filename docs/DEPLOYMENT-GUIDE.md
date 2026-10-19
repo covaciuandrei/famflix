@@ -538,10 +538,12 @@ client made in `src/lib/supabase/admin.ts`: `src/lib/save-media.ts` saves TMDB
 data into the shared `media` table, which signed-in users have no right to write;
 `src/lib/rate-limit.ts` counts requests; deleting an account uses it; and
 `src/lib/guest.ts` speaks for movie night guests, who join through a link with no
-account. For guests it only calls six database functions that nobody but the
-service role may run, each of which checks the guest's own secret (a cookie only
-that link's pages receive) and that the night is still open (see "Movie night
-guests" in `supabase/db_init.sql`). The key skips row-level security, so keep it
+account. Guest voting functions check the guest's own secret (a cookie only
+that link's pages receive) and that the night is still open. A separate
+service-role invitation preview reveals only the invited name and family; actual
+account linking requires a signed-in user and explicit confirmation. See
+"Movie night guests" and the attendance upgrade in `supabase/db_init.sql`.
+The key skips row-level security, so keep it
 out of `NEXT_PUBLIC_` variables, Git, screenshots, and logs. If it leaks, create a
 new one in Supabase (Project Settings -> API Keys) and update the two places
 above.

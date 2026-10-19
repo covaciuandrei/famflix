@@ -175,7 +175,7 @@ function RequestRow({
             {request.release_year ? ` (${request.release_year})` : ""}
           </p>
           <p className="text-xs text-muted-foreground">
-            {loggedBy} logged it on {formatDay(request.watched_on)} ·{" "}
+            {loggedBy} logged it {request.watched_on ? `on ${formatDay(request.watched_on)}` : "with an unknown date"} ·{" "}
             {request.group_name}
           </p>
         </div>

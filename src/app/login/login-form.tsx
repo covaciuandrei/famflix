@@ -7,7 +7,7 @@ import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { signInWithGoogle } from "./actions";
 
-export function LoginForm({ signInError }: { signInError?: string }) {
+export function LoginForm({ signInError, next }: { signInError?: string; next: string }) {
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
@@ -22,7 +22,7 @@ export function LoginForm({ signInError }: { signInError?: string }) {
           </p>
         </div>
 
-        <form action={signInWithGoogle}>
+        <form action={signInWithGoogle.bind(null, next)}>
           <GoogleButton />
         </form>
         {signInError && (

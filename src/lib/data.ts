@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 import { libraryKey } from "@/lib/constants";
+import { familyScoreSummary } from "@/lib/attendance";
 import { dayOf } from "@/lib/day";
 import { timeAgo } from "@/lib/format";
 import { nightPeople, type ActiveNight, type HistoryEntry, type NightState } from "@/lib/movie-night";
@@ -28,7 +29,7 @@ import type {
 } from "@/lib/types";
 
 const LIST_SELECT =
-  "*, media(*), profiles(id,display_name,avatar_url), ratings(*, profiles(id,display_name,avatar_url)), reactions(*), watches(user_id,watched_on,logged_by,skipped_at)";
+  "*, media(*), profiles(id,display_name,avatar_url), ratings(*, profiles(id,display_name,avatar_url)), reactions(*, profiles(id,display_name,avatar_url)), guest_ratings(*,guest:family_guests(id,name,account_id),entered_by:profiles(id,display_name,avatar_url)), watches(user_id,watched_on,logged_by,skipped_at,viewing_id)";
 
 export interface GroupWithCount extends Group {
   memberCount: number;
@@ -181,7 +182,10 @@ export async function getListCards(opts: {
   }
 
   const { data, error } = await query;
-  if (error || !data) return [];
+  if (error || !data) {
+    console.error("Could not load list cards:", error?.message ?? "No response data");
+    throw new Error("Couldn't load the list. Please try again and check that the database update has been applied.");
+  }
 
   const rows = data as unknown as ListItemWithDetails[];
   if (rows.length === 0) return [];
@@ -218,7 +222,7 @@ async function loadEarlier(
   for (let from = 0; from < 20_000; from += 1000) {
     const query = supabase
       .from("watch_history")
-      .select("user_id, media_id, watched_on")
+      .select("user_id, media_id, watched_on, viewing_id")
       .order("watched_on", { ascending: false })
       .order("id")
       .range(from, from + 999);
@@ -298,11 +302,28 @@ async function loadWatchedWith(
   const linked = rows.filter((r) => r.group_id === null && r.status === "watched" && r.source_item_id);
   if (linked.length === 0) return result;
 
-  const { data } = await supabase
-    .from("watches")
-    .select("list_item_id, user_id, watched_on")
-    .in("list_item_id", [...new Set(linked.map((r) => r.source_item_id as string))]);
-  const watches = (data ?? []) as { list_item_id: string; user_id: string; watched_on: string }[];
+  const viewingIds = [...new Set(linked.flatMap((r) => r.source_viewing_id ? [r.source_viewing_id] : []))];
+  type Companion = { user_id: string; viewing_id: string; viewing: { list_item_id: string; watched_on: string | null } };
+  type GuestCompanion = { viewing_id: string; guest: { name: string } | null };
+  const [legacy, participants, guests] = await Promise.all([
+    supabase.from("watches").select("list_item_id,user_id,watched_on")
+      .in("list_item_id", [...new Set(linked.map((r) => r.source_item_id as string))])
+      .returns<{ list_item_id: string; user_id: string; watched_on: string | null }[]>(),
+    viewingIds.length ? supabase.from("family_viewing_members").select("user_id,viewing_id,viewing:family_viewings!inner(list_item_id,watched_on)")
+      .in("viewing_id", viewingIds).returns<Companion[]>() : null,
+    viewingIds.length ? supabase.from("family_viewing_guests").select("viewing_id,guest:family_guests(name)")
+      .in("viewing_id", viewingIds).returns<GuestCompanion[]>() : null,
+  ]);
+  if (legacy.error || participants?.error || guests?.error) {
+    console.error("Could not load viewing companions:", legacy.error?.message ?? participants?.error?.message ?? guests?.error?.message);
+    return result;
+  }
+  const watches = [
+    ...(legacy.data ?? []).map((w) => ({ ...w, viewing_id: null as string | null })),
+    ...(participants?.data ?? []).map((p) => ({
+      user_id: p.user_id, viewing_id: p.viewing_id, list_item_id: p.viewing.list_item_id, watched_on: p.viewing.watched_on,
+    })),
+  ];
 
   const others = [...new Set(watches.filter((w) => w.user_id !== userId).map((w) => w.user_id))];
   const names = new Map<string, string>();
@@ -314,14 +335,17 @@ async function loadWatchedWith(
   }
 
   for (const row of linked) {
-    const onTheLog = watches.filter((w) => w.list_item_id === row.source_item_id);
+    const onTheLog = watches.filter((w) => row.source_viewing_id ? w.viewing_id === row.source_viewing_id : w.viewing_id === null && w.list_item_id === row.source_item_id);
     const mine = onTheLog.find((w) => w.user_id === userId);
     result.set(row.id, {
-      names: onTheLog
+      names: [...onTheLog
         .filter((w) => w.user_id !== userId)
-        .map((w) => names.get(w.user_id) ?? "someone")
+        .map((w) => names.get(w.user_id) ?? "someone"),
+        ...(guests?.data ?? []).flatMap((g) => g.viewing_id === row.source_viewing_id && g.guest ? [`${g.guest.name} (guest)`] : []),
+      ]
         .sort((a, b) => a.localeCompare(b)),
-      on: mine?.watched_on ?? dayOf(row.watched_at),
+      on: mine ? mine.watched_on : dayOf(row.watched_at),
+      viewingId: row.source_viewing_id ?? undefined,
     });
   }
   return result;
@@ -342,12 +366,7 @@ function toCard(
     (r) => r.value === "dislike",
   ).length;
 
-  const scored = row.ratings.filter(
-    (r): r is typeof r & { score: number } => typeof r.score === "number",
-  );
-  const avgScore = scored.length
-    ? scored.reduce((sum, r) => sum + r.score, 0) / scored.length
-    : null;
+  const summary = familyScoreSummary(row.ratings, row.guest_ratings);
 
   const mine = row.ratings.find((r) => r.user_id === userId) ?? null;
   const myReaction =
@@ -363,14 +382,17 @@ function toCard(
       created_at: row.created_at,
       watched_at: row.watched_at,
       source_item_id: row.source_item_id ?? null,
+      source_viewing_id: row.source_viewing_id ?? null,
     },
     media: row.media,
     addedBy: row.profiles,
     ratings: row.ratings,
+    reactions: row.reactions,
+    guestRatings: row.guest_ratings.filter((r) => r.guest?.account_id === null),
     likeCount,
     dislikeCount,
-    avgScore,
-    ratingCount: scored.length,
+    avgScore: summary.average,
+    ratingCount: summary.count,
     myScore: mine?.score ?? null,
     myComment: mine?.comment ?? null,
     myReaction,
@@ -409,19 +431,19 @@ export async function getMyViewings(opts: {
   tmdbId: number;
   /** The My list entry, if the title is on it. */
   item: { id: string; watched: boolean } | null;
-}): Promise<{ current: { on: string | null; own: boolean } | null; earlier: EarlierViewing[] }> {
+}): Promise<{ current: { on: string | null; own: boolean; viewingId?: string } | null; earlier: EarlierViewing[] }> {
   const supabase = await createClient();
   const [entry, history] = await Promise.all([
     opts.item?.watched
-      ? supabase.from("list_items").select("watched_at, source_item_id").eq("id", opts.item.id).maybeSingle()
+      ? supabase.from("list_items").select("watched_at, source_item_id, source_viewing_id").eq("id", opts.item.id).maybeSingle()
       : null,
     supabase
       .from("watch_history")
-      .select("watched_on, media!inner(media_type, tmdb_id)")
+      .select("watched_on, viewing_id, media!inner(media_type, tmdb_id)")
       .eq("user_id", opts.userId)
       .eq("media.media_type", opts.mediaType)
       .eq("media.tmdb_id", opts.tmdbId)
-      .order("watched_on", { ascending: false })
+      .order("watched_on", { ascending: false, nullsFirst: false })
       .limit(500),
   ]);
 
@@ -432,15 +454,16 @@ export async function getMyViewings(opts: {
     if (history.error.code !== "PGRST205") console.error("Could not load earlier viewings:", history.error.message);
   } else {
     earlier = groupEarlier(
-      ((history.data ?? []) as unknown as { watched_on: string | null }[]).map((r) => ({
+      ((history.data ?? []) as unknown as { watched_on: string | null; viewing_id: string | null }[]).map((r) => ({
         user_id: opts.userId,
         watched_on: r.watched_on,
+        viewing_id: r.viewing_id,
       })),
     );
   }
 
-  const row = entry?.data as { watched_at: string | null; source_item_id: string | null } | null | undefined;
-  return { current: row ? { on: dayOf(row.watched_at), own: row.source_item_id === null } : null, earlier };
+  const row = entry?.data as { watched_at: string | null; source_item_id: string | null; source_viewing_id: string | null } | null | undefined;
+  return { current: row ? { on: dayOf(row.watched_at), own: row.source_item_id === null, viewingId: row.source_viewing_id ?? undefined } : null, earlier };
 }
 
 /** An episode someone ticked on a series, as the series page gets it. */
@@ -821,13 +844,13 @@ export async function getNightHistory(
     )
     .eq("group_id", groupId)
     .neq("status", "open")
-    .order("happened_on", { ascending: false })
+    .order("happened_on", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range(offset, offset + limit);
   if (error) {
     console.error("Could not load movie night history:", error.message);
-    return { entries: [], hasMore: false };
+    throw new Error("Couldn't load movie-night history. Please try again.");
   }
 
   type Row = {
@@ -837,7 +860,7 @@ export async function getNightHistory(
     source: "swipe" | "logged";
     status: HistoryEntry["status"];
     genres: string[];
-    happened_on: string;
+    happened_on: string | null;
     ended_by: string | null;
     picked: { title: string; poster_path: string | null; tmdb_id: number; media_type: MediaType; release_year: number | null } | null;
     members: { watched: boolean; profile: { display_name: string; avatar_url: string | null } | null }[];
@@ -856,14 +879,14 @@ export async function getNightHistory(
 
   const shown = rows.slice(0, limit);
 
-  // Guests have no account and no table anyone can read: the database tells the family their names. A night made by
-  // logging Watched together has no guests, so it isn't asked about. If this fails the list is just without them.
+  // Do not present incomplete attendance as a complete history when loading guest names fails.
   const guests = new Map<string, string[]>();
-  const swipeNights = shown.filter((r) => r.source === "swipe").map((r) => r.id);
+  const swipeNights = shown.map((r) => r.id);
   if (swipeNights.length > 0) {
     const { data: found, error: guestError } = await supabase.rpc("movie_night_guest_names", { p_nights: swipeNights });
     if (guestError) {
       console.error("Could not load the guests of movie nights:", guestError.message);
+      throw new Error("Couldn't load the participants of movie nights. Please try again.");
     } else {
       for (const guest of (found ?? []) as { night_id: string; name: string }[]) {
         guests.set(guest.night_id, [...(guests.get(guest.night_id) ?? []), guest.name]);

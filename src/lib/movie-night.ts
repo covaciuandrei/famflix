@@ -239,13 +239,15 @@ export interface NightInfo {
   picked_tmdb_id: number | null;
   picked_media_type: MediaType | null;
   picked_list_item_id: string | null;
-  happened_on: string;
+  happened_on: string | null;
+  viewing_id?: string | null;
   /**
    * What the signed-in member may do with a night that is over (never a guest): change who watched and the day, and
    * delete it. Missing before the database has the update that adds them, and then they can't.
    */
   can_edit?: boolean;
   can_delete?: boolean;
+  can_undo?: boolean;
 }
 
 export interface StackInfo {
@@ -271,6 +273,7 @@ export interface MemberProgress {
   name: string;
   avatar_url: string | null;
   guest: boolean;
+  profile_id?: string | null;
   joined: boolean;
   /** Watched the picked title. */
   watched: boolean;
@@ -380,6 +383,7 @@ export interface GuestLinkInfo {
   night_id?: string;
   family_name?: string;
   full?: boolean;
+  guest_name?: string;
 }
 
 /** What someone can do next with a night that is going: join it, carry on swiping, or look at how it is going. */
@@ -405,7 +409,7 @@ export interface HistoryEntry {
   source: "swipe" | "logged";
   status: Exclude<NightStatus, "open">;
   /** When it started, or once a title was picked, the day it was watched. */
-  happenedOn: string;
+  happenedOn: string | null;
   /** The mood a swipe night started with (category slugs). */
   genres: string[];
   /** Who cancelled it. */
@@ -460,7 +464,7 @@ export function peopleLabel(status: HistoryEntry["status"], people: readonly His
  * were in the night (they can't be ticked, having no account). Each group keeps the order it came in.
  */
 export function whoWatched(members: readonly MemberProgress[]): MemberProgress[] {
-  return [...members.filter((m) => !m.guest && m.watched), ...members.filter((m) => m.guest)];
+  return [...members.filter((m) => !m.guest && m.watched), ...members.filter((m) => m.guest && m.watched)];
 }
 
 // ---------------------------------------------------------------------------------------------------------------

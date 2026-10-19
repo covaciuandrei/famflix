@@ -18,18 +18,29 @@ export interface HistoryRow {
   media_id: string;
   /** Null for a viewing nobody remembers the day of. */
   watched_on: string | null;
+  viewing_id?: string | null;
 }
 
 /**
  * One title's history rows as viewings: one per day, newest first, with who watched that day. Then the viewings with no
  * day, each of its own (nothing says two of them are the same one).
  */
-export function groupEarlier(rows: { user_id: string; watched_on: string | null }[]): EarlierViewing[] {
+export function groupEarlier(rows: { user_id: string; watched_on: string | null; viewing_id?: string | null }[]): EarlierViewing[] {
   const days = new Map<string, Set<string>>();
   const unknown: EarlierViewing[] = [];
+  const unknownById = new Map<string, EarlierViewing>();
   for (const r of rows) {
     if (r.watched_on === null) {
-      unknown.push({ on: null, userIds: [r.user_id] });
+      if (r.viewing_id) {
+        const viewing = unknownById.get(r.viewing_id);
+        if (viewing) {
+          if (!viewing.userIds.includes(r.user_id)) viewing.userIds.push(r.user_id);
+        } else {
+          const next = { on: null, userIds: [r.user_id], viewingId: r.viewing_id };
+          unknownById.set(r.viewing_id, next);
+          unknown.push(next);
+        }
+      } else unknown.push({ on: null, userIds: [r.user_id] });
       continue;
     }
     const day = r.watched_on.slice(0, 10);
@@ -65,21 +76,21 @@ export function isWatchedNow(card: ListItemCard): boolean {
 }
 
 /** The viewing the list shows right now, as days (none when it is not known) and (on a family list) the people on them. */
-function currentViewings(card: ListItemCard): { on: string | null; userId: string | null }[] {
+function currentViewings(card: ListItemCard): { on: string | null; userId: string | null; viewingId?: string }[] {
   if (!isWatchedNow(card)) return [];
-  if (card.item.group_id) return card.viewers.map((v) => ({ on: v.watched_on.slice(0, 10), userId: v.user_id }));
-  return [{ on: dayOf(card.item.watched_at), userId: null }];
+  if (card.item.group_id) return card.viewers.map((v) => ({ on: v.watched_on?.slice(0, 10) ?? null, userId: v.user_id, viewingId: v.viewing_id ?? undefined }));
+  return [{ on: dayOf(card.item.watched_at), userId: null, viewingId: card.item.source_viewing_id ?? undefined }];
 }
 
 /** How many times the title has been watched: the days it was watched on, and every viewing with no day. */
 export function timesWatched(card: ListItemCard): number {
   const days = new Set<string>();
-  let unknown = 0;
-  for (const { on } of [...currentViewings(card), ...card.earlier]) {
-    if (on === null) unknown++;
+  const unknown = new Set<string>();
+  for (const [i, { on, viewingId }] of [...currentViewings(card), ...card.earlier].entries()) {
+    if (on === null) unknown.add(viewingId ?? `legacy:${i}`);
     else days.add(on);
   }
-  return days.size + unknown;
+  return days.size + unknown.size;
 }
 
 /** A watched title can be put back on To watch, or logged again. */
@@ -120,7 +131,7 @@ export interface ViewingLine {
 
 /** Viewings as lines: one per day, newest first, with who was there; then one for each viewing with no day. */
 function toLines(
-  viewings: { on: string | null; userId: string | null }[],
+  viewings: { on: string | null; userId: string | null; viewingId?: string }[],
   family: boolean,
   me: string,
   nameOf: (userId: string) => string,
@@ -131,10 +142,15 @@ function toLines(
       .map((id) => (id === me ? "You" : nameOf(id)));
   const days = new Map<string, Set<string>>();
   const unknown: ViewingLine[] = [];
-  for (const { on, userId } of viewings) {
+  const unknownById = new Map<string, Set<string>>();
+  for (const { on, userId, viewingId } of viewings) {
     const who = family && userId ? [userId] : [];
     if (on === null) {
-      unknown.push({ on: null, who: names(who) });
+      if (viewingId) {
+        const people = unknownById.get(viewingId) ?? new Set<string>();
+        who.forEach((id) => people.add(id));
+        unknownById.set(viewingId, people);
+      } else unknown.push({ on: null, who: names(who) });
       continue;
     }
     const people = days.get(on) ?? new Set<string>();
@@ -142,7 +158,7 @@ function toLines(
     days.set(on, people);
   }
   const dated = [...days].sort(([a], [b]) => b.localeCompare(a)).map(([on, people]) => ({ on, who: names(people) }));
-  return [...dated, ...unknown];
+  return [...dated, ...unknownById.values()].map((line) => line instanceof Set ? { on: null, who: names(line) } : line).concat(unknown);
 }
 
 /** Every viewing of the title, newest first. `nameOf` gives a family member's name (and is only used on family lists). */
@@ -153,7 +169,7 @@ export function viewingLines(
 ): ViewingLine[] {
   // A series followed by episode has its days by episode, on its page.
   if (isEpisodeSeries(card)) return [];
-  const earlier = card.earlier.flatMap((e) => e.userIds.map((userId) => ({ on: e.on, userId })));
+  const earlier = card.earlier.flatMap((e) => e.userIds.map((userId) => ({ on: e.on, userId, viewingId: e.viewingId })));
   return toLines([...currentViewings(card), ...earlier], card.item.group_id !== null, me, nameOf);
 }
 
@@ -171,11 +187,11 @@ export function currentViewingLines(
  * nobody remembers it), and the earlier ones. The chip is null when there is nothing to say.
  */
 export function myViewings(
-  current: { on: string | null } | null,
+  current: { on: string | null; viewingId?: string } | null,
   earlier: EarlierViewing[],
 ): { chip: string | null; lines: ViewingLine[] } {
   const lines = toLines(
-    [...(current ? [current] : []), ...earlier].map(({ on }) => ({ on, userId: null })),
+    [...(current ? [current] : []), ...earlier].map(({ on, viewingId }) => ({ on, userId: null, viewingId })),
     false,
     "",
     () => "",

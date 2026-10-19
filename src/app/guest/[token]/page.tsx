@@ -46,6 +46,7 @@ export default async function GuestPage({ params }: { params: Promise<{ token: s
       familyName={link.family_name ?? "A family"}
       full={Boolean(link.full)}
       openInApp={await openInApp(link.night_id)}
+      guestName={link.guest_name}
     />
   );
 }

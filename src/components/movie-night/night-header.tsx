@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { findGenre } from "@/lib/genres";
 import type { NightInfo } from "@/lib/movie-night";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * The title of a night and a menu with what can be done with it: every item is there when its handler is. A member of
@@ -83,6 +84,13 @@ export function NightHeader({
           {night.group_name} · {genres.length > 0 ? genres.join(", ") : "a bit of everything"}
         </p>
       </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {onInvite && (
+          <Button size="sm" variant="outline" onClick={onInvite} className={cn(compact && "max-sm:px-2")}>
+            <UserPlus className="size-4" aria-hidden />
+            <span className={cn(compact && "max-sm:sr-only")}>Invite a guest</span>
+          </Button>
+        )}
       <div ref={menu} className="relative shrink-0">
         <button
           type="button"
@@ -183,7 +191,7 @@ export function NightHeader({
                 }}
               >
                 <Pencil className="size-4" />
-                Edit who watched
+                Edit participants
               </button>
             )}
             {onDelete && (
@@ -222,6 +230,7 @@ export function NightHeader({
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

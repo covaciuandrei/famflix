@@ -31,6 +31,7 @@ export function WatchAgain({
   title: string;
   /** On a family list. */
   family?: {
+    groupId: string;
     members: MemberSummary[];
     viewers: Watch[];
     ratings: RatingWithProfile[];
@@ -63,6 +64,7 @@ export function WatchAgain({
       {step === "log" && family && (
         <WatchedTogetherModal
           title={title}
+          groupId={family.groupId}
           intro="This is a new viewing: the one it has now stays in its history."
           submitLabel="Log it"
           members={family.members}

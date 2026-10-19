@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 
 import { setRating } from "@/app/app/actions";
 import { Avatar } from "@/components/avatar";
+import { GuestScoreEntry } from "@/components/guest/guest-score";
 import { ScoreInput, SCORE_REACTION_HINT } from "@/components/score-input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +19,7 @@ export function RatingPanel({
   ratings,
   currentUserId,
   members,
+  groupId,
 }: {
   itemId: string;
   myScore: number | null;
@@ -25,6 +27,7 @@ export function RatingPanel({
   ratings: RatingWithProfile[];
   currentUserId: string;
   members?: MemberSummary[];
+  groupId?: string;
 }) {
   const [score, setScore] = useState<number | null>(myScore);
   const [comment, setComment] = useState(myComment ?? "");
@@ -105,6 +108,7 @@ export function RatingPanel({
                     ★ {formatScore(r.score)}/10
                   </span>
                 )}
+                {groupId && <GuestScoreEntry groupId={groupId} itemId={itemId} />}
                 {r.rated_by && r.rated_by !== r.user_id && (
                   <span className="ml-1.5 text-xs text-muted-foreground">
                     (filled in by {nameOf(r.rated_by) ?? "a family member"})
