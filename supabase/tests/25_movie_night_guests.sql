@@ -264,8 +264,13 @@ select test.expect_error($$select public.guest_cast_votes(test.t('gu_sec2'), tes
 select public.guest_leave(test.t('gu_sec2'));
 select public.guest_leave('not a secret');
 select public.guest_leave(null);
--- Someone who joins after that can take the name again.
-select public.guest_join(test.t('gu_tok'), 'Yan');
+-- A returning person uses a profile-specific invitation; a name alone cannot claim their saved identity.
+:as_noa
+select public.create_guest_invitation((select id from public.family_guests
+  where name = 'Yan' and group_id = (select group_id from public.movie_nights where id = test.v('gu_a'))),
+  test.v('gu_a')) as returning_yan \gset
+:as_service
+select public.guest_join(:'returning_yan', 'Yan');
 :as_mia
 -- A new link: the old one is dead, and the guests who are in stay in.
 select public.replace_movie_night_guest_link(test.v('gu_a')) as tok2 \gset

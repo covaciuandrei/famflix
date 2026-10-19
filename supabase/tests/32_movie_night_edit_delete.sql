@@ -175,7 +175,10 @@ select test.expect_error($$select public.update_movie_night(test.v('ed_n1'), cur
 select test.expect_error($$select public.update_movie_night(test.v('ed_n1'), current_date - 4, '{}'::jsonb)$$, 'at least one person');
 select test.expect_error($$select public.update_movie_night(test.v('ed_n1'), current_date - 4, test.vw(array['ana', 'eve']))$$, 'Only members of this family');
 select test.expect_error($$select public.update_movie_night(test.v('ed_n1'), current_date + 5, test.vw(array['ana', 'ben', 'cara']))$$, 'not in the future');
-select test.expect_error($$select public.update_movie_night(test.v('ed_n1'), null, test.vw(array['ana', 'ben', 'cara']))$$, 'not in the future');
+begin;
+select public.update_movie_night(test.v('ed_n1'), null, test.vw(array['ana', 'ben', 'cara']));
+select test.expect_eq((select happened_on is null from public.movie_nights where id = test.v('ed_n1')), true, 'an edited night may have an unknown date');
+rollback;
 select test.expect_error($$select public.update_movie_night(test.v('ed_n1'), current_date - 4, test.vw(array['ana', 'ben', 'cara'], 'ben', 11))$$, 'between 1 and 10');
 
 -- Replacing everyone keeps the night: the new people are added before the others are taken off.
@@ -252,9 +255,9 @@ insert into test.vals values ('ed_n3', test.enight(7703)::text);
 insert into public.movie_nights (group_id, source, status, started_by, ended_by, picked_media_id, picked_list_item_id, happened_on)
   select group_id, 'logged', 'closed', started_by, ended_by, picked_media_id, picked_list_item_id, happened_on from public.movie_nights where id = test.v('ed_n3');
 insert into test.vals select 'ed_n3b', id::text from public.movie_nights where picked_list_item_id = test.eitem(7703) and id <> test.v('ed_n3');
-select test.expect_eq(test.flag(test.v('ed_n3'), 'ben', 'can_edit'), false, 'two nights of one title and day: neither can be edited');
+select test.expect_eq(test.flag(test.v('ed_n3'), 'ben', 'can_edit'), true, 'the explicit viewing identity remains editable beside another same-day night');
 :as_ben
-select test.expect_error($$select public.update_movie_night(test.v('ed_n3'), current_date - 2, test.vw(array['ben', 'cara']))$$, 'same day');
+select public.update_movie_night(test.v('ed_n3'), current_date - 2, test.vw(array['ben', 'cara']));
 select public.delete_movie_night(test.v('ed_n3b'));
 reset role;
 select test.expect_eq(test.flag(test.v('ed_n3'), 'ben', 'can_edit'), true, 'with one of them deleted, the other can');
@@ -267,9 +270,9 @@ select public.log_watch(test.eitem(7704), current_date - 5, test.vw(array['ben']
 select public.log_watch(test.eitem(7704), current_date - 4, test.vw(array['cara']));
 reset role;
 select test.expect_eq((select count(*) from public.movie_nights where picked_list_item_id = test.eitem(7704)), 2::bigint, 'a second day made a second night');
-select test.expect_eq(test.flag((select id from public.movie_nights where picked_list_item_id = test.eitem(7704) order by happened_on limit 1), 'ben', 'can_edit'), false, 'neither can be edited while the days differ');
+select test.expect_eq(test.flag((select id from public.movie_nights where picked_list_item_id = test.eitem(7704) order by happened_on limit 1), 'ben', 'can_edit'), true, 'each dated viewing can be edited independently');
 :as_ben
-select test.expect_error($$select public.update_movie_night((select id from public.movie_nights where picked_list_item_id = test.eitem(7704) order by happened_on limit 1), current_date - 5, test.vw(array['ben', 'ana']))$$, 'different days');
+select public.update_movie_night((select id from public.movie_nights where picked_list_item_id = test.eitem(7704) order by happened_on limit 1), current_date - 5, test.vw(array['ben', 'ana']));
 :as_cara
 delete from public.watches where list_item_id = test.eitem(7704) and user_id = test.u('cara');
 reset role;
@@ -284,9 +287,9 @@ insert into test.vals values ('ed_old', test.enight(7705)::text);
 :as_ben
 select public.watch_again(test.eitem(7705));
 reset role;
-select test.expect_eq(test.flag(test.v('ed_old'), 'ben', 'can_edit'), false, 'a night whose viewing went to the history can''t be edited');
+select test.expect_eq(test.flag(test.v('ed_old'), 'ben', 'can_edit'), true, 'an archived viewing remains editable');
 :as_ben
-select test.expect_error($$select public.update_movie_night(test.v('ed_old'), current_date - 9, test.vw(array['ben', 'ana', 'cara']))$$, 'earlier viewing');
+select public.update_movie_night(test.v('ed_old'), current_date - 9, test.vw(array['ben', 'ana', 'cara']));
 select test.expect_error($$select public.delete_movie_night(test.v('ed_old'), true)$$, 'earlier viewing');
 reset role;
 select test.expect_eq((select count(*) from public.movie_nights where id = test.v('ed_old')), 1::bigint, 'and it is still there');
@@ -297,13 +300,13 @@ reset role;
 insert into test.vals values ('ed_new', test.enight(7705)::text);
 select test.expect_eq(test.flag(test.v('ed_new'), 'ben', 'can_edit'), true, 'the new viewing''s night can be edited');
 :as_ben
-select test.expect_error($$select public.update_movie_night(test.v('ed_new'), current_date - 9, test.vw(array['ben']))$$, 'after the earlier viewing');
-select test.expect_error($$select public.update_movie_night(test.v('ed_new'), current_date - 10, test.vw(array['ben']))$$, 'after the earlier viewing');
+select public.update_movie_night(test.v('ed_new'), current_date - 9, test.vw(array['ben']));
+select public.update_movie_night(test.v('ed_new'), current_date - 10, test.vw(array['ben']));
 select public.update_movie_night(test.v('ed_new'), current_date - 8, test.vw(array['ben', 'cara']));
 reset role;
 select test.expect_eq((select happened_on from public.movie_nights where id = test.v('ed_new')), current_date - 8, 'any later day is fine');
 select test.expect_eq((select happened_on from public.movie_nights where id = test.v('ed_old')), current_date - 9, 'and the earlier night is as it was');
-select test.expect_eq((select count(*) from public.watch_history where media_id = (select media_id from public.list_items where id = test.eitem(7705)) and group_id = test.v('ed_fam')), 2::bigint, 'and the earlier viewing is still in the history');
+select test.expect_eq((select count(*) from public.watch_history where media_id = (select media_id from public.list_items where id = test.eitem(7705)) and group_id = test.v('ed_fam')), 3::bigint, 'the earlier viewing and its retrospectively added attendee remain in the history');
 
 -- A title taken off the family list: bring it back first.
 :as_ben
@@ -312,9 +315,9 @@ select public.log_watch(test.eitem(7706), current_date - 2, test.vw(array['ben']
 :as_ana
 update public.list_items set deleted_at = now() where id = test.eitem(7706);
 reset role;
-select test.expect_eq(test.flag(test.enight(7706), 'ana', 'can_edit'), false, 'a title that was removed can''t be edited');
+select test.expect_eq(test.flag(test.enight(7706), 'ana', 'can_edit'), true, 'a viewing can be corrected independently of its removed list card');
 :as_ana
-select test.expect_error($$select public.update_movie_night(test.enight(7706), current_date - 2, test.vw(array['ben', 'cara']))$$, 'removed from the family list');
+select public.update_movie_night(test.enight(7706), current_date - 2, test.vw(array['ben', 'cara']));
 select test.expect_error($$select public.delete_movie_night(test.enight(7706), true)$$, 'removed from the family list');
 select public.delete_movie_night(test.enight(7706));
 reset role;
@@ -489,7 +492,7 @@ reset role;
 insert into test.vals values ('ed_n12b', test.enight(7712)::text);
 select test.expect_eq(test.v('ed_n12a') <> test.v('ed_n12b'), true, 'two days made two nights');
 select test.expect_eq(test.flag(test.v('ed_n12b'), 'cara', 'can_edit'), true, 'the later one can be edited');
-select test.expect_eq(test.flag(test.v('ed_n12a'), 'cara', 'can_edit'), false, 'the earlier one can''t');
+select test.expect_eq(test.flag(test.v('ed_n12a'), 'cara', 'can_edit'), true, 'the earlier one can be corrected too');
 :as_cara
 select public.update_movie_night(test.v('ed_n12b'), current_date - 4, test.vw(array['cara']));
 reset role;
@@ -622,10 +625,10 @@ select test.expect_eq(test.nightwatchers(test.v('ed_n22a')), array['Ana', 'Ben']
 select public.watch_again(test.eitem(7722));
 reset role;
 select test.expect_eq(test.watchers(7722), '{}'::text[], 'the title is back on To watch, with nobody on its record');
-select test.expect_eq(test.flag(test.v('ed_n22a'), 'cara', 'can_edit'), false, 'the older night can''t be edited');
-select test.expect_eq(test.flag(test.v('ed_n22b'), 'cara', 'can_edit'), false, 'nor the later one');
+select test.expect_eq(test.flag(test.v('ed_n22a'), 'cara', 'can_edit'), true, 'the older archived night can be edited');
+select test.expect_eq(test.flag(test.v('ed_n22b'), 'cara', 'can_edit'), true, 'the later archived one can too');
 :as_cara
-select test.expect_error($$select public.update_movie_night(test.v('ed_n22a'), current_date - 1, test.vw(array['cara']))$$, 'earlier viewing');
+select public.update_movie_night(test.v('ed_n22a'), current_date - 1, test.vw(array['cara']));
 :as_ana
 select test.expect_error($$select public.delete_movie_night(test.v('ed_n22a'), true)$$, 'earlier viewing');
 select public.delete_movie_night(test.v('ed_n22a'));
@@ -666,13 +669,13 @@ select public.update_movie_night(test.v('ed_n24b'), current_date - 12, test.vw(a
 :as_ana
 select public.watch_again(test.eitem(7724));
 reset role;
-select test.expect_eq((select max(watched_on) from public.watch_history h join public.media m on m.id = h.media_id where m.tmdb_id = 7724 and h.group_id = test.v('ed_fam')), current_date - 12, 'the history only goes as far as the day the real viewing was moved to');
+select test.expect_eq((select max(watched_on) from public.watch_history h join public.media m on m.id = h.media_id where m.tmdb_id = 7724 and h.group_id = test.v('ed_fam')), current_date - 10, 'the first viewing remains independent when the second is moved earlier');
 select test.expect_eq(test.nightwatchers(test.v('ed_n24a')), array['Ana', 'Ben'], 'the older night is on a later day than that, and still says they watched it');
-select test.expect_eq(test.flag(test.v('ed_n24a'), 'cara', 'can_edit'), false, 'so it can''t be edited');
+select test.expect_eq(test.flag(test.v('ed_n24a'), 'cara', 'can_edit'), true, 'the first viewing is still independently editable');
 :as_cara
-select test.expect_error($$select public.update_movie_night(test.v('ed_n24a'), current_date - 1, test.vw(array['cara']))$$, 'can''t be edited here');
+select public.update_movie_night(test.v('ed_n24a'), current_date - 1, test.vw(array['cara']));
 :as_ana
-select test.expect_error($$select public.delete_movie_night(test.v('ed_n24a'), true)$$, 'can''t be edited here');
+select test.expect_error($$select public.delete_movie_night(test.v('ed_n24a'), true)$$, 'earlier viewing');
 reset role;
 select test.expect_eq(test.watchers(7724), '{}'::text[], 'and a refused try changed nothing');
 
@@ -691,10 +694,10 @@ reset role;
 insert into test.vals values ('ed_n25b', test.enight(7725)::text);
 select test.expect_eq(test.v('ed_n25a') <> test.v('ed_n25b'), true, 'the rewatch is a night of its own');
 select test.expect_eq(test.flag(test.v('ed_n25b'), 'cara', 'can_edit'), true, 'the rewatch is the current viewing, although the history has a later day');
-select test.expect_eq(test.flag(test.v('ed_n25a'), 'cara', 'can_edit'), false, 'and the first viewing is still an earlier one');
+select test.expect_eq(test.flag(test.v('ed_n25a'), 'cara', 'can_edit'), true, 'the first viewing can be edited too');
 :as_cara
-select test.expect_error($$select public.update_movie_night(test.v('ed_n25b'), current_date - 11, test.vw(array['ana', 'ben']))$$, 'after the earlier viewing');
-select public.update_movie_night(test.v('ed_n25b'), current_date - 3, test.vw(array['ana', 'ben']), current_date - 12, test.ua(array['ana', 'ben']));
+select public.update_movie_night(test.v('ed_n25b'), current_date - 11, test.vw(array['ana', 'ben']));
+select public.update_movie_night(test.v('ed_n25b'), current_date - 3, test.vw(array['ana', 'ben']), current_date - 11, test.ua(array['ana', 'ben']));
 reset role;
 select test.expect_eq((select count(*) from public.watches where list_item_id = test.eitem(7725) and watched_on = current_date - 3), 2::bigint, 'moving it after the first viewing works for everyone on the record');
 select test.expect_eq((select happened_on from public.movie_nights where id = test.v('ed_n25b')), current_date - 3, 'and for the night');

@@ -156,7 +156,7 @@ select public.export_my_data()::text as ida_text \gset
 reset role;
 insert into test.vals values ('ida_export', :'ida_text');
 select test.expect_eq((select array_agg(k order by k collate "C") from jsonb_object_keys(test.t('ida_export')::jsonb) k),
-  array['account', 'exported_at', 'families', 'family_lists', 'feed_events', 'movie_night_plans', 'movie_nights', 'my_list', 'not_included', 'watch_history'],
+  array['account', 'exported_at', 'families', 'family_lists', 'family_viewings', 'feed_events', 'movie_night_plans', 'movie_nights', 'my_guest_votes', 'my_list', 'not_included', 'watch_history'],
   'the document has the documented parts, and nothing else');
 select test.expect_eq(test.ex_part('ida_export', 'account') ->> 'display_name', 'Ida'::text, 'the account is hers');
 select test.expect_eq(test.ex_part('ida_export', 'account') ->> 'id', '7a7a7a7a-0000-0000-0000-000000000001'::text, 'with her id');
@@ -193,11 +193,13 @@ select test.expect_eq((select e -> 'watched_with' from jsonb_array_elements(test
   'null'::jsonb, 'and a title she watched on her own does not');
 
 -- The watch history: her own movie on her own, and the family's viewing of a title put back on To watch.
-select test.expect_eq(test.ex_part('ida_export', 'watch_history'),
+select test.expect_eq((select jsonb_agg(e - 'viewing_id') from jsonb_array_elements(test.ex_part('ida_export', 'watch_history')) e),
   jsonb_build_array(
     jsonb_build_object('title', 'EXMovie', 'type', 'movie', 'tmdb_id', 7301, 'year', 2020, 'watched_on', :'d1', 'family', null),
     jsonb_build_object('title', 'EXFamilyOnly', 'type', 'movie', 'tmdb_id', 7305, 'year', 2022, 'watched_on', :'d3', 'family', 'Export Fam')),
   'the watch history is hers, with the family a viewing was with');
+select test.expect_eq((select e ->> 'viewing_id' is not null from jsonb_array_elements(test.ex_part('ida_export', 'watch_history')) e
+  where e ->> 'title' = 'EXFamilyOnly'), true, 'a family-history row also carries its stable viewing identity');
 
 -- Her part of the family list: what she added, and her own score, note, reaction and watches on any title.
 select test.expect_eq(jsonb_array_length(test.ex_part('ida_export', 'family_lists')), 1, 'one family list');
@@ -237,7 +239,7 @@ select test.expect_eq(jsonb_array_length(test.ex_part('ida_export', 'feed_events
   'every feed event she caused');
 select test.expect_eq((select count(*) > 0 from jsonb_array_elements(test.ex_part('ida_export', 'feed_events')) e where e ->> 'kind' = 'added' and e ->> 'family' = 'Export Fam'), true, 'with their kind and family');
 
--- Nothing that is someone else's: Jo's and Kai's notes, e-mail addresses and ids, Kai's title, the guest, the invite code
+-- Nothing private of someone else: Jo's and Kai's notes, e-mail addresses and ids, Kai's title, the invite code
 -- and the night's link.
 select test.expect_eq(test.ex_has('ida_export', 'JO-SECRET-NOTE'), false, 'Jo''s note is not in it');
 select test.expect_eq(test.ex_has('ida_export', 'JO-ADDED-NOTE'), false, 'nor his other one');
@@ -245,7 +247,8 @@ select test.expect_eq(test.ex_has('ida_export', 'jo28@x.test'), false, 'nor his 
 select test.expect_eq(test.ex_has('ida_export', '7b7b7b7b-0000-0000-0000-000000000002'), false, 'nor his id');
 select test.expect_eq(test.ex_has('ida_export', 'KAI-SECRET-NOTE') or test.ex_has('ida_export', 'EXKaiOnly') or test.ex_has('ida_export', 'Kai Fam')
   or test.ex_has('ida_export', '7c7c7c7c-0000-0000-0000-000000000003') or test.ex_has('ida_export', 'kai28@x.test'), false, 'nothing of Kai''s, in another family');
-select test.expect_eq(test.ex_has('ida_export', 'ZedGuest'), false, 'the night''s guest is not in it');
+select test.expect_eq(test.ex_has('ida_export', 'ZedGuest'), true, 'her own viewing includes the guest she watched with');
+select test.expect_eq(test.ex_has('ida_export', 'secret_hash'), false, 'guest session secrets are never exported');
 select test.expect_eq(test.ex_has('ida_export', test.t('ex_invite')) or test.ex_has('ida_export', :'tok'), false, 'nor the family''s invite code or the night''s link');
 
 -- ---- Jo's export, while he is in the family ---------------------------------------------------------------------------------
@@ -256,7 +259,8 @@ insert into test.vals values ('jo_export', :'jo_text');
 select test.expect_eq(test.ex_has('jo_export', 'JO-SECRET-NOTE') and test.ex_has('jo_export', 'JO-ADDED-NOTE'), true, 'Jo gets his own notes');
 select test.expect_eq(test.ex_has('jo_export', 'IDA-MOVIE-NOTE') or test.ex_has('jo_export', 'IDA-FAMILY-NOTE') or test.ex_has('jo_export', 'IDA-FIRST-PASS-NOTE')
   or test.ex_has('jo_export', 'ida28@x.test') or test.ex_has('jo_export', '7a7a7a7a-0000-0000-0000-000000000001'), false, 'and none of Ida''s notes, e-mail address or id');
-select test.expect_eq(test.ex_has('jo_export', 'KAI-SECRET-NOTE') or test.ex_has('jo_export', 'EXKaiOnly') or test.ex_has('jo_export', 'ZedGuest'), false, 'nor Kai''s or the guest''s');
+select test.expect_eq(test.ex_has('jo_export', 'KAI-SECRET-NOTE') or test.ex_has('jo_export', 'EXKaiOnly'), false, 'nor Kai''s private data');
+select test.expect_eq(test.ex_has('jo_export', 'ZedGuest'), true, 'Jo can export his own viewing companion too');
 select test.expect_eq((select array_agg((v ->> 'title') || ':' || (v ->> 'vote') order by v ->> 'title')
   from jsonb_array_elements(test.ex_part('jo_export', 'movie_nights')) n, jsonb_array_elements(n -> 'my_votes') v where n ->> 'source' = 'swipe'),
   array['EXCard7311:nope', 'EXCard7314:love'], 'Jo''s votes are his own');
@@ -298,7 +302,7 @@ select test.expect_eq(test.ex_has('kai_export', 'KAI-SECRET-NOTE') and test.ex_h
 select test.expect_eq(test.ex_has('kai_export', 'IDA-MOVIE-NOTE') or test.ex_has('kai_export', 'JO-SECRET-NOTE') or test.ex_has('kai_export', 'EXMovie')
   or test.ex_has('kai_export', 'Export Fam') or test.ex_has('kai_export', 'ZedGuest'), false, 'and nothing of anyone else''s');
 select test.expect_eq((select array_agg(k order by k collate "C") from jsonb_object_keys(test.t('lee_export')::jsonb) k),
-  array['account', 'exported_at', 'families', 'family_lists', 'feed_events', 'movie_night_plans', 'movie_nights', 'my_list', 'not_included', 'watch_history'],
+  array['account', 'exported_at', 'families', 'family_lists', 'family_viewings', 'feed_events', 'movie_night_plans', 'movie_nights', 'my_guest_votes', 'my_list', 'not_included', 'watch_history'],
   'someone with nothing still gets the whole document');
 select test.expect_eq((select count(*) from jsonb_each(test.t('lee_export')::jsonb) e
   where e.key not in ('account', 'exported_at', 'not_included') and e.value <> '[]'::jsonb), 0::bigint, 'with every list empty');
@@ -320,18 +324,20 @@ select test.expect_eq((select array_agg(relname::text order by relname::text col
     'profiles', 'groups', 'group_members', 'media', 'list_items', 'ratings', 'reactions', 'watches', 'watch_history',
     'episode_logs', 'episode_history', 'activity', 'movie_nights', 'movie_night_stacks', 'movie_night_candidates',
     'movie_night_votes', 'movie_night_finishes', 'movie_night_members', 'movie_night_plans', 'movie_night_plan_rsvps',
-    -- left out: a family's secret link, and guests, who are not the person asking, and the temporary rate-limit counters
-    'movie_night_links', 'movie_night_guests', 'movie_night_guest_votes', 'movie_night_guest_finishes', 'rate_limits']) x),
+    'family_viewings', 'family_viewing_members', 'family_viewing_guests', 'family_guests', 'movie_night_guests', 'movie_night_guest_votes',
+    -- Left out: invitation credentials, other guests' scores/stack completion, and temporary counters.
+    'movie_night_links', 'movie_night_guest_finishes', 'guest_ratings', 'guest_invitations', 'rate_limits']) x),
   'every table is either exported or listed as left out');
 select test.expect_eq((select array_agg(t order by t collate "C") from unnest(array[
     'profiles', 'groups', 'group_members', 'media', 'list_items', 'ratings', 'reactions', 'watches', 'watch_history',
     'episode_logs', 'episode_history', 'activity', 'movie_nights', 'movie_night_stacks', 'movie_night_candidates',
-    'movie_night_votes', 'movie_night_finishes', 'movie_night_members', 'movie_night_plans', 'movie_night_plan_rsvps']) t
-  where (select prosrc from pg_proc where proname = 'export_my_data' and pronamespace = 'public'::regnamespace) !~ ('public\.' || t || '\M')),
+    'movie_night_votes', 'movie_night_finishes', 'movie_night_members', 'movie_night_plans', 'movie_night_plan_rsvps',
+    'family_viewings', 'family_viewing_members', 'family_viewing_guests', 'family_guests', 'movie_night_guests', 'movie_night_guest_votes']) t
+  where (select string_agg(prosrc, E'\n') from pg_proc where proname in ('export_my_data', 'export_my_data_base') and pronamespace = 'public'::regnamespace) !~ ('public\.' || t || '\M')),
   null::text[], 'each table listed as exported is read by the export');
 select test.expect_eq((select array_agg(t order by t collate "C") from unnest(array[
-    'movie_night_links', 'movie_night_guests', 'movie_night_guest_votes', 'movie_night_guest_finishes', 'rate_limits']) t
-  where (select prosrc from pg_proc where proname = 'export_my_data' and pronamespace = 'public'::regnamespace) ~ ('public\.' || t || '\M')),
+    'movie_night_links', 'movie_night_guest_finishes', 'guest_ratings', 'guest_invitations', 'rate_limits']) t
+  where (select string_agg(prosrc, E'\n') from pg_proc where proname in ('export_my_data', 'export_my_data_base') and pronamespace = 'public'::regnamespace) ~ ('public\.' || t || '\M')),
   null::text[], 'and none of those left out is');
 
 do $$ begin raise notice 'ALL EXPORT TESTS PASSED'; end $$;

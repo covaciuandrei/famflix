@@ -112,7 +112,7 @@ select test.expect_eq(test.wa_mine(:ada, 7101), 'watched@' || :'d1' || ' linked'
 select test.expect_eq(test.wa_mine(:bea, 7101), 'watched@' || :'d1' || ' linked', 'and Bea''s');
 select test.expect_eq(test.wa_mine(:cal, 7101), 'watched@' || :'d1' || ' linked', 'and Cal''s');
 select test.expect_eq(test.wa_nights(7101), :'d1' || ':Ada+Bea+Cal', 'and a movie night of that day is in the history');
-select test.expect_eq((select count(*) from public.watch_history), 0::bigint, 'nothing is in the history yet');
+select test.expect_eq((select count(*) from public.watch_history where group_id = :fam), 0::bigint, 'this family has no earlier viewing yet');
 
 :as_bea
 select public.watch_again(:item);
@@ -180,17 +180,20 @@ select test.expect_eq(test.wa_now(:item), 'watched:Ada@' || :'d2', 'the family''
 select public.log_watch(:item, :'d3'::date, test.wa_viewers('cal'));
 reset role;
 select test.expect_eq(test.wa_now(:item), 'watched:Ada@' || :'d2' || ',Cal@' || :'d3', 'the plain Watched together adds people');
-select test.expect_eq((select count(*) from public.watch_history), 3::bigint, 'and the history is as it was');
+select test.expect_eq((select count(*) from public.watch_history where group_id = :fam), 3::bigint, 'and this family''s history is as it was');
 
 -- ---- We watched it again: the same, in one go, or nothing at all --------------------------------------------------
 :as_ada
 select test.expect_error($$select public.watched_again(test.v('wa_item'), current_date - 5, test.wa_viewers('ada', 'dev'))$$, 'Only members of this family');
 select test.expect_error($$select public.watched_again(test.v('wa_item'), current_date + 5, test.wa_viewers('ada'))$$, 'not in the future');
-select test.expect_error($$select public.watched_again(test.v('wa_item'), null, test.wa_viewers('ada'))$$, 'not in the future');
+begin;
+select public.watched_again(test.v('wa_item'), null, test.wa_viewers('ada'));
+select test.expect_eq((select watched_on is null from public.watches where list_item_id = :item), true, 'a family rewatch may have an unknown date');
+rollback;
 select test.expect_error($$select public.watched_again(test.v('wa_item'), current_date - 5, null)$$, 'at least one person');
 reset role;
 select test.expect_eq(test.wa_now(:item), 'watched:Ada@' || :'d2' || ',Cal@' || :'d3', 'a viewing that is refused changes nothing');
-select test.expect_eq((select count(*) from public.watch_history), 3::bigint, 'not even the history');
+select test.expect_eq((select count(*) from public.watch_history where group_id = :fam), 3::bigint, 'not even this family''s history');
 
 :as_ada
 select public.watched_again(:item, :'d4'::date, test.wa_viewers('ada', 'bea', 'cal'));
@@ -265,7 +268,10 @@ select test.expect_eq(test.wa_mine(:ada, 7102), 'watched@' || :'d5' || ' own', '
 select test.expect_eq(test.wa_hist(:ada, 7102), :'d1' || ',' || :'d4', 'and the one before goes to the history');
 :as_ada
 select test.expect_error($$select public.watched_again(test.v('wa_mine7102'), current_date + 5, null)$$, 'not in the future');
-select test.expect_error($$select public.watched_again(test.v('wa_mine7102'), null, null)$$, 'not in the future');
+begin;
+select public.watched_again(test.v('wa_mine7102'), null, null);
+select test.expect_eq((select watched_at is null from public.list_items where id = test.v('wa_mine7102')), true, 'a personal rewatch may have an unknown date');
+rollback;
 
 -- An entry a family's watch put on My list becomes the person's own again, and its viewing is remembered as the family's.
 :as_cal

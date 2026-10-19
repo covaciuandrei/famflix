@@ -240,7 +240,7 @@ delete from public.watches where list_item_id = test.item(9831) and user_id = :f
 :as_eli
 delete from public.watches where list_item_id = test.item(9831) and user_id = :eli;
 reset role;
-select test.expect_eq((select count(*) from public.movie_nights where group_id = :fam and picked_list_item_id = test.item(9831)), 0::bigint, 'with nobody left, the logged nights are gone');
+select test.expect_eq((select count(*) from public.movie_nights where group_id = :fam and picked_list_item_id = test.item(9831)), 1::bigint, 'leaving the current viewing preserves the earlier viewing that Eli attended');
 select test.expect_eq((select status from public.list_items where id = test.item(9831)), 'want'::text, 'and the title is back on To watch');
 :as_eli
 delete from public.watches where list_item_id = test.v('pk_a_item') and user_id = :eli;
@@ -329,7 +329,7 @@ select test.expect_eq((select started_by from public.movie_nights where id = tes
 select test.expect_eq((select count(*) from public.movie_night_votes where user_id = :fay), 0::bigint, 'her votes are gone');
 select test.expect_eq((select count(*) from public.movie_night_members where user_id = :fay), 0::bigint, 'and her place in every night');
 select test.expect_eq((select count(*) from public.movie_night_finishes where user_id = :fay), 0::bigint, 'and her finished stacks');
-select test.expect_eq((select count(*) from public.movie_nights where group_id = :fam), 7::bigint, 'the family keeps its seven nights');
+select test.expect_eq((select count(*) from public.movie_nights where group_id = :fam), 8::bigint, 'the family keeps all eight nights, including the preserved earlier viewing');
 :as_eli
 select test.expect_eq((select count(*) from jsonb_array_elements(public.movie_night_state(test.v('pk_a')) -> 'members') m where m ->> 'name' = 'Fay'), 0::bigint, 'and the night no longer lists her');
 select test.expect_eq(public.movie_night_state(test.v('pk_a')) -> 'night' ->> 'status', 'closed', 'night A still reads as picked');

@@ -14,7 +14,8 @@ select test.expect_eq((select array_agg(relname::text order by relname::text col
     'movie_night_candidates', 'movie_night_finishes', 'movie_night_guest_finishes', 'movie_night_guest_votes',
     'movie_night_guests', 'movie_night_links', 'movie_night_members', 'movie_night_plan_rsvps', 'movie_night_plans',
     'movie_night_stacks', 'movie_night_votes',
-    'movie_nights', 'profiles', 'rate_limits', 'ratings', 'reactions', 'watch_history', 'watches']) x),
+    'movie_nights', 'profiles', 'rate_limits', 'ratings', 'reactions', 'watch_history', 'watches',
+    'family_viewings', 'family_viewing_members', 'family_guests', 'family_viewing_guests', 'guest_ratings', 'guest_invitations']) x),
   'the tables are the ones whose grants are pinned here');
 
 -- Visitors who aren't signed in: nothing at all, and nothing that everyone gets by default either.
@@ -41,7 +42,8 @@ select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relnam
     'profiles:select',
     'ratings:select', 'ratings:insert', 'ratings:update', 'ratings:delete',
     'reactions:select', 'reactions:insert', 'reactions:update', 'reactions:delete',
-    'watch_history:select', 'watches:select', 'watches:delete']) x),
+    'watch_history:select', 'watches:select', 'watches:delete',
+    'family_viewings:select', 'family_viewing_members:select', 'family_guests:select', 'family_viewing_guests:select', 'guest_ratings:select']) x),
   'signed-in people have exactly these table privileges');
 select test.expect_eq((select array_agg(c.relname || '.' || a.attname || ':' || p order by (c.relname || '.' || a.attname || ':' || p) collate "C")
   from pg_class c
@@ -68,7 +70,9 @@ select test.expect_eq((select array_agg(p.proname::text order by p.proname::text
     'my_series_passes', 'my_episode_counts', 'member_list', 'export_my_data',
     'plan_movie_night', 'rsvp_movie_night_plan', 'cancel_movie_night_plan', 'planned_movie_nights', 'due_movie_night_plans',
     'get_movie_night_guest_link', 'replace_movie_night_guest_link', 'turn_off_movie_night_guest_link',
-    'remove_movie_night_guest', 'movie_night_guest_names']) x),
+    'remove_movie_night_guest', 'movie_night_guest_names', 'can_see_viewing', 'save_family_guest', 'set_guest_rating',
+    'edit_family_viewing', 'save_family_watch', 'family_viewing_details', 'create_guest_invitation', 'revoke_guest_invitations',
+    'claim_family_guest', 'guest_claim_result', 'merge_family_guests']) x),
   'signed-in people can run exactly these functions');
 
 -- The server (service-role key): reads and writes every table, and runs the functions it calls (counting rate limits, and
@@ -83,7 +87,7 @@ select test.expect_eq((select array_agg(c.relname || ':' || p order by (c.relnam
 select test.expect_eq((select array_agg(p.proname::text order by p.proname::text collate "C") from pg_proc p
   where p.pronamespace = 'public'::regnamespace and has_function_privilege('service_role', p.oid, 'execute')),
   (select array_agg(x order by x collate "C") from unnest(array['hit_rate_limit', 'guest_link_info', 'guest_join',
-    'guest_movie_night_state', 'guest_cast_votes', 'guest_finish_stack', 'guest_leave']) x),
+    'guest_movie_night_state', 'guest_cast_votes', 'guest_finish_stack', 'guest_leave', 'guest_account_invitation']) x),
   'the server can run hit_rate_limit and the guest functions, and nothing else');
 
 :as_service
