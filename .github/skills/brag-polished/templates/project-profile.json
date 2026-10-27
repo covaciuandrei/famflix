@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "draft": true,
+  "name": "YOUR_PROJECT_NAME",
+  "tagline": "Replace this with the project's own positioning.",
+  "sourceRoot": ".",
+  "brand": {
+    "palette": {
+      "background": "#faf8f3",
+      "foreground": "#182b23",
+      "card": "#ffffff",
+      "muted": "#667369",
+      "border": "#dce2d8",
+      "primary": "#31745a"
+    },
+    "font": {
+      "family": "Geist",
+      "package": "@fontsource-variable/geist",
+      "file": "files/geist-latin-wght-normal.woff2",
+      "license": "SIL-OFL-1.1"
+    }
+  },
+  "facts": [
+    { "claim": "Replace with a real core capability.", "source": "README.md", "evidence": "Exact supporting text from that file." }
+  ],
+  "captions": [
+    "Write one connected, source-backed introduction, explanation, payoff and closing invitation.",
+    "Keep canonical captions and pronunciation aliases separate."
+  ],
+  "pronunciations": [],
+  "output": { "duration": 25, "width": 1920, "height": 1080, "fps": 30, "posterAt": 23 },
+  "demo": {
+    "title": "The actual core flow",
+    "item": "A fictional example",
+    "initial": "Before the action",
+    "action": "The real action label",
+    "added": "The resulting state",
+    "confirmAction": "The real confirmation label",
+    "confirmed": "The final state",
+    "result": "A grounded outcome, not a fabricated metric.",
+    "actionAt": 4,
+    "confirmAt": 10
+  },
+  "stateContracts": [
+    {
+      "scene": "scenes/flow.html",
+      "timeline": "flow",
+      "samples": [
+        { "at": 1, "assertions": [{ "selector": "#flow-before", "visible": true }, { "selector": "#flow-added", "visible": false }] },
+        { "at": 5, "assertions": [{ "selector": "#flow-before", "visible": false }, { "selector": "#flow-added", "visible": true }, { "selector": "#flow-done", "visible": false }] },
+        { "at": 11, "assertions": [{ "selector": "#flow-added", "visible": false }, { "selector": "#flow-done", "visible": true }] }
+      ]
+    }
+  ]
+}

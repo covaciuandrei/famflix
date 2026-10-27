@@ -64,6 +64,13 @@ and family movie nights, with English narration, captions and a transcript.
 It only loads and starts sound after a click. See the
 [editable video source and rendering guide](video/intro/README.md).
 
+The reusable [brag-polished video skill](.github/skills/brag-polished/SKILL.md)
+is also included as a complete, editable project copy. Its
+[provenance and update guide](.github/skills/brag-polished/UPSTREAM.md) pins the
+private canonical toolkit revision and explains how to preserve app-specific
+changes. Video tooling keeps its own Node 22 dependencies; it is not part of
+the application runtime or browser bundle.
+
 ## Architecture
 
 ```mermaid

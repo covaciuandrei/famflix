@@ -1,0 +1,20 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; display: grid; place-items: center; background: var(--background); padding: 10%; }
+    #outro-copy { text-align: center; max-width: 90%; }
+    #outro-brand { display: flex; align-items: center; justify-content: center; gap: 24px; margin-bottom: 30px; color: var(--primary); font-size: 48px; }
+    #outro-brand img { width: 80px; height: 80px; }
+    #outro-title { margin: 0; font-size: clamp(58px, 5vw, 90px); line-height: 1.12; font-weight: 650; letter-spacing: -2px; }
+    #outro-cta { display: inline-block; margin-top: 36px; padding: 17px 30px; border-radius: 13px; font-size: 28px; color: white; background: var(--primary); }
+  </style>
+  <div id="root" data-composition-id="outro" data-width="{{WIDTH}}" data-height="{{HEIGHT}}">
+    <div id="outro-copy"><div id="outro-brand">{{LOGO}}<span>{{NAME}}</span></div><h1 id="outro-title">{{TAGLINE}}</h1><div id="outro-cta">Get started</div></div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#outro-copy", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: "power4.out" }, 0.1);
+    tl.fromTo("#outro-cta", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.5);
+    tl.to({}, { duration: 4 }, 0);
+    window.__timelines.outro = tl;
+  </script>
+</template>

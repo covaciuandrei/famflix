@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "name": "Pantry Lane",
+  "tagline": "Your kitchen, a little clearer.",
+  "sourceRoot": ".",
+  "brand": {
+    "palette": {
+      "background": "#faf8f3", "foreground": "#182b23", "card": "#ffffff",
+      "muted": "#667369", "border": "#dce2d8", "primary": "#31745a"
+    },
+    "font": {
+      "family": "Fraunces", "package": "@fontsource-variable/fraunces",
+      "file": "files/fraunces-latin-wght-normal.woff2", "license": "SIL-OFL-1.1"
+    }
+  },
+  "facts": [
+    { "claim": "Keep pantry ingredients and low-stock items in one place.", "source": "product.md", "evidence": "Pantry Lane records pantry items and flags low stock." },
+    { "claim": "Turn missing ingredients into your next shopping list.", "source": "product.md", "evidence": "A person can add a low-stock ingredient to a shopping list." },
+    { "claim": "Keep the pantry up to date after shopping.", "source": "product.md", "evidence": "Marking that shopping item bought moves the pantry item to Restocked." }
+  ],
+  "captions": [
+    "Meet Pantry Lane, a calmer way to keep your kitchen organised.",
+    "Add what you have, keep an eye on what's running low,",
+    "and turn missing ingredients into a shopping list.",
+    "When you restock, tick items off and see your pantry update.",
+    "Fewer forgotten ingredients. A clearer next shop.",
+    "Get started with Pantry Lane."
+  ],
+  "pronunciations": [],
+  "output": { "duration": 20, "width": 1080, "height": 1080, "fps": 30, "posterAt": 18 },
+  "demo": {
+    "title": "My pantry",
+    "item": "Oats",
+    "initial": "Running low",
+    "action": "Add to shopping list",
+    "added": "On your shopping list",
+    "confirmAction": "Bought",
+    "confirmed": "Restocked",
+    "result": "Your pantry is up to date.",
+    "actionAt": 3.3,
+    "confirmAt": 8
+  },
+  "frames": [1.8, 4.5, 7.5, 12, 14.5, 18],
+  "stateContracts": [
+    {
+      "scene": "scenes/flow.html", "timeline": "flow",
+      "samples": [
+        { "at": 1, "assertions": [
+          { "selector": "#flow-before", "visible": true, "contains": "Running low" },
+          { "selector": "#flow-added", "visible": false },
+          { "selector": "#flow-done", "visible": false }
+        ] },
+        { "at": 4.2, "assertions": [
+          { "selector": "#flow-before", "visible": false },
+          { "selector": "#flow-added", "visible": true, "contains": "On your shopping list" },
+          { "selector": "#flow-done", "visible": false }
+        ] },
+        { "at": 9, "assertions": [
+          { "selector": "#flow-added", "visible": false },
+          { "selector": "#flow-done", "visible": true, "contains": "Restocked" }
+        ] }
+      ]
+    }
+  ]
+}

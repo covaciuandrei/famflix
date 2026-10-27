@@ -17,6 +17,13 @@ from hiding an update. No third-party video player or tracking is involved.
 This is an isolated video-tooling project, separate from the application's
 Node 20 dependencies. Use **Node.js 22+**, FFmpeg and FFprobe on your PATH.
 
+The [project-local video skill](../../.github/skills/brag-polished/SKILL.md)
+preserves the reusable production workflow. Its
+[source provenance](../../.github/skills/brag-polished/UPSTREAM.md) links the
+private canonical toolkit and documents project-specific edits. Continue
+editing this authoring project for the actual FamFlix introduction; the
+toolkit's approved reference fixtures are frozen regression baselines.
+
 ```sh
 cd video/intro
 npm ci

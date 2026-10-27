@@ -1,0 +1,56 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; background: var(--background); }
+    #flow-stage { position: absolute; inset: 0; padding: 10%; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 7%; }
+    #flow-copy h1 { margin: 0; font-size: clamp(52px, 4vw, 78px); font-weight: 650; line-height: 1.1; letter-spacing: -2px; }
+    #flow-copy p { margin: 25px 0 0; color: var(--muted); font-size: 28px; line-height: 1.5; }
+    #flow-panel { border: 2px solid var(--border); border-radius: 30px; padding: 36px; background: var(--card); box-shadow: 0 30px 70px #00000012; }
+    #flow-panel h2 { margin: 0 0 25px; font-size: 34px; font-weight: 600; }
+    #flow-item { border-radius: 18px; border: 1px solid var(--border); padding: 25px; }
+    #flow-item h3 { margin: 0; font-size: 32px; font-weight: 600; }
+    #flow-states { display: grid; margin-top: 20px; min-height: 185px; }
+    .flow-state { grid-area: 1 / 1; }
+    .flow-state p { margin: 0 0 25px; color: var(--muted); font-size: 26px; line-height: 1.35; }
+    .flow-action { display: inline-block; border-radius: 12px; background: var(--primary); color: white; padding: 15px 23px; font-size: 27px; }
+    #flow-done strong { display: inline-block; padding: 12px 19px; border-radius: 12px; color: var(--primary); border: 2px solid var(--primary); font-size: 27px; font-weight: 600; }
+    #flow-result { margin-top: 28px; color: var(--muted); font-size: 23px; line-height: 1.4; }
+    #flow-demo-label { margin-top: 26px; color: var(--muted); font-size: 18px; }
+    @media (max-aspect-ratio: 6/5) {
+      #flow-stage { grid-template-columns: 1fr; gap: 34px; padding: 8%; align-content: center; }
+      #flow-copy h1 { font-size: 58px; }
+      #flow-copy p { font-size: 25px; margin-top: 16px; }
+      #flow-panel { padding: 28px; }
+      #flow-states { min-height: 150px; }
+    }
+  </style>
+  <div id="root" data-composition-id="flow" data-width="{{WIDTH}}" data-height="{{HEIGHT}}">
+    <div id="flow-stage">
+      <div id="flow-copy"><h1>{{TAGLINE}}</h1><p>{{FACT}}</p></div>
+      <div id="flow-panel">
+        <h2>{{DEMO_TITLE}}</h2>
+        <div id="flow-item">
+          <h3>{{ITEM}}</h3>
+          <div id="flow-states">
+            <div id="flow-before" class="flow-state"><p>{{INITIAL}}</p><div id="flow-add" class="flow-action">{{ACTION}}</div></div>
+            <div id="flow-added" class="flow-state"><p>{{ADDED}}</p><div id="flow-confirm" class="flow-action">{{CONFIRM_ACTION}}</div></div>
+            <div id="flow-done" class="flow-state"><strong>{{CONFIRMED}}</strong><div id="flow-result">{{RESULT}}</div></div>
+          </div>
+        </div>
+        <div id="flow-demo-label">Illustrative demo · fictional data</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.set("#flow-added, #flow-done", { opacity: 0 }, 0);
+    tl.fromTo("#flow-stage", { opacity: 0, y: 25 }, { opacity: 1, y: 0, duration: 0.65, ease: "power3.out" }, 0.1);
+    tl.fromTo("#flow-add", { scale: 1 }, { scale: 0.95, duration: 0.12 }, {{ACTION_AT}});
+    tl.to("#flow-before", { opacity: 0, duration: 0.25 }, {{ACTION_AT}} + 0.12);
+    tl.fromTo("#flow-added", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, {{ACTION_AT}} + 0.3);
+    tl.fromTo("#flow-confirm", { scale: 1 }, { scale: 0.95, duration: 0.12 }, {{CONFIRM_AT}});
+    tl.to("#flow-added", { opacity: 0, duration: 0.25 }, {{CONFIRM_AT}} + 0.12);
+    tl.fromTo("#flow-done", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, {{CONFIRM_AT}} + 0.3);
+    tl.to("#flow-stage", { opacity: 0, y: -12, duration: 0.2 }, {{FLOW_DURATION}} - 0.21);
+    window.__timelines.flow = tl;
+  </script>
+</template>

@@ -1,0 +1,56 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; }
+    .memory-title { display: flex; align-items: center; gap: 24px; margin: 26px 0; }
+    .memory-title h2 { margin: 0 0 10px; font-size: 38px; letter-spacing: -1px; }
+    .memory-title p { margin: 0; color: var(--muted); font-size: 22px; }
+    .attendees { display: flex; gap: 20px; padding: 20px 0 28px; border-bottom: 1px solid #39313f; }
+    .attendee { display: flex; align-items: center; gap: 10px; color: #cbc5d8; font-size: 23px; }
+    .attendee .avatar { margin: 0; width: 43px; height: 43px; }
+    .score-header { display: flex; justify-content: space-between; align-items: center; margin-top: 28px; font-size: 24px; }
+    .personal-score { color: #d2c4ff; font-size: 38px; font-weight: 700; }
+    .personal-score small { color: var(--muted); font-size: 22px; font-weight: 400; }
+    .score-track { position: relative; height: 10px; margin: 25px 0 30px; border-radius: 99px; background: #36303e; }
+    .score-fill { width: 83.333%; height: 100%; border-radius: inherit; background: var(--primary); transform-origin: left; }
+    .score-thumb { position: absolute; left: calc(83.333% - 13px); top: -8px; width: 27px; height: 27px; border: 5px solid #c7b5ff; border-radius: 50%; background: var(--primary); }
+    .memory-note { padding: 20px; border: 1px solid #3b3347; border-radius: 14px; color: #c2baca; background: #1b1721; font-size: 23px; }
+  </style>
+  <div data-hf-id="hf-gyso" id="root" data-composition-id="memories" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-5an0" id="memories-stage" class="stage">
+      <div data-hf-id="hf-5o1i" id="memories-copy">
+        <p data-hf-id="hf-r3je" class="feature-label">WATCHED TOGETHER</p>
+        <h1 data-hf-id="hf-76bk" class="headline">Remember what<br data-hf-id="hf-x5px">you loved<br data-hf-id="hf-rsrt"><span data-hf-id="hf-eh81" class="accent">together.</span></h1>
+        <p data-hf-id="hf-esx2" class="subline">Log the night.<br data-hf-id="hf-szow">Keep your own score.</p>
+      </div>
+      <div data-hf-id="hf-32fe" id="memories-window" class="app-window">
+        <div data-hf-id="hf-tnbh" class="window-heading"><h2 data-hf-id="hf-ihgd">Friday crew</h2><span data-hf-id="hf-xufy" class="pill success">&#10003; Watched together</span></div>
+        <div data-hf-id="hf-mssk" class="memory-title">
+          <div data-hf-id="hf-qayi" class="poster mini-poster orbit"><div data-hf-id="hf-0w2e" class="planet"></div><div data-hf-id="hf-0qcu" class="ring"></div><div data-hf-id="hf-oc9u" class="poster-title">ORBIT CLUB</div></div>
+          <div data-hf-id="hf-yeow"><h2 data-hf-id="hf-hqer">Orbit Club</h2><p data-hf-id="hf-icdu">Movie night &middot; A new memory</p></div>
+        </div>
+        <div data-hf-id="hf-35p0" id="memories-attendees" class="attendees">
+          <div data-hf-id="hf-7bl6" class="attendee"><span data-hf-id="hf-2xht" class="avatar">A</span>Alex</div>
+          <div data-hf-id="hf-xlog" class="attendee"><span data-hf-id="hf-nrls" class="avatar" style="background:#2c7b78">L</span>Luna</div>
+          <div data-hf-id="hf-h6tl" class="attendee"><span data-hf-id="hf-ymok" class="avatar" style="background:#a25165">S</span>Sam</div>
+        </div>
+        <div data-hf-id="hf-3v6l" id="memories-score">
+          <div data-hf-id="hf-fdgo" class="score-header"><span data-hf-id="hf-qnx4">Your score</span><span data-hf-id="hf-v1yx" class="personal-score">8.5<small data-hf-id="hf-sm42"> / 10</small></span></div>
+          <div data-hf-id="hf-7tws" class="score-track"><div data-hf-id="hf-agyn" id="memories-fill" class="score-fill"></div><div data-hf-id="hf-9c95" id="memories-thumb" class="score-thumb"></div></div>
+        </div>
+        <div data-hf-id="hf-ixt7" id="memories-note" class="memory-note">&ldquo;A new family favourite.&rdquo;</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#memories-copy", { opacity: 0, x: -35 }, { opacity: 1, x: 0, duration: 0.525, ease: "power4.out" }, 0.075);
+    tl.fromTo("#memories-window", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.1875);
+    tl.fromTo("#memories-attendees", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0.6375);
+    tl.fromTo("#memories-score", { opacity: 0 }, { opacity: 1, duration: 0.45 }, 0.975);
+    tl.fromTo("#memories-fill", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 1.125);
+    tl.fromTo("#memories-thumb", { opacity: 0 }, { opacity: 1, duration: 0.225 }, 1.275);
+    tl.fromTo("#memories-note", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 1.65);
+    tl.to("#memories-stage", { opacity: 0, y: -12, duration: 0.1875, ease: "power2.in" }, 3.405);
+    window.__timelines.memories = tl;
+  </script>
+</template>
