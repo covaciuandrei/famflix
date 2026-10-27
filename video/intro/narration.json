@@ -1,0 +1,22 @@
+{
+  "duration": 25,
+  "voice": "af_bella",
+  "precision": "fp32",
+  "speed": 1.06,
+  "start": 0.12,
+  "spokenBrand": "Famflix",
+  "captions": [
+    "Meet FamFlix, a home for everything you want to watch.",
+    "Find movies and series,",
+    "save them to your own list,",
+    "and mark them watched when you're done.",
+    "You can also share a list with family and friends,",
+    "so everyone's ideas are in one place.",
+    "For movie night, swipe and vote together",
+    "to find a favourite.",
+    "Afterwards, add your ratings",
+    "and keep track of who watched with you.",
+    "FamFlix. Less choosing. More watching.",
+    "Get started for free."
+  ]
+}

@@ -16,6 +16,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated video-tooling output and vendored runtime; authoring sources stay linted.
+    "video/intro/.hyperframes/**",
+    "video/intro/assets/gsap.min.js",
+    "video/intro/assets/audio-levels.js",
   ]),
 ]);
 

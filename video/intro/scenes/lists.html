@@ -1,0 +1,43 @@
+<template>
+  <style>#root { position: absolute; inset: 0; }</style>
+  <div data-hf-id="hf-d8zc" id="root" data-composition-id="lists" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-pwq6" id="lists-stage" class="stage">
+      <div data-hf-id="hf-qgeu" id="lists-copy">
+        <p data-hf-id="hf-n429" class="feature-label">THE SHARED WATCHLIST</p>
+        <h1 data-hf-id="hf-uwvj" class="headline">Everyone's picks.<br data-hf-id="hf-x5px"><span data-hf-id="hf-6kvk" class="accent">One place.</span></h1>
+        <p data-hf-id="hf-88uo" class="subline">For your family.<br data-hf-id="hf-rsrt">For your friends.<br data-hf-id="hf-szow">For whatever's next.</p>
+      </div>
+      <div data-hf-id="hf-m4ag" id="lists-window" class="app-window">
+        <div data-hf-id="hf-72ep" class="app-nav"><img data-hf-id="hf-vpk7" src="assets/icon.svg" alt=""><span data-hf-id="hf-twcr">Browse</span><span data-hf-id="hf-34ol">Movie night</span><span data-hf-id="hf-tftt">My list</span><span data-hf-id="hf-b9wb" class="active">Families</span></div>
+        <div data-hf-id="hf-tnbh" class="window-heading"><h2 data-hf-id="hf-ihgd">Friday crew</h2><div data-hf-id="hf-5s3u" class="avatars"><span data-hf-id="hf-2xht" class="avatar">A</span><span data-hf-id="hf-4x0y" class="avatar">L</span><span data-hf-id="hf-xd7f" class="avatar">S</span></div></div>
+        <div data-hf-id="hf-5rmk" class="tabs"><span data-hf-id="hf-q3ns" class="tab selected">To watch &nbsp;3</span><span data-hf-id="hf-cl32" class="tab">Watched together &nbsp;0</span></div>
+        <div data-hf-id="hf-6qwo" class="poster-grid">
+          <div data-hf-id="hf-nl9w" id="lists-card-one">
+            <div data-hf-id="hf-8vcz" class="poster orbit"><div data-hf-id="hf-568o" class="star"></div><div data-hf-id="hf-0w2e" class="planet"></div><div data-hf-id="hf-0qcu" class="ring"></div><div data-hf-id="hf-o42m" class="poster-title">ORBIT<br data-hf-id="hf-sldv">CLUB<span data-hf-id="hf-w4a2" class="poster-sub">A LITTLE FURTHER.</span></div></div>
+            <div data-hf-id="hf-wf5a" class="card-name">Orbit Club</div><div data-hf-id="hf-ctoa" class="card-meta">Movie &middot; Sci-fi</div>
+          </div>
+          <div data-hf-id="hf-p79a" id="lists-card-two">
+            <div data-hf-id="hf-78d9" class="poster lighthouse"><div data-hf-id="hf-64ru" class="sun"></div><div data-hf-id="hf-bxt4" class="sea" data-layout-allow-overflow></div><div data-hf-id="hf-d62v" class="tower"></div><div data-hf-id="hf-4tpm" class="roof"></div><div data-hf-id="hf-w4cr" class="poster-title">THE LAST<br data-hf-id="hf-qluq">LIGHTHOUSE<span data-hf-id="hf-an27" class="poster-sub">FIND YOUR WAY HOME.</span></div></div>
+            <div data-hf-id="hf-je55" class="card-name">The Last Lighthouse</div><div data-hf-id="hf-qqhh" class="card-meta">Movie &middot; Adventure</div>
+          </div>
+          <div data-hf-id="hf-7upk" id="lists-card-three">
+            <div data-hf-id="hf-s2kq" class="poster bloom"><div data-hf-id="hf-a4v0" class="hill" data-layout-allow-overflow></div><div data-hf-id="hf-4xmz" class="stem"></div><div data-hf-id="hf-9jy5" class="flower"></div><div data-hf-id="hf-ihdm" class="poster-title">SUNDAY<br data-hf-id="hf-q7jp">IN BLOOM<span data-hf-id="hf-wqpe" class="poster-sub">TAKE THE LONG WAY.</span></div></div>
+            <div data-hf-id="hf-xy3m" class="card-name">Sunday in Bloom</div><div data-hf-id="hf-urfo" class="card-meta">Movie &middot; Comedy</div>
+          </div>
+        </div>
+        <div data-hf-id="hf-d7to" id="lists-added" class="member-note"><span data-hf-id="hf-9gry" class="dot"></span>Everyone adds what they want to watch together.</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#lists-copy", { opacity: 0, x: -45 }, { opacity: 1, x: 0, duration: 0.525, ease: "power4.out" }, 0.09);
+    tl.fromTo("#lists-window", { opacity: 0, y: 48, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.6375, ease: "power3.out" }, 0.15);
+    tl.fromTo("#lists-card-one", { opacity: 0, y: 25 }, { opacity: 1, y: 0, duration: 0.4125, ease: "power3.out" }, 0.4125);
+    tl.fromTo("#lists-card-two", { opacity: 0, y: 25 }, { opacity: 1, y: 0, duration: 0.4125, ease: "power3.out" }, 0.6);
+    tl.fromTo("#lists-card-three", { opacity: 0, y: 25 }, { opacity: 1, y: 0, duration: 0.4125, ease: "power3.out" }, 0.7875);
+    tl.fromTo("#lists-added", { opacity: 0 }, { opacity: 1, duration: 0.375 }, 1.0875);
+    tl.to("#lists-stage", { opacity: 0, y: -12, duration: 0.1875, ease: "power2.in" }, 3.63);
+    window.__timelines.lists = tl;
+  </script>
+</template>

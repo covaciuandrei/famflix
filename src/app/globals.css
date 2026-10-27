@@ -258,6 +258,116 @@ body {
   .fade-in {
     animation: fade-in 200ms ease-out;
   }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-landing-motion] [data-reveal-pending] {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    [data-landing-motion] [data-reveal-pending]:focus-within {
+      opacity: 1;
+      transform: none;
+    }
+    .landing-preview-panel:not([hidden]) {
+      animation: landing-panel-in 420ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .landing-tab-indicator {
+      transition: transform 540ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .landing-preview-aura {
+      animation: landing-aura-in 1400ms ease-out backwards;
+    }
+    .landing-preview-panel:not([hidden]) .landing-preview-row {
+      --landing-row-delay: 160ms;
+      animation: landing-row-in 520ms cubic-bezier(0.16, 1, 0.3, 1) var(--landing-row-delay) backwards;
+    }
+    .landing-preview-panel:not([hidden]) .landing-preview-row:nth-child(2) { --landing-row-delay: 240ms; }
+    .landing-preview-panel:not([hidden]) .landing-preview-row:nth-child(3) { --landing-row-delay: 320ms; }
+    .landing-preview-panel:not([hidden]) .landing-preview-row:nth-child(4) { --landing-row-delay: 400ms; }
+    .landing-preview-panel:not([hidden]) .landing-points-value {
+      animation: landing-score-in 460ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--landing-row-delay) + 120ms) backwards;
+    }
+    .landing-preview-panel:not([hidden]) .landing-watched-label {
+      animation: landing-pop-in 360ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .landing-preview-panel:focus-visible,
+    .landing-preview-panel:has(:focus-visible),
+    .landing-preview-panel .landing-preview-row:has(:focus-visible) {
+      animation: none;
+    }
+    .landing-feature-card[data-revealed] .landing-flow-step {
+      animation: landing-pop-in 500ms cubic-bezier(0.16, 1, 0.3, 1) 140ms backwards;
+    }
+    .landing-feature-card[data-revealed] .landing-flow-step:nth-of-type(2) { animation-delay: 380ms; }
+    .landing-feature-card[data-revealed] .landing-flow-step:nth-of-type(3) { animation-delay: 620ms; }
+    .landing-feature-card[data-revealed] .landing-flow-arrow {
+      animation: landing-arrow-in 420ms ease-out 240ms backwards;
+    }
+    .landing-feature-card[data-revealed] .landing-watched-check path {
+      stroke-dasharray: 24;
+      animation: landing-check-in 380ms ease-out 620ms backwards;
+    }
+    .landing-feature-card[data-revealed] .landing-feature-score {
+      animation: landing-pop-in 500ms cubic-bezier(0.16, 1, 0.3, 1) 480ms backwards;
+    }
+    .landing-feature-card[data-revealed] .landing-progress-fill,
+    .landing-feature-details[open] .landing-progress-fill {
+      animation: landing-fill-in 900ms cubic-bezier(0.16, 1, 0.3, 1) 280ms backwards;
+    }
+    .landing-feature-details[open] .landing-memory-icon {
+      animation: landing-pop-in 650ms cubic-bezier(0.16, 1, 0.3, 1) 240ms backwards;
+    }
+    .landing-feature-details[open] .landing-details-grid > article {
+      animation: fade-in 420ms ease-out backwards;
+    }
+    .landing-feature-details[open] .landing-details-grid > article:nth-child(2) {
+      animation-delay: 80ms;
+    }
+    .landing-feature-card {
+      transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1), border-color 280ms ease;
+    }
+    .landing-feature-icon,
+    .landing-cta,
+    .landing-cta > svg,
+    .landing-actions > button {
+      transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 240ms ease;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .landing-feature-card:hover {
+        transform: translateY(-5px);
+        border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+      }
+      .landing-feature-card:hover .landing-feature-icon {
+        transform: translateY(-2px) rotate(-6deg);
+      }
+      .landing-cta:hover,
+      .landing-actions > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px -12px var(--primary);
+      }
+      .landing-cta:hover > svg {
+        transform: translateX(3px);
+      }
+    }
+    .landing-cta:active,
+    .landing-actions > button:active {
+      transform: scale(0.97);
+    }
+    @supports (interpolate-size: allow-keywords) {
+      .landing-feature-details {
+        interpolate-size: allow-keywords;
+      }
+      .landing-feature-details::details-content {
+        height: 0;
+        overflow: clip;
+        transition: height 360ms ease, content-visibility 360ms allow-discrete;
+      }
+      .landing-feature-details[open]::details-content {
+        height: auto;
+      }
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .sheet[open],
     .fade-in {
@@ -271,6 +381,40 @@ body {
     opacity: 0;
     transform: translateY(6px);
   }
+}
+
+@keyframes landing-panel-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+}
+
+@keyframes landing-row-in {
+  from { opacity: 0; transform: translateX(22px) scale(0.98); }
+}
+
+@keyframes landing-score-in {
+  from { opacity: 0; transform: translateY(90%); }
+}
+
+@keyframes landing-arrow-in {
+  from { opacity: 0; transform: translateX(-8px); }
+}
+
+@keyframes landing-pop-in {
+  from { opacity: 0; transform: translateY(5px) scale(0.86); }
+}
+
+@keyframes landing-fill-in {
+  from { transform: scaleX(0); }
+}
+
+@keyframes landing-check-in {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes landing-aura-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes sheet-up {

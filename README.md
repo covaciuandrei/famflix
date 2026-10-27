@@ -46,6 +46,24 @@ database checks and 40+ browser scenarios on every push, and a free-tier deploym
 
 Every feature is described in the [feature guide](docs/FEATURES.md).
 
+The public landing page introduces personal lists, family lists and movie nights
+with an interactive, fictional-data preview and a visual feature guide. The
+movie-night preview shows four ranked titles with vote breakdowns and points.
+The preview stays in the browser and never saves anything to an account.
+Core features stay visible; **Show more features** expands series progress and
+watch-history details inline on desktop and phones, even without JavaScript.
+Motion is choreographed: the hero reveals line by line, the preview arrives as
+cards slide into place, a selection pill moves between tabs, and feature
+illustrations animate their checks, scores and progress bars. These are short,
+one-time or interaction-triggered sequences, not continuous loops or automatic
+tab changes. Reduced-motion preferences are respected, and content remains
+available when motion APIs or JavaScript are unavailable.
+It also has an optional **Watch intro**: a self-hosted,
+25-second landscape video covering personal lists, adding and watching titles,
+and family movie nights, with English narration, captions and a transcript.
+It only loads and starts sound after a click. See the
+[editable video source and rendering guide](video/intro/README.md).
+
 ## Architecture
 
 ```mermaid

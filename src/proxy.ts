@@ -12,6 +12,6 @@ export const config = {
      * Match all request paths except static assets and image files so the
      * session cookie stays fresh while avoiding unnecessary work.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|vtt)$).*)",
   ],
 };

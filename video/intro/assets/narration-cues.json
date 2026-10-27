@@ -1,0 +1,85 @@
+{
+  "sourceHash": "64dba8a9c19c01efd6ba391736ad7a029a5bc9b12e8cc609ced72e61c15e127f",
+  "voice": "af_bella",
+  "precision": "fp32",
+  "takeCount": 1,
+  "spokenBrand": "Famflix",
+  "speechDuration": 23.4,
+  "wordsPerMinute": 194.9,
+  "recognitionMismatch": 0.0641,
+  "duration": 25,
+  "cues": [
+    {
+      "id": "caption-1",
+      "start": 0.12,
+      "end": 3.24,
+      "text": "Meet FamFlix, a home for everything you want to watch."
+    },
+    {
+      "id": "caption-2",
+      "start": 3.82,
+      "end": 4.86,
+      "text": "Find movies and series,"
+    },
+    {
+      "id": "caption-3",
+      "start": 4.92,
+      "end": 6,
+      "text": "save them to your own list,"
+    },
+    {
+      "id": "caption-4",
+      "start": 6.04,
+      "end": 7.48,
+      "text": "and mark them watched when you're done."
+    },
+    {
+      "id": "caption-5",
+      "start": 7.86,
+      "end": 10.06,
+      "text": "You can also share a list with family and friends,"
+    },
+    {
+      "id": "caption-6",
+      "start": 10.06,
+      "end": 12.06,
+      "text": "so everyone's ideas are in one place."
+    },
+    {
+      "id": "caption-7",
+      "start": 12.5,
+      "end": 14.28,
+      "text": "For movie night, swipe and vote together"
+    },
+    {
+      "id": "caption-8",
+      "start": 14.28,
+      "end": 15.12,
+      "text": "to find a favourite."
+    },
+    {
+      "id": "caption-9",
+      "start": 15.64,
+      "end": 16.82,
+      "text": "Afterwards, add your ratings"
+    },
+    {
+      "id": "caption-10",
+      "start": 16.82,
+      "end": 18.86,
+      "text": "and keep track of who watched with you."
+    },
+    {
+      "id": "caption-11",
+      "start": 19.08,
+      "end": 21.42,
+      "text": "FamFlix. Less choosing. More watching."
+    },
+    {
+      "id": "caption-12",
+      "start": 21.94,
+      "end": 23.08,
+      "text": "Get started for free."
+    }
+  ]
+}

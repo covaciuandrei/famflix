@@ -1,0 +1,9 @@
+/node_modules/
+/.hyperframes/
+/.thumbnails/
+/.voice/
+/assets/geist.woff2
+/assets/gsap.min.js
+/assets/score.wav
+/assets/audio-levels.js
+/render.mp4
