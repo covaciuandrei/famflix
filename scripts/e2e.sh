@@ -33,5 +33,4 @@ export NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY"
 export SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
 export NEXT_DIST_DIR=.next-e2e
 npx next build
-# supabase-js (used by the tests to create users) needs WebSocket, which Node 20 only has behind this flag.
-NODE_OPTIONS="--experimental-websocket" npx playwright test "$@"
+npx playwright test "$@"

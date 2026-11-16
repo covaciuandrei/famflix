@@ -313,7 +313,7 @@ Names and notes are at most 250 characters, and each family's feed keeps its lat
 
 ## Getting started
 
-You need Node.js 20 or newer, a free [Supabase](https://supabase.com) project, and a free
+You need Node.js 22 (22.23.4, pinned in [`.nvmrc`](.nvmrc)), a free [Supabase](https://supabase.com) project, and a free
 [TMDB](https://www.themoviedb.org) account with its **API Read Access Token** (the long one, starting with `eyJ`).
 
 ### 1. Install and configure
@@ -321,9 +321,15 @@ You need Node.js 20 or newer, a free [Supabase](https://supabase.com) project, a
 ```bash
 git clone https://github.com/covaciuandrei/famflix.git
 cd famflix
-npm install
+nvm install
+nvm use
+npm ci
 cp .env.local.example .env.local
 ```
+
+The `nvm` commands use [Node Version Manager](https://github.com/nvm-sh/nvm).
+If you use another version manager, select the version in `.nvmrc` before installing dependencies.
+CI reads the same file; Azure's build integration selects Node 22 from the `package.json` engine constraint.
 
 Fill in `.env.local`:
 

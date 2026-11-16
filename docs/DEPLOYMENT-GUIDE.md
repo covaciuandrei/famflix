@@ -286,6 +286,8 @@ are different accounts: signing in to one does not sign in to the other.
 Work from the repository root: the folder containing `package.json`.
 
 ```bash
+nvm install
+nvm use
 node --version
 npm --version
 npm ci
@@ -295,13 +297,20 @@ npm ci
 reproducible builds; it replaces the existing `node_modules` dependency tree.
 `npm install` is the usual command when intentionally changing dependencies.
 
-The project's original deployment pins Node to `20.x` in
-[`package.json`](../package.json), mirrored in
-[`package-lock.json`](../package-lock.json). This helped align builds with the
-hosting integration at the time. A pin is **not** a permanent security/support
-guarantee: before reproducing this later, check the Node release lifecycle and
-Azure's supported Next.js runtimes. Upgrade in a tested change rather than
-blindly copying an old runtime or assuming the latest one is supported.
+The original October 8 deployment used Node `20.x`. The application now targets
+Node `22.x` in [`package.json`](../package.json), mirrored in
+[`package-lock.json`](../package-lock.json), and pins Node **22.23.4** in
+[`.nvmrc`](../.nvmrc) for local development and CI. The `nvm` commands require
+[Node Version Manager](https://github.com/nvm-sh/nvm); another version manager
+can select the same version instead.
+
+Azure's build integration reads `engines.node` independently of the GitHub
+Actions test job. Its supported Node 22 patch may differ from the local/CI pin.
+After deploying this migration, check the deployment logs and deployed server
+runtime; changing repository configuration does not update an already-running
+deployment. Before future upgrades, check the Node release lifecycle and
+Azure's supported Next.js runtimes rather than assuming a newer version is
+supported.
 
 Create local configuration:
 
@@ -626,6 +635,7 @@ YAML is a structured configuration format where indentation matters.
 | `needs: test` | The deploy job only runs when the tests pass |
 | `runs-on: ubuntu-latest` | GitHub supplies a temporary Linux machine for the job |
 | `actions/checkout@v4` | Downloads the repository files onto that machine |
+| `actions/setup-node@v4`, `node-version-file: .nvmrc` | Runs the test job on the pinned Node 22 version |
 | `Azure/static-web-apps-deploy@v1` | Azure's action builds/packages/uploads the supported app |
 | `action: upload` | Publish an application |
 | `app_location: /` | App source is at the repository root |
@@ -1245,7 +1255,8 @@ features or migrations.
 
 - [`package.json`](../package.json) and
   [`package-lock.json`](../package-lock.json): recorded the original Node `20.x`
-  engine constraint.
+  engine constraint; the October 28 migration changes it to `22.x`, aligns Node
+  types with version 22, and adds [`.nvmrc`](../.nvmrc) for the local/CI patch pin.
 - [`.github/workflows/azure-static-web-apps.yml`](../.github/workflows/azure-static-web-apps.yml):
   production/preview build and deployment.
 - [`infra/`](../infra/): Bicep resource definitions and parameters.
