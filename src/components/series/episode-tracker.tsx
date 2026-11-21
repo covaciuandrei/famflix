@@ -301,7 +301,7 @@ export function EpisodeTracker({
         )}
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="episode-progress-panel rounded-xl border border-border bg-card p-4">
         <ProgressBar value={progress.watched} max={progress.aired} label="Episodes watched" />
         <p className="mt-2 text-sm text-muted-foreground">
           {progress.watched} of {progress.aired} aired episodes watched
@@ -322,7 +322,7 @@ export function EpisodeTracker({
                 Mark rest of season {upNext.s} watched
               </Button>
             )}
-            <span className="text-sm text-muted-foreground">
+            <span className="episode-next-title text-sm text-muted-foreground">
               Next: {episodeLabel(upNext.s, upNext.e)}
               {nextName ? ` · ${nextName}` : ""}
             </span>

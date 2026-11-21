@@ -38,7 +38,7 @@ export default async function AppLayout({
         <WelcomeTour name={name} hasFamily={groups.length > 0} />
         <NightInvite />
         <PlanInvite />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-24 pt-6 sm:px-6 sm:pb-12">
+        <main className="app-content mx-auto w-full max-w-5xl flex-1 px-4 pb-24 pt-6 sm:px-6 sm:pb-12">
           <WatchedPromptProvider>{children}</WatchedPromptProvider>
         </main>
       </div>

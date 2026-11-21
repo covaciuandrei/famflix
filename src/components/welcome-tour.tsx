@@ -147,7 +147,7 @@ export function WelcomeTour({
       }}
       className="m-auto w-[min(26rem,calc(100%-2rem))] overflow-hidden rounded-2xl border border-border bg-card p-0 text-foreground shadow-xl backdrop:bg-black/70"
     >
-      <div className="relative bg-[radial-gradient(80%_100%_at_50%_0%,rgba(124,92,255,0.35),transparent)] px-6 pb-2 pt-8">
+      <div className="feature-dialog-header relative bg-[radial-gradient(80%_100%_at_50%_0%,rgba(124,92,255,0.35),transparent)] px-6 pb-2 pt-8">
         <button
           type="button"
           onClick={close}

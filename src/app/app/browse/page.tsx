@@ -85,7 +85,7 @@ export default async function BrowsePage({
           <Link
             href="/app/browse/discover"
             title="Swipe through titles that fit your mood"
-            className={buttonVariants()}
+            className={buttonVariants({ className: "browse-discover-link" })}
           >
             <Layers className="size-4" />
             Discover

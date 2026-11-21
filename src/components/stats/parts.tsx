@@ -46,13 +46,13 @@ export function YearPicker({
 
 /** The big numbers at the top: put StatTile inside. */
 export function StatTiles({ children }: { children: ReactNode }) {
-  return <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">{children}</dl>;
+  return <dl className="stat-summary grid grid-cols-2 gap-3 sm:grid-cols-4">{children}</dl>;
 }
 
 /** A number and what it counts (the label comes first for people who hear it read out, and shows below the number). */
 export function StatTile({ value, label, hint }: { value: string | number; label: string; hint?: string }) {
   return (
-    <div className="flex flex-col-reverse justify-end rounded-xl border border-border bg-card p-4">
+    <div className="stat-total flex flex-col-reverse justify-end rounded-xl border border-border bg-card p-4">
       <dt className="text-sm text-muted-foreground">
         {label}
         {hint && <span className="block text-xs">{hint}</span>}
@@ -128,7 +128,8 @@ export function BarChart({ bars, one, many }: { bars: ChartBar[]; one: string; m
           <div aria-hidden className="flex h-24 w-full items-end border-b border-border">
             {bar.value > 0 && (
               <div
-                className="w-full rounded-t bg-primary"
+                className="stat-chart-bar w-full rounded-t bg-primary"
+                data-peak={bar.value === max ? "" : undefined}
                 style={{ height: `${Math.max(6, Math.round((bar.value / max) * 100))}%` }}
               />
             )}

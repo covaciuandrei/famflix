@@ -16,7 +16,7 @@ function rowClassName(label: string | undefined) {
 
 function chipClassName(active: boolean) {
   return cn(
-    "shrink-0 whitespace-nowrap rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground",
+    "category-chip shrink-0 whitespace-nowrap rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground",
     active && "border-primary bg-primary/15 text-foreground",
   );
 }

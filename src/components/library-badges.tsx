@@ -4,7 +4,7 @@ import type { LibraryEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const badge =
-  "pointer-events-auto max-w-full truncate rounded bg-primary px-1.5 py-0.5 text-[10px] leading-3 font-medium text-primary-foreground";
+  "library-badge pointer-events-auto max-w-full truncate rounded bg-primary px-1.5 py-0.5 text-[10px] leading-3 font-medium text-primary-foreground";
 
 /** Badges for the lists that have a title, in the top-right corner of a `relative` poster wrapper. */
 export function ListBadges({ lists }: { lists?: LibraryEntry["lists"] }) {

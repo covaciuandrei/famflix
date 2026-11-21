@@ -42,7 +42,7 @@ export function MediaCard({
       <div className="min-w-0">
         <Link
           href={href}
-          className="line-clamp-1 text-sm font-medium hover:underline"
+          className="media-card-title line-clamp-1 text-sm font-medium hover:underline"
         >
           {item.title}
         </Link>
@@ -58,7 +58,7 @@ export function MediaCard({
         title={item.title}
         targets={targets}
         alreadyOn={library?.lists}
-        className="w-full"
+        className="media-card-add w-full"
       />
     </div>
   );

@@ -115,7 +115,7 @@ export default async function LandingPage({
           <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
             <div data-reveal="0" className="mb-9 flex flex-wrap items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">From &ldquo;we should watch this&rdquo; to movie night</p>
+                <p className="landing-kicker text-xs font-semibold tracking-[0.18em] text-primary uppercase">From &ldquo;we should watch this&rdquo; to movie night</p>
                 <h2 id="how-heading" className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">A good night starts with a good list.</h2>
               </div>
               <a href="#features" className="flex items-center gap-2 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">See what&apos;s inside <ArrowDown className="size-3.5" aria-hidden /></a>
@@ -138,7 +138,7 @@ export default async function LandingPage({
 
         <section id="features" aria-labelledby="features-heading" className="mx-auto w-full max-w-6xl scroll-mt-8 px-5 py-16 sm:px-8 sm:py-24">
           <div data-reveal="0" className="mb-9 max-w-2xl">
-            <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">A little more than &ldquo;watch it later&rdquo;</p>
+            <p className="landing-kicker text-xs font-semibold tracking-[0.18em] text-primary uppercase">A little more than &ldquo;watch it later&rdquo;</p>
             <h2 id="features-heading" className="mt-3 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">For the next pick.<br />And all the good ones after it.</h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">From a quiet episode on your own to a full sofa on Friday. FamFlix keeps the choosing, watching and remembering together.</p>
           </div>
@@ -163,7 +163,7 @@ export default async function LandingPage({
               <div className="mt-7 rounded-2xl border border-primary/20 bg-card p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <span className="text-[10px] font-semibold tracking-widest text-primary uppercase">Example movie-night result</span>
+                    <span className="landing-kicker text-[10px] font-semibold tracking-widest text-primary uppercase">Example movie-night result</span>
                     <p className="mt-1.5 text-sm font-semibold">Orbit Club</p>
                   </div>
                   <span className="landing-feature-score flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary"><Heart className="size-3.5" aria-hidden /> 5 pts</span>

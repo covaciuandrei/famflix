@@ -76,7 +76,7 @@ function Row({
   const groups = groupVotes(row.votes, meId);
   const watchedBefore = (card.watched_before ?? 0) > 0;
   return (
-    <li className="rounded-xl border border-border bg-card">
+    <li data-leading={row.rank === 1 ? "" : undefined} className="leaderboard-row rounded-xl border border-border bg-card">
       {/* The title button stretches over the whole header, so a tap anywhere on it opens the row. */}
       <div className="relative flex items-start gap-3 rounded-xl p-2.5 hover:bg-muted/40">
         <span className="mt-1 w-5 shrink-0 text-center text-sm font-semibold text-muted-foreground sm:w-7">
@@ -94,7 +94,7 @@ function Row({
             >
               {card.title}
             </button>
-            <span className="pointer-events-none shrink-0 rounded-full bg-primary/15 px-2.5 py-0.5 text-sm font-semibold text-primary">
+            <span className="leaderboard-points pointer-events-none shrink-0 rounded-full bg-primary/15 px-2.5 py-0.5 text-sm font-semibold text-primary">
               {row.points} {Math.abs(row.points) === 1 ? "pt" : "pts"}
             </span>
           </div>

@@ -99,7 +99,7 @@ export function ListItemCard({
             <div className="min-w-0">
               <Link
                 href={detailHref}
-                className="line-clamp-1 font-semibold hover:underline"
+                className="watchlist-title line-clamp-1 font-semibold hover:underline"
               >
                 {media.title}
               </Link>

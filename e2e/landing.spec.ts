@@ -321,10 +321,13 @@ test("the design preview switches in place, persists per tab, and leaves the the
   const panel = page.getByRole("tabpanel", { name: "Movie night" });
   const initialUrl = page.url();
   const initialState = await panel.textContent();
+  const pageSurface = () => page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+  const originalSurface = await pageSurface();
   await v2.focus();
   await v2.press("Enter");
   await expect(v2).toBeFocused();
   await expect(v2).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(pageSurface).not.toBe(originalSurface);
   await expect(page).toHaveURL(initialUrl);
   await expect(panel).toBeVisible();
   expect(await panel.textContent()).toBe(initialState);

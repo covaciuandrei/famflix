@@ -54,3 +54,215 @@
 [data-ui-version] .app-nav-header {
   top: var(--ui-preview-height);
 }
+
+/* Quiet cinema: reserve strong color for art, the current choice, and the next action. */
+:root[data-ui-version="v2"] {
+  --background: #101014;
+  --foreground: #f3edf0;
+  --card: #19181d;
+  --card-foreground: var(--foreground);
+  --muted: #242229;
+  --muted-foreground: #b7acb8;
+  --border: #38323c;
+  --input: #242229;
+  --primary: #bca5ff;
+  --primary-foreground: #1c142a;
+  --accent: var(--muted);
+  --accent-foreground: var(--foreground);
+  --ring: var(--primary);
+  --destructive: #ff9b92;
+  --v2-destructive-foreground: #2b1115;
+}
+
+:root[data-ui-version="v2"][data-theme="light"] {
+  --background: #f7f4ef;
+  --foreground: #25212a;
+  --card: #fffdf9;
+  --muted: #efeae4;
+  --muted-foreground: #5d5360;
+  --border: #dbd2d8;
+  --input: #f8f4ef;
+  --primary: #5133b5;
+  --primary-foreground: #fff;
+  --destructive: #b42938;
+  --v2-destructive-foreground: #fff;
+}
+
+[data-ui-version="v2"] .app-nav-header,
+[data-ui-version="v2"] .app-nav-links.fixed {
+  background: var(--background);
+  backdrop-filter: none;
+}
+
+[data-ui-version="v2"] .app-nav-links > a[aria-current="page"] {
+  background: var(--muted);
+  color: var(--foreground);
+  box-shadow: inset 0 -2px var(--primary);
+}
+
+[data-ui-version="v2"] .app-content h1 {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+[data-ui-version="v2"] .ui-action.rounded-md {
+  border-radius: 0.625rem;
+}
+
+[data-ui-version="v2"] .ui-action.bg-destructive {
+  color: var(--v2-destructive-foreground);
+}
+
+[data-ui-version="v2"] [role="switch"][aria-checked="true"] .list-sharing-thumb {
+  background: var(--primary-foreground);
+}
+
+[data-ui-version="v2"] .category-chip {
+  border-radius: 0.5rem;
+}
+
+[data-ui-version="v2"] .category-chip:is([aria-current="page"], [aria-pressed="true"]) {
+  border-color: var(--primary);
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+[data-ui-version="v2"] .feature-dialog-header {
+  background-image: none;
+}
+
+/* Keep the real preview and its reveal sequence; remove the decorative glow around it. */
+[data-ui-version="v2"] [data-hero-part="eyebrow"] {
+  margin-bottom: 1rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-foreground);
+}
+
+[data-ui-version="v2"] [data-hero-part="eyebrow"] svg,
+[data-ui-version="v2"] .landing-preview-aura {
+  display: none;
+}
+
+[data-ui-version="v2"] #hero-heading {
+  font-weight: 650;
+}
+
+[data-ui-version="v2"] [data-hero-line],
+[data-ui-version="v2"] [data-hero-part="trust"] svg {
+  color: inherit;
+}
+
+[data-ui-version="v2"] .landing-kicker {
+  font-size: 0.75rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--muted-foreground);
+}
+
+[data-ui-version="v2"] .landing-preview-frame {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+[data-ui-version="v2"] .landing-result:first-child,
+[data-ui-version="v2"] .leaderboard-row[data-leading] {
+  border-inline-start-color: var(--primary);
+  box-shadow: inset 1px 0 var(--primary);
+}
+
+[data-ui-version="v2"] .landing-result-votes,
+[data-ui-version="v2"] .landing-points-value {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-ui-version="v2"] .landing-feature-card:hover,
+[data-ui-version="v2"] .landing-feature-card:hover .landing-feature-icon,
+[data-ui-version="v2"] .landing-cta:hover,
+[data-ui-version="v2"] .landing-actions > button:hover {
+  transform: none;
+}
+
+[data-ui-version="v2"] .landing-cta:hover:not(:focus-visible),
+[data-ui-version="v2"] .landing-actions > button:hover:not(:focus-visible) {
+  box-shadow: none;
+}
+
+[data-ui-version="v2"] :is(.media-card-add, .browse-discover-link).bg-primary {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+[data-ui-version="v2"] :is(.media-card-add, .browse-discover-link).bg-primary:hover {
+  border-color: var(--primary);
+  background: var(--muted);
+}
+
+[data-ui-version="v2"] .media-card-title,
+[data-ui-version="v2"] .watchlist-title {
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+[data-ui-version="v2"] .media-card-title {
+  min-height: 2lh;
+}
+
+[data-ui-version="v2"] .library-badge {
+  background: #242229;
+  color: #f3edf0;
+}
+
+[data-ui-version="v2"] .leaderboard-points {
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-ui-version="v2"] .leaderboard-row[data-leading] .leaderboard-points {
+  background: var(--muted);
+  color: var(--primary);
+}
+
+[data-ui-version="v2"] .episode-progress-panel {
+  border-inline-start-color: var(--primary);
+}
+
+[data-ui-version="v2"] .episode-progress-panel .ui-action {
+  min-height: 2.5rem;
+  height: auto;
+  white-space: normal;
+}
+
+[data-ui-version="v2"] .episode-next-title {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+[data-ui-version="v2"] .stat-summary {
+  gap: 1px;
+  padding: 1px;
+  overflow: hidden;
+  border-radius: 0.875rem;
+  background: var(--border);
+}
+
+[data-ui-version="v2"] .stat-total {
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 0;
+}
+
+[data-ui-version="v2"] .stat-total dd {
+  font-weight: 600;
+}
+
+[data-ui-version="v2"] .stat-chart-bar:not([data-peak]) {
+  background: color-mix(in srgb, var(--primary) 30%, var(--muted-foreground));
+}

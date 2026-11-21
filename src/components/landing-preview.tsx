@@ -101,13 +101,13 @@ export function LandingPreview() {
   return (
     <div data-reveal="1" data-preview-shell className="relative min-w-0">
       <div aria-hidden className="landing-preview-aura pointer-events-none absolute -inset-8 rounded-full bg-primary/10 blur-3xl" />
-      <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-card shadow-[0_24px_100px_-40px_rgba(124,92,255,0.5)]">
+      <div className="landing-preview-frame relative overflow-hidden rounded-3xl border border-primary/20 bg-card shadow-[0_24px_100px_-40px_rgba(124,92,255,0.5)]">
         <div className="flex items-center justify-between border-b border-border px-5 py-4 sm:px-6">
           <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <span className="size-1.5 rounded-full bg-like" aria-hidden />
             A little look inside
           </span>
-          <span className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">FamFlix / preview</span>
+          <span className="landing-kicker text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">FamFlix / preview</span>
         </div>
         <div role="tablist" aria-label="Explore FamFlix" className="relative isolate mx-4 mt-4 grid grid-cols-3 rounded-xl bg-muted p-1 sm:mx-6 sm:mt-5">
           <span
@@ -167,7 +167,7 @@ export function LandingPreview() {
                       <div className="h-12 w-9 shrink-0"><Poster artwork={result.artwork} /></div>
                       <div className="min-w-0 flex-1">
                         <h3 className="text-xs font-medium leading-snug">{result.title}</h3>
-                        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{result.votes}</p>
+                        <p className="landing-result-votes mt-1 text-[10px] leading-relaxed text-muted-foreground">{result.votes}</p>
                       </div>
                       <span className={cn("overflow-hidden shrink-0 rounded-full px-2 py-1 text-[10px] font-medium", index === 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                         <span className="landing-points-value block">{result.points} {Math.abs(result.points) === 1 ? "point" : "points"}</span>

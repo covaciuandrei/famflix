@@ -85,7 +85,7 @@ export function NightInvite() {
       className="m-auto w-[min(24rem,calc(100%-2rem))] overflow-hidden rounded-2xl border border-border bg-card p-0 text-foreground shadow-xl outline-none backdrop:bg-black/70"
     >
       {night && (
-        <div className="bg-[radial-gradient(80%_100%_at_50%_0%,rgba(124,92,255,0.35),transparent)] px-6 pt-8 pb-6">
+        <div className="feature-dialog-header bg-[radial-gradient(80%_100%_at_50%_0%,rgba(124,92,255,0.35),transparent)] px-6 pt-8 pb-6">
           <div className="fade-in flex flex-col items-center gap-4 text-center">
             <span className="flex size-16 items-center justify-center rounded-2xl bg-primary/20 text-primary">
               <Popcorn className="size-8" />
