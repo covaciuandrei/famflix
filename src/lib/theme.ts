@@ -1,6 +1,8 @@
 // Colour theme: dark (the default design), light, or follow the device ("system").
 // The choice is saved per device in localStorage; <html data-theme> holds the resolved theme.
 
+import { DEFAULT_UI_VERSION, readUiVersion } from "@/lib/ui-preview";
+
 export type ThemePreference = "dark" | "light" | "system";
 
 export const THEME_STORAGE_KEY = "famflix:theme";
@@ -8,13 +10,16 @@ export const THEME_STORAGE_KEY = "famflix:theme";
 export const THEME_CHANGE_EVENT = "famflix:theme-change";
 
 // Browser UI colour (<meta name="theme-color">) per theme: the page background.
-const THEME_COLORS = { dark: "#0b0b0f", light: "#f6f6f9" } as const;
+export const THEME_COLORS = {
+  original: { dark: "#0b0b0f", light: "#f6f6f9" },
+  v2: { dark: "#101014", light: "#f7f4ef" },
+} as const;
 const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
 // Runs in <head> before the first paint so a saved light theme never flashes dark. It also adds the
 // theme-color meta: React doesn't render that tag, so hydration and navigations leave it alone.
 // Must match readThemePreference() + applyTheme() below.
-export const THEME_SCRIPT = `(function(){var t="dark";try{var p=localStorage.getItem("${THEME_STORAGE_KEY}");if(p==="light"||(p==="system"&&matchMedia("${LIGHT_QUERY}").matches))t="light"}catch(e){}document.documentElement.dataset.theme=t;var m=document.createElement("meta");m.name="theme-color";m.content=t==="light"?"${THEME_COLORS.light}":"${THEME_COLORS.dark}";document.head.appendChild(m)})()`;
+export const THEME_SCRIPT = `(function(){var t="dark";try{var p=localStorage.getItem("${THEME_STORAGE_KEY}");if(p==="light"||(p==="system"&&matchMedia("${LIGHT_QUERY}").matches))t="light"}catch(e){}var d=document.documentElement.dataset;d.theme=t;var v=d.uiVersion==="original"?"original":"${DEFAULT_UI_VERSION}";var m=document.createElement("meta");m.name="theme-color";m.content=${JSON.stringify(THEME_COLORS)}[v][t];document.head.appendChild(m)})()`;
 
 export function readThemePreference(): ThemePreference {
   try {
@@ -38,7 +43,7 @@ export function applyTheme(preference: ThemePreference) {
   document.documentElement.dataset.theme = theme;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", THEME_COLORS[theme]);
+    ?.setAttribute("content", THEME_COLORS[readUiVersion()][theme]);
 }
 
 export function setThemePreference(preference: ThemePreference) {

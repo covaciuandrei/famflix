@@ -300,12 +300,13 @@ test("the hero stays readable in two lines from small phones to desktop", async 
   }
 });
 
-test("the design preview is off by default even with a saved V2 preference", async ({ page }) => {
+test("Quiet cinema is the default without the preview flag, even with Original saved", async ({ page }) => {
   test.skip(process.env.FAMFLIX_UI_PREVIEW === "1", "Run without the preview flag");
-  await page.addInitScript(() => sessionStorage.setItem("famflix:ui-version", "v2"));
+  await page.addInitScript(() => sessionStorage.setItem("famflix:ui-version", "original"));
   await page.goto("/");
   await expect(page.getByRole("group", { name: "Compare designs" })).toHaveCount(0);
-  await expect(page.locator("html[data-ui-version]")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-ui-version", "v2");
+  await expect(page.locator(".landing-preview-aura")).toBeHidden();
 });
 
 test("the design preview switches in place, persists per tab, and leaves the theme alone", async ({ page, context }) => {
@@ -315,32 +316,39 @@ test("the design preview switches in place, persists per tab, and leaves the the
   const mode = page.getByRole("group", { name: "Compare designs" });
   const original = mode.getByRole("button", { name: "Original" });
   const v2 = mode.getByRole("button", { name: "V2" });
-  await expect(original).toHaveAttribute("aria-pressed", "true");
+  await expect(v2).toHaveAttribute("aria-pressed", "true");
   const movieNight = page.getByRole("tab", { name: "Movie night", exact: true });
   await movieNight.click();
   const panel = page.getByRole("tabpanel", { name: "Movie night" });
   const initialUrl = page.url();
   const initialState = await panel.textContent();
   const pageSurface = () => page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
-  const originalSurface = await pageSurface();
-  await v2.focus();
-  await v2.press("Enter");
-  await expect(v2).toBeFocused();
-  await expect(v2).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(pageSurface).not.toBe(originalSurface);
+  const v2Surface = await pageSurface();
+  await original.focus();
+  await original.press("Enter");
+  await expect(original).toBeFocused();
+  await expect(original).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(pageSurface).not.toBe(v2Surface);
   await expect(page).toHaveURL(initialUrl);
   await expect(panel).toBeVisible();
   expect(await panel.textContent()).toBe(initialState);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  const expectBrowserColor = async () => {
+    const surface = await page.locator("html").evaluate((html) => getComputedStyle(html).getPropertyValue("--background").trim());
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", surface);
+  };
+  await expectBrowserColor();
 
   await page.getByRole("link", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.reload();
-  await expect(v2).toHaveAttribute("aria-pressed", "true");
+  await expect(original).toHaveAttribute("aria-pressed", "true");
+  await expectBrowserColor();
   const otherTab = await context.newPage();
   await otherTab.goto("/");
-  await expect(otherTab.getByRole("button", { name: "Original", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(v2).toHaveAttribute("aria-pressed", "true");
-  await original.click();
-  await expect(page.locator("html")).toHaveAttribute("data-ui-version", "original");
+  await expect(otherTab.getByRole("button", { name: "V2", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(original).toHaveAttribute("aria-pressed", "true");
+  await v2.click();
+  await expect(page.locator("html")).toHaveAttribute("data-ui-version", "v2");
+  await expectBrowserColor();
 });

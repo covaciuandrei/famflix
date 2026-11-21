@@ -11,6 +11,7 @@ import {
   setThemePreference,
   type ThemePreference,
 } from "@/lib/theme";
+import { UI_VERSION_CHANGE } from "@/lib/ui-preview";
 import { cn } from "@/lib/utils";
 
 /** Keeps the page in step with the saved theme: device changes (System), other tabs, and the browser bar colour. */
@@ -24,9 +25,11 @@ export function ThemeWatcher() {
     sync();
     media.addEventListener("change", sync);
     window.addEventListener("storage", onStorage);
+    window.addEventListener(UI_VERSION_CHANGE, sync);
     return () => {
       media.removeEventListener("change", sync);
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener(UI_VERSION_CHANGE, sync);
     };
   }, []);
   return null;

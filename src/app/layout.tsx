@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeWatcher } from "@/components/theme";
 import { UiPreviewSwitch } from "@/components/ui-preview-switch";
 import { THEME_SCRIPT } from "@/lib/theme";
-import { UI_PREVIEW_SCRIPT } from "@/lib/ui-preview";
+import { DEFAULT_UI_VERSION, UI_PREVIEW_SCRIPT } from "@/lib/ui-preview";
 import "./globals.css";
 import "./ui-preview.css";
 
@@ -36,13 +36,14 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      data-ui-version={uiPreview ? "original" : undefined}
+      data-ui-version={DEFAULT_UI_VERSION}
+      data-ui-preview={uiPreview ? "" : undefined}
       // Theme and preview preferences are applied before React hydrates.
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         {uiPreview && <script dangerouslySetInnerHTML={{ __html: UI_PREVIEW_SCRIPT }} />}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="bg-background text-foreground min-h-full flex flex-col">
         <ThemeWatcher />

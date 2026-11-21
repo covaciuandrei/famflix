@@ -50,7 +50,7 @@ export function ListSharing({ shared }: { shared: boolean }) {
         >
           <span
             className={cn(
-              "list-sharing-thumb pointer-events-none grid size-5 place-items-center rounded-full bg-white shadow transition-transform",
+              "pointer-events-none grid size-5 place-items-center rounded-full bg-white shadow transition-transform",
               on ? "translate-x-[1.375rem]" : "translate-x-0.5",
             )}
           >

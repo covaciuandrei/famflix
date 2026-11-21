@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { readUiVersion, setUiVersion, UI_VERSION_CHANGE } from "@/lib/ui-preview";
+import { DEFAULT_UI_VERSION, readUiVersion, setUiVersion, UI_VERSION_CHANGE } from "@/lib/ui-preview";
 
 function subscribe(onChange: () => void) {
   window.addEventListener(UI_VERSION_CHANGE, onChange);
@@ -10,7 +10,7 @@ function subscribe(onChange: () => void) {
 }
 
 export function UiPreviewSwitch() {
-  const version = useSyncExternalStore(subscribe, readUiVersion, () => "original");
+  const version = useSyncExternalStore(subscribe, readUiVersion, () => DEFAULT_UI_VERSION);
 
   return (
     <div role="group" aria-label="Compare designs" className="ui-preview-switch">
