@@ -58,7 +58,7 @@ export function MediaCard({
         title={item.title}
         targets={targets}
         alreadyOn={library?.lists}
-        className="media-card-add w-full"
+        className="w-full"
       />
     </div>
   );

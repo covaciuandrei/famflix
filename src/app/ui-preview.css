@@ -197,13 +197,13 @@
   box-shadow: none;
 }
 
-[data-ui-version="v2"] :is(.media-card-add, .browse-discover-link).bg-primary {
+[data-ui-version="v2"] .browse-discover-link.bg-primary {
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--foreground);
 }
 
-[data-ui-version="v2"] :is(.media-card-add, .browse-discover-link).bg-primary:hover {
+[data-ui-version="v2"] .browse-discover-link.bg-primary:hover {
   border-color: var(--ring);
   background: var(--muted);
 }
