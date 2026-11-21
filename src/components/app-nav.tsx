@@ -91,7 +91,7 @@ export function AppNav({
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
+      <header className="app-nav-header sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link href={APP_HOME} className="flex items-center gap-2 font-semibold">
             <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary">

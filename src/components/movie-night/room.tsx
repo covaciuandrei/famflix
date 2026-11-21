@@ -55,10 +55,10 @@ const POLL_MS = 6000;
 // The swipe stack's height: what is left of the screen after the header, the room's title row, the counter and the vote
 // buttons (the title row is a little shorter on a phone while swiping, see NightHeader's `compact`).
 const ROOM_STACK_HEIGHT =
-  "h-[clamp(18rem,calc(100dvh-20.3rem),38rem)] sm:h-[clamp(22rem,calc(100dvh-21.4rem),38rem)]";
+  "h-[clamp(18rem,calc(100dvh-20.3rem-var(--ui-preview-height,0px)),38rem)] sm:h-[clamp(22rem,calc(100dvh-21.4rem-var(--ui-preview-height,0px)),38rem)]";
 // A guest's page has no bottom bar on a phone, which gives the stack that much more room.
 const GUEST_STACK_HEIGHT =
-  "h-[clamp(18rem,calc(100dvh-16.3rem),38rem)] sm:h-[clamp(22rem,calc(100dvh-21.4rem),38rem)]";
+  "h-[clamp(18rem,calc(100dvh-16.3rem-var(--ui-preview-height,0px)),38rem)] sm:h-[clamp(22rem,calc(100dvh-21.4rem-var(--ui-preview-height,0px)),38rem)]";
 
 /** Done with every stack that is still open for voting (once the results are shown, nobody has anything left). */
 function isDone(member: MemberProgress, state: NightState): boolean {

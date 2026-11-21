@@ -28,7 +28,7 @@ export default async function AppLayout({
 
   return (
     <NightStatusProvider initial={nights} initialPlans={plans} poll={groups.some((g) => g.memberCount > 1)}>
-      <div className="flex min-h-screen flex-col">
+      <div className="app-shell flex min-h-screen flex-col">
         <AppNav
           name={name}
           avatarUrl={profile?.avatar_url ?? null}

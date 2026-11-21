@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { ThemeWatcher } from "@/components/theme";
+import { UiPreviewSwitch } from "@/components/ui-preview-switch";
 import { THEME_SCRIPT } from "@/lib/theme";
+import { UI_PREVIEW_SCRIPT } from "@/lib/ui-preview";
 import "./globals.css";
+import "./ui-preview.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,18 +30,23 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const uiPreview = process.env.FAMFLIX_UI_PREVIEW === "1";
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      // The theme script sets data-theme before React hydrates.
+      data-ui-version={uiPreview ? "original" : undefined}
+      // Theme and preview preferences are applied before React hydrates.
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {uiPreview && <script dangerouslySetInnerHTML={{ __html: UI_PREVIEW_SCRIPT }} />}
       </head>
       <body className="bg-background text-foreground min-h-full flex flex-col">
         <ThemeWatcher />
+        {uiPreview && <UiPreviewSwitch />}
         {children}
       </body>
     </html>

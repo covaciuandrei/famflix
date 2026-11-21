@@ -384,6 +384,23 @@ npm run dev
 
 Open <http://localhost:3000>, continue with Google, then create a family or join one with an invite code.
 
+To compare the original design with the **V2 / Quiet cinema** experiment, run:
+
+```bash
+FAMFLIX_UI_PREVIEW=1 npm run dev -- --hostname localhost
+```
+
+Use **Original / V2** at the top of any page. You stay on the same page and
+signed in to the same account. Both modes use the Supabase connection already
+configured for this project; changes to your watchlist are shared. To compare
+side by side, open the same page in two tabs and choose a different mode in
+each. The choice survives refreshes in its own tab and is independent of the
+light/dark/system theme. Start without the flag to hide the switch and use the
+original design. No setup or migration is needed for the preview itself.
+
+V2 was reviewed using [Unslop](https://github.com/heydamir/unslop) by Damir
+Sokolovsky (CC BY 4.0). No plugin or extra dependency is needed to run FamFlix.
+
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Development server on port 3000 |

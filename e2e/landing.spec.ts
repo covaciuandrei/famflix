@@ -299,3 +299,45 @@ test("the hero stays readable in two lines from small phones to desktop", async 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   }
 });
+
+test("the design preview is off by default even with a saved V2 preference", async ({ page }) => {
+  test.skip(process.env.FAMFLIX_UI_PREVIEW === "1", "Run without the preview flag");
+  await page.addInitScript(() => sessionStorage.setItem("famflix:ui-version", "v2"));
+  await page.goto("/");
+  await expect(page.getByRole("group", { name: "Compare designs" })).toHaveCount(0);
+  await expect(page.locator("html[data-ui-version]")).toHaveCount(0);
+});
+
+test("the design preview switches in place, persists per tab, and leaves the theme alone", async ({ page, context }) => {
+  test.skip(process.env.FAMFLIX_UI_PREVIEW !== "1", "Run with FAMFLIX_UI_PREVIEW=1");
+  await page.addInitScript(() => localStorage.setItem("famflix:theme", "light"));
+  await page.goto("/");
+  const mode = page.getByRole("group", { name: "Compare designs" });
+  const original = mode.getByRole("button", { name: "Original" });
+  const v2 = mode.getByRole("button", { name: "V2" });
+  await expect(original).toHaveAttribute("aria-pressed", "true");
+  const movieNight = page.getByRole("tab", { name: "Movie night", exact: true });
+  await movieNight.click();
+  const panel = page.getByRole("tabpanel", { name: "Movie night" });
+  const initialUrl = page.url();
+  const initialState = await panel.textContent();
+  await v2.focus();
+  await v2.press("Enter");
+  await expect(v2).toBeFocused();
+  await expect(v2).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(initialUrl);
+  await expect(panel).toBeVisible();
+  expect(await panel.textContent()).toBe(initialState);
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.reload();
+  await expect(v2).toHaveAttribute("aria-pressed", "true");
+  const otherTab = await context.newPage();
+  await otherTab.goto("/");
+  await expect(otherTab.getByRole("button", { name: "Original", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(v2).toHaveAttribute("aria-pressed", "true");
+  await original.click();
+  await expect(page.locator("html")).toHaveAttribute("data-ui-version", "original");
+});

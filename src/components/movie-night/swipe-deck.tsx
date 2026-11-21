@@ -39,7 +39,7 @@ const BEHIND_CARDS = 2;
 const BEHIND_TRANSFORMS = ["none", "scale(0.94) translateY(26px)", "scale(0.88) translateY(50px)"];
 // The card is as wide as the screen allows (up to 24 rem) and as tall as fits between the app's header and bottom bar on
 // a phone (and under the header on a computer): what is left of the screen after everything else on this page.
-const STACK_HEIGHT = "h-[clamp(18rem,calc(100dvh-19.7rem),38rem)] sm:h-[clamp(22rem,calc(100dvh-19.4rem),38rem)]";
+const STACK_HEIGHT = "h-[clamp(18rem,calc(100dvh-19.7rem-var(--ui-preview-height,0px)),38rem)] sm:h-[clamp(22rem,calc(100dvh-19.4rem-var(--ui-preview-height,0px)),38rem)]";
 
 function subscribeReducedMotion(onChange: () => void) {
   const query = window.matchMedia("(prefers-reduced-motion: reduce)");
