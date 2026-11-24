@@ -60,10 +60,12 @@ Actions**. In the Azure Static Web App, add the runtime values under
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Yes |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN` | Yes | No |
 
-Get the deployment token from the Static Web App in Azure. The existing
-[workflow](../.github/workflows/azure-static-web-apps.yml) tests the app and
-deploys pushes to `main` and eligible pull requests. Its browser tests use a
-throwaway local Supabase, not the hosted database.
+Get the deployment token from the Static Web App in Azure. The
+[workflow](../.github/workflows/azure-static-web-apps.yml) runs on pushes to
+`main` and deploys automatically when the checks pass. Its browser tests use
+a throwaway local Supabase, not the hosted database. Pull requests do not run
+this workflow. If you add previews later, use a separate workflow with its own
+Azure app and Supabase project, without production credentials.
 
 Never commit real credentials. The Supabase service-role key stays server-side
 and must never have a `NEXT_PUBLIC_` prefix. If you change either
@@ -77,7 +79,7 @@ only the runtime value doesn't update the browser bundle.
    managed HTTPS to be ready.
 2. In Supabase **Authentication > URL Configuration**, set the Site URL to
    your production origin. Allow the same address with `/auth/callback`
-   appended. Add your local and trusted preview callback URLs if needed.
+   appended. Add your local callback URL if needed for development.
 3. Check that the latest deployment succeeded in GitHub Actions. Open your
    site over HTTPS, sign in with Google, add a title, and start a movie night
    to check that sign-in and server-side database operations work.

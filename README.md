@@ -419,18 +419,17 @@ Sokolovsky (CC BY 4.0). No plugin or extra dependency is needed to run FamFlix.
 
 ```mermaid
 flowchart TD
-    A["Push to main or<br/>open a pull request"] --> B["Lint, type-check<br/>and unit tests"]
+    A["Push to main"] --> B["Lint, type-check<br/>and unit tests"]
     B --> C["Database tests<br/>PostgreSQL 17"]
     C --> D["Browser tests<br/>desktop and phone"]
     D --> E["Build and deploy<br/>Azure Static Web Apps"]
-    E -->|"main"| F["Production"]
-    E -->|"pull request"| G["Preview site"]
+    E --> F["Production"]
 ```
 
 The live site runs on **Azure Static Web Apps** (Free plan).
-[`azure-static-web-apps.yml`](.github/workflows/azure-static-web-apps.yml) tests, builds and deploys every push to
-`main`, and nothing is deployed unless every suite passes. Pull requests get a preview site, closed with the pull
-request.
+[`azure-static-web-apps.yml`](.github/workflows/azure-static-web-apps.yml) runs the checks on every push to `main`
+and automatically deploys to production when they pass. This workflow does not run on pull requests or create
+preview sites.
 
 1. Create a detached Free Static Web App from the Bicep files in [`infra/`](infra), then add these repository
    secrets in GitHub: `AZURE_STATIC_WEB_APPS_API_TOKEN`, `NEXT_PUBLIC_SUPABASE_URL`,

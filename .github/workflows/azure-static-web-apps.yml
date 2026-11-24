@@ -4,20 +4,14 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
-    branches:
-      - main
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   # Nothing is deployed unless these pass. The browser tests run against a throwaway Supabase started in
   # Docker on the runner (scripts/e2e.sh), never against the live database.
   test:
-    if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     name: Lint, type-check and test
     services:
@@ -79,7 +73,6 @@ jobs:
 
   build_and_deploy:
     needs: test
-    if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     name: Build and deploy
     steps:
@@ -89,7 +82,6 @@ jobs:
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
           app_location: /
           api_location: ""
@@ -99,14 +91,3 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           TMDB_ACCESS_TOKEN: ${{ secrets.TMDB_ACCESS_TOKEN }}
-
-  close_pull_request:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    name: Close preview environment
-    steps:
-      - name: Close preview environment
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          action: close
