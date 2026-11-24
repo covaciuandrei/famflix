@@ -448,8 +448,8 @@ attendance and release-guard upgrades for older databases are available in the
 Do not run the initializer on an existing database; back up and check which
 upgrades it already has before applying any older SQL.
 
-The [deployment guide](docs/DEPLOYMENT-GUIDE.md) explains the complete setup for beginners: infrastructure, secrets,
-DNS, HTTPS, authentication, limits and troubleshooting.
+The [deployment guide](docs/DEPLOYMENT-GUIDE.md) covers provisioning Azure,
+configuring Supabase and GitHub, connecting a domain, and verifying a new deployment.
 
 ## Project structure
 

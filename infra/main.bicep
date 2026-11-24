@@ -1,22 +1,16 @@
 targetScope = 'subscription'
 
+@description('A short, unique name for this FamFlix deployment, such as famflix-example.')
 param environmentName string
 param location string
-param sessionId string
-param deployedBy string
-param createdAt string
 param tags object = {
-  'app-onboard-skill': 'true'
-  'app-onboard-session-id': sessionId
   environment: environmentName
   project: 'famflix'
-  managedBy: 'AppOnboard/${deployedBy}'
   deploymentMethod: 'bicep'
-  'created-at': createdAt
 }
 
-var resourceGroupName = 'rg-famflix-prod-a85c'
-var staticWebAppName = 'swa-famflix-prod-a85c'
+var resourceGroupName = 'rg-${environmentName}'
+var staticWebAppName = 'swa-${environmentName}'
 
 // Create resource group
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
