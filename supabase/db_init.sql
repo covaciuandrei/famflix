@@ -4749,10 +4749,7 @@ grant execute on function
 notify pgrst, 'reload schema';
 
 
--- BEGIN:movie-night-attendance
--- Kept identical to upgrade_movie_night_attendance.sql (without its transaction wrapper).
--- Existing installations: back up first, then run once before deploying the matching app.
--- This same upgrade is included at the end of db_init.sql for fresh installations.
+-- Movie night attendance, viewing history and reusable guests.
 
 -- BEGIN:family-release-guards
 create or replace function public.join_group(p_invite_code text)
@@ -6089,6 +6086,5 @@ grant execute on function public.can_see_viewing(uuid), public.save_family_guest
   public.set_guest_rating(uuid, uuid, numeric), public.edit_family_viewing(uuid, date, uuid[], uuid[], integer) to authenticated;
 revoke all on function public.movie_night_edit_problem(public.movie_nights) from public, anon, authenticated, service_role;
 notify pgrst, 'reload schema';
--- END:movie-night-attendance
 
 commit;

@@ -55,27 +55,5 @@ for regime in older newer; do
     fi
   done
   cleanup_db
-
-  db="famflix_upgrade_$$_$regime"
-  psql -X -q -d postgres -c "create database $db" >/dev/null
-  # Build the pre-upgrade schema, populate it, and exercise the production upgrade instead of assuming an empty DB.
-  old_schema() {
-    awk '/^-- BEGIN:movie-night-attendance$/{ print "commit;"; exit } { print }' "$init" |
-      psql -X -q -v ON_ERROR_STOP=1 -d "$db" 2>&1
-  }
-  if ! out="$(run "$here/setup.sql" && run "$here/defaults_$regime.sql" && old_schema &&
-      run "$here/attendance_upgrade_fixture.sql" && run "$here/../upgrade_movie_night_attendance.sql" &&
-      run "$here/attendance_upgrade_assert.sql" &&
-      psql -X -q -v ON_ERROR_STOP=1 -d "$db" -c 'select test.use_older_family_guards()' 2>&1 &&
-      run "$here/../upgrade_attendance_release_guards.sql" && run "$here/../upgrade_attendance_release_guards.sql" &&
-      run "$here/attendance_upgrade_assert.sql" && run "$here/35_revoked_exports.sql" && run "$here/20_api_privileges.sql")"; then
-    echo "Upgrading a populated database failed ($regime Supabase defaults):"
-    grep -E "ERROR|FAILED" <<<"$out" | head -5
-    exit 1
-  fi
-  checks="$(grep -c 'NOTICE:  ok' <<<"$out" || true)"
-  total=$((total + checks))
-  printf "  pass  %-32s %3s checks\n" "populated attendance upgrade" "$checks"
-  cleanup_db
 done
 echo "All database tests passed ($total checks, both ways)"

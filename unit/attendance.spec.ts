@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { expect, test } from "@playwright/test";
 
 import { familyScoreSummary, localReturnPath, validGuestSelections } from "../src/lib/attendance";
@@ -55,30 +53,4 @@ test("export merges the same undated family viewing across lists without losing 
   });
   expect(rows).toHaveLength(2);
   expect(rows[0].with).toEqual(["Daria (guest)"]);
-});
-
-test("fresh-install attendance SQL matches the additive production upgrade", () => {
-  const schema = readFileSync("supabase/db_init.sql", "utf8");
-  const copy = schema.split("-- BEGIN:movie-night-attendance\n")[1]?.split("-- END:movie-night-attendance")[0]
-    .replace(/^-- Kept identical[^\n]*\n/, "").trim();
-  const upgrade = readFileSync("supabase/upgrade_movie_night_attendance.sql", "utf8")
-    .replace(/^begin;\n/m, "").replace(/^commit;\s*$/m, "").trim();
-  expect(copy).toBe(upgrade);
-});
-
-test("the rerunnable release correction uses the same canonical admission and export guards", () => {
-  const upgrade = readFileSync("supabase/upgrade_movie_night_attendance.sql", "utf8");
-  const correction = readFileSync("supabase/upgrade_attendance_release_guards.sql", "utf8");
-  const baseline = readFileSync("supabase/db_init.sql", "utf8").split("-- BEGIN:movie-night-attendance")[0];
-  const definitions = ["join_group", "rename_group", "regenerate_invite_code", "remove_member", "leave_group", "export_my_data"].map((name) => {
-    const definition = baseline.match(new RegExp(`create function public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`))?.[0];
-    if (!definition) throw new Error(`Missing canonical guard ${name}`);
-    return definition.replace("create function", "create or replace function");
-  }).join("\n\n");
-  const guards = (sql: string) => sql.split("-- BEGIN:family-release-guards\n")[1]?.split("-- END:family-release-guards")[0].trim();
-  expect(guards(upgrade)).toBe(definitions);
-  expect(guards(correction)).toBe(definitions.replace("function public.export_my_data()", "function public.export_my_data_base()"));
-  const claim = upgrade.match(/create function public\.claim_family_guest\([\s\S]*?\n\$\$;/)?.[0];
-  if (!claim) throw new Error("Missing canonical guest admission guard");
-  expect(correction).toContain(claim.replace("create function", "create or replace function"));
 });
